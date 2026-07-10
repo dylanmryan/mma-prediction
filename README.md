@@ -39,7 +39,7 @@ All-time peak Elo (through 2025-09):
 |---|---|---|
 | 1 | Jon Jones | 1985 |
 | 2 | Islam Makhachev | 1938 |
-| 3 | Georges St-Pierre | 1917 |
+| 3 | Georges St-Pierre | 1916 |
 | 4 | Anderson Silva | 1912 |
 | 5 | Kamaru Usman | 1907 |
 | 6 | Charles Oliveira | 1877 |
