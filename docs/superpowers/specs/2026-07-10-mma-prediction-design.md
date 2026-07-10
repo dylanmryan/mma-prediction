@@ -21,6 +21,7 @@ The README leads with the story: "Elo → GBM → deep learning, honestly evalua
 
 - **Winner**: binary (fighter A wins).
 - **Method**: 3 classes — KO/TKO (incl. doctor stoppage), Submission, Decision (all types). Raw method strings preserved for display. Combined outputs like "A by KO" = P(A wins) × P(KO), validated against a 6-class variant in an ablation.
+- **Finish round**: 4 classes — R1, R2, R3, R4–5 (grouped) — defined only for finishes; "Decision" in the method head already covers going the distance. Rounds 4–5 masked for 3-round fights. Full outcomes compose by multiplication: P(A by KO in R1) = P(A) × P(KO) × P(R1 | finish). Framed as a calibrated distribution (noisiest target; base rates are strong).
 
 ## 1. Data layer
 
@@ -58,13 +59,14 @@ One feature-builder module → one model-ready table, one row per fight, A-minus
 - **Context:** weight class, title fight flag, scheduled rounds, days since last fight.
 - **Symmetry:** random A/B assignment (or both orders) so column order can't encode the winner.
 
-XGBoost trains winner (binary) and method (3-class) models. Feature importances feed the README analysis.
+XGBoost trains winner (binary), method (3-class), and finish-round (4-class, finishes only) models. Feature importances feed the README analysis.
 
 ## Evaluation protocol (locked, shared by all models)
 
 - **Time-based split:** train < ~2021; validation 2021–2023 (all tuning); test 2024+ (untouched until final).
 - **Winner metrics:** accuracy, log-loss, Brier, calibration curve.
 - **Method metrics:** accuracy, macro-F1.
+- **Finish-round metrics:** accuracy, macro-F1 (evaluated on finishes only), vs base-rate dummy.
 - **Baselines in every results table:** higher-Elo-wins dummy, Elo expected-score, XGBoost, neural net.
 - **No random splits anywhere.**
 
@@ -72,7 +74,7 @@ XGBoost trains winner (binary) and method (3-class) models. Feature importances 
 
 - **Inputs:** same feature table as XGBoost (fair comparison); numerics standardized; weight class via learned embedding.
 - **Trunk:** 2–3 FC layers (~128 → 64), ReLU, batch norm, dropout ~0.3.
-- **Heads:** winner (sigmoid) + method (3-way softmax). Loss = weighted BCE + CE (multi-task).
+- **Heads:** winner (sigmoid) + method (3-way softmax) + finish round (4-way softmax, trained on finishes, R4–5 masked for 3-round fights). Loss = weighted BCE + CE + CE (multi-task).
 - **Training:** AdamW, early stopping on val log-loss, honest hyperparameter search on validation years only.
 - **Uncertainty:** 5-seed deep ensemble (headline = mean, spread = confidence range); MC dropout (100 passes) for distribution visuals.
 - **Calibration:** temperature scaling fit on validation; before/after curves in README.
@@ -83,7 +85,7 @@ XGBoost trains winner (binary) and method (3-class) models. Feature importances 
 Free on Streamlit Community Cloud, deployed from this repo (`app.py`). Loads pre-exported artifacts (parquet + model weights); no training or DB at runtime.
 
 - **Matchup picker:** two searchable fighter dropdowns, weight-class filter; tale-of-the-tape with Elo trajectory sparkline.
-- **Prediction panel:** ensemble win-probability bar, MC-dropout probability distribution strip, method breakdown grid ("A by KO 28% …") using latest ratings/stats.
+- **Prediction panel:** ensemble win-probability bar, MC-dropout probability distribution strip, method breakdown grid ("A by KO 28% …"), and a fight-duration distribution (finish round probabilities + expected rounds) using latest ratings/stats.
 - **Model card footer:** test metrics vs baselines, repo link.
 
 ## 6. Scraper
