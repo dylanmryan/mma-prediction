@@ -109,3 +109,36 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
         .sort_values("date", kind="stable")
         .reset_index(drop=True)
     )
+
+
+_STAT_COLUMNS = {
+    # output name -> raw column suffix (dataset spells "attempted" as "atmpted")
+    "kd": "kd",
+    "sig_landed": "sig_str_landed",
+    "sig_attempted": "sig_str_atmpted",
+    "total_landed": "total_str_landed",
+    "total_attempted": "total_str_atmpted",
+    "td_landed": "td_landed",
+    "td_attempted": "td_atmpted",
+    "sub_att": "sub_att",
+    "ctrl_sec": "ctrl",
+}
+
+
+def build_fight_stats(raw: pd.DataFrame) -> pd.DataFrame:
+    """Two rows per fight (one per fighter) with in-fight performance stats."""
+    fight_ids = raw["fight_id"].astype("string").str.strip()
+    frames = []
+    for corner, prefix, id_column in (("a", "r_", "r_id"), ("b", "b_", "b_id")):
+        frame = pd.DataFrame(
+            {
+                "fight_id": fight_ids,
+                "fighter_id": raw[id_column].astype("string").str.strip(),
+                "corner": pd.Series(corner, index=raw.index, dtype="string"),
+            }
+        )
+        for out_name, suffix in _STAT_COLUMNS.items():
+            frame[out_name] = pd.to_numeric(raw[prefix + suffix], errors="coerce")
+        frames.append(frame)
+    stats = pd.concat(frames, ignore_index=True)
+    return stats.sort_values(["fight_id", "corner"]).reset_index(drop=True)
