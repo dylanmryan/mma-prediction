@@ -128,6 +128,8 @@ _STAT_COLUMNS = {
 def build_fight_stats(raw: pd.DataFrame) -> pd.DataFrame:
     """Two rows per fight (one per fighter) with in-fight performance stats."""
     fight_ids = raw["fight_id"].astype("string").str.strip()
+    if fight_ids.isna().any() or not fight_ids.is_unique:
+        raise ValueError("fight_id must be present and unique")
     frames = []
     for corner, prefix, id_column in (("a", "r_", "r_id"), ("b", "b_", "b_id")):
         frame = pd.DataFrame(

@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from mma.dataset import build_fight_stats
 
@@ -59,3 +60,9 @@ def test_multiple_fights_sorted():
     stats = build_fight_stats(raw)
     assert list(stats["fight_id"]) == ["f0", "f0", "f1", "f1"]
     assert list(stats["corner"]) == ["a", "b", "a", "b"]
+
+
+def test_duplicate_fight_ids_rejected():
+    raw = pd.concat([_raw_fights(), _raw_fights()], ignore_index=True)
+    with pytest.raises(ValueError):
+        build_fight_stats(raw)
