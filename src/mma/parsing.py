@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import re
 
+import pandas as pd
+
 _MISSING = {"", "--", "---", "n/a", "nan"}
 
 
 def _is_missing(value) -> bool:
-    if value is None:
+    if value is None or value is pd.NA:
         return True
     if isinstance(value, float):  # NaN
         return value != value

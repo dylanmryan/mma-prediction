@@ -1,3 +1,5 @@
+import pandas as pd
+
 from mma.parsing import (
     parse_height_inches,
     parse_landed_attempted,
@@ -58,3 +60,15 @@ def test_percent():
 def test_percent_missing():
     assert parse_percent("---") is None
     assert parse_percent(None) is None
+
+
+def test_pandas_na_is_missing():
+    assert parse_landed_attempted(pd.NA) == (None, None)
+    assert parse_mmss_seconds(pd.NA) is None
+    assert parse_percent(pd.NA) is None
+
+
+def test_malformed_inputs_return_missing():
+    assert parse_landed_attempted("45 of") == (None, None)
+    assert parse_height_inches("5'") is None
+    assert parse_mmss_seconds("2:3") is None
