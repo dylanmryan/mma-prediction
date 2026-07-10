@@ -80,6 +80,8 @@ def run_elo(
             continue
         score_a, score_b = _SCORES[fight.winner]
         id_a, id_b = fight.fighter_a_id, fight.fighter_b_id
+        if id_a == id_b:
+            raise ValueError(f"fight {fight.fight_id} has both corners = {id_a}")
         fight_stats = combined.get(fight.fight_id, {})
         share = striking_share(
             fight_stats.get("sig_landed"),
@@ -87,6 +89,8 @@ def run_elo(
             fight_stats.get("sub_att"),
             fight_stats.get("ctrl_sec"),
         )
+        # method is nullable ("string" dtype); pd.NA membership tests are
+        # unreliable, and null-method fights get no finish bonus.
         bonus = (
             params.finish_bonus
             if pd.notna(fight.method) and fight.method in ("ko_tko", "submission")
