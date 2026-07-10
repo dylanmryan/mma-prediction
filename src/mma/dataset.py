@@ -15,10 +15,13 @@ def build_fighters(raw: pd.DataFrame) -> pd.DataFrame:
     purpose: they are as-of-scrape values and would leak the future if
     joined to historical fights.
     """
+    ids = raw["id"].astype("string").str.strip()
+    if ids.isna().any():
+        raise ValueError(f"{int(ids.isna().sum())} fighter rows have missing ids")
     fighters = pd.DataFrame(
         {
-            "fighter_id": raw["id"].astype(str).str.strip(),
-            "name": raw["name"].astype(str).str.strip(),
+            "fighter_id": ids,
+            "name": raw["name"].astype("string").str.strip(),
             "height_cm": pd.to_numeric(raw["height"], errors="coerce"),
             "reach_cm": pd.to_numeric(raw["reach"], errors="coerce"),
             "stance": raw["stance"],

@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from mma.dataset import build_fighters
 
@@ -57,6 +58,20 @@ def test_duplicate_ids_rejected():
     except ValueError:
         raised = True
     assert raised
+
+
+def test_missing_id_rejected():
+    raw = _raw_fighters()
+    raw.loc[0, "id"] = None
+    with pytest.raises(ValueError):
+        build_fighters(raw)
+
+
+def test_missing_name_stays_missing():
+    raw = _raw_fighters()
+    raw.loc[0, "name"] = None
+    fighters = build_fighters(raw)
+    assert fighters["name"].isna().sum() == 1
 
 
 def test_leaky_career_columns_dropped():
