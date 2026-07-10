@@ -61,6 +61,18 @@ One feature-builder module → one model-ready table, one row per fight, A-minus
 
 XGBoost trains winner (binary), method (3-class), and finish-round (4-class, finishes only) models. Feature importances feed the README analysis.
 
+### Cold start: UFC debutants
+
+Fighters arriving from other organizations have no UFC history. Handling:
+
+- **Elo:** start at 1500 with high early-career K (~40) for fast convergence; `ufc_fight_count` serves as a rating-confidence feature; the expected-score formula already discounts wins over unknown 1500-rated debutants.
+- **Missing rolling stats are left missing, not faked:** XGBoost handles NaN natively; the neural net gets neutral imputation plus missingness-indicator flags.
+- **Explicit `ufc_debut` flag** (and debut-vs-veteran matchup flag) so the model can learn debut effects directly.
+- **Pre-UFC career record** (W-L, win rate, finish rate at fight time) used as debut features where the dataset provides it.
+- **Evaluation reported separately** for fights involving debutants vs established-vs-established, so model weakness on debuts is visible, not averaged away.
+
+Out of scope for v1: fight-level pre-UFC data (Sherdog/Tapology) and org-based Elo entry priors (e.g., ex-Bellator champions seeded above 1500) — listed as a v2 experiment.
+
 ## Evaluation protocol (locked, shared by all models)
 
 - **Time-based split:** train < ~2021; validation 2021–2023 (all tuning); test 2024+ (untouched until final).
@@ -112,4 +124,4 @@ Phases 1–6 in sequence: data → Elo → features/XGBoost → PyTorch → app 
 
 ## Out of scope (v1)
 
-- Non-UFC organizations; betting odds comparison; inactivity decay in Elo; round-by-round fight simulation; decision sub-type prediction (unanimous vs split) beyond display.
+- Non-UFC organizations (incl. fight-level pre-UFC data and org-based Elo entry priors); betting odds comparison; inactivity decay in Elo; round-by-round fight simulation; decision sub-type prediction (unanimous vs split) beyond display.
