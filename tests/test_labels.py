@@ -59,6 +59,13 @@ def test_method_technical_variants():
     assert map_method("Technical Submission") == "submission"
 
 
+def test_decision_subtype_technical():
+    # Subtype comes only from the judges' split in the string; a bare
+    # "Technical Decision" is a decision with unknown subtype.
+    assert decision_subtype("Technical Decision") is None
+    assert decision_subtype("Technical Decision - Unanimous") == "unanimous"
+
+
 def test_missing_sentinels_are_none():
     assert map_method("--") is None
     assert parse_scheduled_rounds("n/a") is None

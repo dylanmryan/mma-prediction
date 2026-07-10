@@ -36,7 +36,9 @@ def _clean(value) -> str | None:
 def map_method(win_by) -> str | None:
     """Raw method string -> 'ko_tko' | 'submission' | 'decision' | None.
 
-    None means the fight is excluded from method modeling (DQ, overturned...).
+    Substring matching so 'Technical Decision' / 'Technical Submission'
+    map to their base method. None means the fight is excluded from
+    method modeling (DQ, Overturned, Could Not Continue...).
     """
     text = _clean(win_by)
     if text is None:
@@ -52,7 +54,11 @@ def map_method(win_by) -> str | None:
 
 
 def decision_subtype(win_by) -> str | None:
-    """'Decision - Split' -> 'split'; non-decisions -> None."""
+    """'Decision - Split' -> 'split'.
+
+    None means either not a decision, or the judges' split is absent
+    from the string (e.g. a bare 'Technical Decision').
+    """
     text = _clean(win_by)
     if text is None or "decision" not in text.lower():
         return None
