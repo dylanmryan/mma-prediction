@@ -1,0 +1,74 @@
+import pandas as pd
+
+from mma.dataset import build_fights
+
+
+def _raw_fights():
+    return pd.DataFrame(
+        {
+            "fight_id": ["f2", "f1", "f3"],
+            "date": ["2017/07/29", "2016/11/12", "2019/03/02"],
+            "r_id": ["jj", "cm", "aa"],
+            "b_id": ["dc", "ed", "bb"],
+            "winner": ["Jon Jones", None, None],
+            "winner_id": ["jj", None, None],
+            "method": ["KO/TKO", "Decision - Majority", "Overturned"],
+            "finish_round": [3, 3, 2],
+            "total_rounds": [5.0, 3.0, None],
+            "division": ["light heavyweight", "lightweight", "6 tournament"],
+            "title_fight": [1, 0, 0],
+        }
+    )
+
+
+def test_schema_order_and_sorting():
+    fights = build_fights(_raw_fights())
+    assert list(fights.columns) == [
+        "fight_id", "date", "fighter_a_id", "fighter_b_id", "winner",
+        "method", "method_raw", "decision_subtype", "finish_round",
+        "scheduled_rounds", "weight_class", "title_fight",
+    ]
+    assert list(fights["fight_id"]) == ["f1", "f2", "f3"]  # date-sorted
+
+
+def test_finish_fight_values():
+    fights = build_fights(_raw_fights())
+    row = fights[fights["fight_id"] == "f2"].iloc[0]
+    assert row["fighter_a_id"] == "jj" and row["fighter_b_id"] == "dc"
+    assert row["winner"] == "a"
+    assert row["method"] == "ko_tko"
+    assert row["method_raw"] == "KO/TKO"
+    assert row["finish_round"] == 3
+    assert row["scheduled_rounds"] == 5
+    assert row["weight_class"] == "Light Heavyweight"
+    assert bool(row["title_fight"]) is True
+    assert pd.Timestamp(row["date"]) == pd.Timestamp("2017-07-29")
+
+
+def test_draw_and_decision_have_no_finish_round():
+    fights = build_fights(_raw_fights())
+    row = fights[fights["fight_id"] == "f1"].iloc[0]
+    assert row["winner"] == "draw"
+    assert row["method"] == "decision"
+    assert row["decision_subtype"] == "majority"
+    assert pd.isna(row["finish_round"])
+
+
+def test_no_contest_and_noise_division():
+    fights = build_fights(_raw_fights())
+    row = fights[fights["fight_id"] == "f3"].iloc[0]
+    assert row["winner"] == "nc"
+    assert pd.isna(row["method"])
+    assert pd.isna(row["weight_class"])
+    assert pd.isna(row["scheduled_rounds"])
+    assert pd.isna(row["finish_round"])
+
+
+def test_winner_b_and_unmatched_winner_id():
+    raw = _raw_fights()
+    raw.loc[0, "winner_id"] = "dc"
+    fights = build_fights(raw)
+    assert fights[fights["fight_id"] == "f2"].iloc[0]["winner"] == "b"
+    raw.loc[0, "winner_id"] = "zz"
+    fights = build_fights(raw)
+    assert fights[fights["fight_id"] == "f2"].iloc[0]["winner"] == "nc"
