@@ -1,8 +1,8 @@
 {
-  "k_early": 48.0,
-  "k_late": 32.0,
+  "k_early": 64.0,
+  "k_late": 48.0,
   "early_fights": 5,
   "finish_bonus": 1.4,
   "tuned_on": "fights before 2020-01-01",
-  "pre2020_log_loss": 0.6808
+  "pre2020_log_loss": 0.6801
 }
