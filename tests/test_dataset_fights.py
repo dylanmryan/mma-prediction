@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from mma.dataset import build_fights
 
@@ -72,3 +73,18 @@ def test_winner_b_and_unmatched_winner_id():
     raw.loc[0, "winner_id"] = "zz"
     fights = build_fights(raw)
     assert fights[fights["fight_id"] == "f2"].iloc[0]["winner"] == "nc"
+
+
+def test_other_method_null_winner_is_draw():
+    raw = _raw_fights()
+    raw.loc[0, "winner"] = None
+    raw.loc[0, "winner_id"] = None
+    raw.loc[0, "method"] = "Other"
+    fights = build_fights(raw)
+    assert fights[fights["fight_id"] == "f2"].iloc[0]["winner"] == "draw"
+
+
+def test_duplicate_fight_ids_rejected():
+    raw = pd.concat([_raw_fights(), _raw_fights().iloc[[0]]])
+    with pytest.raises(ValueError):
+        build_fights(raw)

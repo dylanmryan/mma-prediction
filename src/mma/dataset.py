@@ -36,10 +36,18 @@ def build_fighters(raw: pd.DataFrame) -> pd.DataFrame:
     return fighters.sort_values("fighter_id").reset_index(drop=True)
 
 
-def _winner_code(winner_id, id_a: str, id_b: str, method: str | None) -> str:
-    """'a'/'b' from the winning corner; 'draw'/'nc' when there is no winner."""
+_NO_CONTEST_METHODS = {"overturned", "could not continue", "dq"}
+
+
+def _winner_code(winner_id, id_a: str, id_b: str, method_raw) -> str:
+    """'a'/'b' from the winning corner; 'draw'/'nc' when there is no winner.
+
+    No-winner fights are no-contests only for the explicit NC method values;
+    anything else with no winner (decisions, early-era "Other") is a draw.
+    """
     if pd.isna(winner_id):
-        return "draw" if method == "decision" else "nc"
+        text = "" if pd.isna(method_raw) else str(method_raw).strip().lower()
+        return "nc" if text in _NO_CONTEST_METHODS else "draw"
     winner = str(winner_id).strip()
     if winner == id_a:
         return "a"
@@ -52,17 +60,22 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
     """One row per fight: ids, date, winner code, targets, context."""
     ids_a = raw["r_id"].astype("string").str.strip()
     ids_b = raw["b_id"].astype("string").str.strip()
+    fight_ids = raw["fight_id"].astype("string").str.strip()
+    if fight_ids.isna().any() or not fight_ids.is_unique:
+        raise ValueError("fight_id must be present and unique")
+    if ids_a.isna().any() or ids_b.isna().any():
+        raise ValueError("fights with missing corner fighter ids")
     method = raw["method"].map(map_method)
     fights = pd.DataFrame(
         {
-            "fight_id": raw["fight_id"].astype("string").str.strip(),
+            "fight_id": fight_ids,
             "date": pd.to_datetime(raw["date"], format="mixed", errors="coerce"),
             "fighter_a_id": ids_a,
             "fighter_b_id": ids_b,
             "winner": [
                 _winner_code(winner_id, id_a, id_b, m)
                 for winner_id, id_a, id_b, m in zip(
-                    raw["winner_id"], ids_a, ids_b, method
+                    raw["winner_id"], ids_a, ids_b, raw["method"]
                 )
             ],
             "method": method,
@@ -72,7 +85,9 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
                 raw["total_rounds"], errors="coerce"
             ).astype("Int64"),
             "weight_class": raw["division"].map(parse_weight_class),
-            "title_fight": raw["title_fight"].fillna(0).astype(bool),
+            "title_fight": pd.to_numeric(raw["title_fight"], errors="coerce")
+            .fillna(0)
+            .astype(bool),
         }
     )
     # finish_round only for finishes: decisions go the distance by definition,
@@ -80,6 +95,9 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
     last_round = pd.to_numeric(raw["finish_round"], errors="coerce").astype("Int64")
     is_finish = fights["method"].isin(["ko_tko", "submission"])
     fights["finish_round"] = last_round.where(is_finish)
+
+    for column in ("winner", "method", "method_raw", "decision_subtype", "weight_class"):
+        fights[column] = fights[column].astype("string")
 
     columns = [
         "fight_id", "date", "fighter_a_id", "fighter_b_id", "winner",
