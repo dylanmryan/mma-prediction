@@ -52,3 +52,26 @@ def test_weight_class_ordering_pitfalls():
     assert parse_weight_class("Lightweight Bout") == "Lightweight"
     assert parse_weight_class("Catch Weight Bout") == "Catch Weight"
     assert parse_weight_class("Some Unknown Bout") is None
+
+
+def test_method_technical_variants():
+    assert map_method("Technical Decision") == "decision"
+    assert map_method("Technical Submission") == "submission"
+
+
+def test_missing_sentinels_are_none():
+    assert map_method("--") is None
+    assert parse_scheduled_rounds("n/a") is None
+    assert parse_weight_class(None) is None
+
+
+def test_catchweight_canonicalized():
+    assert parse_weight_class("Catchweight Bout") == "Catch Weight"
+    assert parse_weight_class("Catch Weight Bout") == "Catch Weight"
+
+
+def test_is_title_fight():
+    from mma.labels import is_title_fight
+    assert is_title_fight("UFC Middleweight Title Bout") is True
+    assert is_title_fight("Middleweight Bout") is False
+    assert is_title_fight(None) is False

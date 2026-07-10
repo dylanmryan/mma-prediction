@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 
+from mma.parsing import _is_missing
+
 # Ordered longest/most-specific first so substrings don't shadow
 # (Light Heavyweight before Heavyweight, Women's before men's).
 WEIGHT_CLASSES = [
@@ -26,10 +28,9 @@ WEIGHT_CLASSES = [
 
 
 def _clean(value) -> str | None:
-    if value is None or (isinstance(value, float) and value != value):
+    if _is_missing(value):
         return None
-    text = str(value).strip()
-    return text or None
+    return str(value).strip() or None
 
 
 def map_method(win_by) -> str | None:
@@ -43,9 +44,9 @@ def map_method(win_by) -> str | None:
     lower = text.lower()
     if "ko/tko" in lower or "doctor" in lower or lower.startswith("tko"):
         return "ko_tko"
-    if lower.startswith("submission"):
+    if "submission" in lower:
         return "submission"
-    if lower.startswith("decision"):
+    if "decision" in lower:
         return "decision"
     return None
 
@@ -53,7 +54,7 @@ def map_method(win_by) -> str | None:
 def decision_subtype(win_by) -> str | None:
     """'Decision - Split' -> 'split'; non-decisions -> None."""
     text = _clean(win_by)
-    if text is None or not text.lower().startswith("decision"):
+    if text is None or "decision" not in text.lower():
         return None
     for subtype in ("unanimous", "split", "majority"):
         if subtype in text.lower():
@@ -66,6 +67,7 @@ def parse_scheduled_rounds(format_str) -> int | None:
     text = _clean(format_str)
     if text is None:
         return None
+    # prefix match on purpose: format strings continue after "N Rnd", e.g. "3 Rnd (5-5-5)"
     match = re.match(r"(\d+)\s*Rnd", text)
     if not match:
         return None
@@ -79,7 +81,7 @@ def parse_weight_class(fight_type) -> str | None:
         return None
     for weight_class in WEIGHT_CLASSES:
         if weight_class.lower() in text.lower():
-            return weight_class
+            return "Catch Weight" if weight_class == "Catchweight" else weight_class
     return None
 
 
