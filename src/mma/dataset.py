@@ -26,7 +26,7 @@ def build_fighters(raw: pd.DataFrame) -> pd.DataFrame:
             "name": raw["name"].astype("string").str.strip(),
             "height_cm": pd.to_numeric(raw["height"], errors="coerce"),
             "reach_cm": pd.to_numeric(raw["reach"], errors="coerce"),
-            "stance": raw["stance"],
+            "stance": raw["stance"].astype("string").str.strip(),
             "dob": pd.to_datetime(raw["dob"], format="mixed", errors="coerce"),
         }
     )
