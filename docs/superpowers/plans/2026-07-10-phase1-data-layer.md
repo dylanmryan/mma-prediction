@@ -1083,6 +1083,24 @@ git push
 
 ---
 
+## Addendum — actual schema found at Task 4 decision point (2026-07-10)
+
+The downloaded dataset (`neelagiriaditya/ufc-datasets-1994-2025`, 8,337 fights 1994→2025-09, 2,611 fighters) is **pre-parsed and numeric**, not raw ufcstats strings. Tasks 5–7 are revised as follows; Tasks 1–3 outputs stand (parsing.py will serve the Phase 6 scraper, labels.py works on this dataset's method/division strings as-is).
+
+Key facts:
+- Source files: `UFC.csv` (one row per fight, 124 cols, per-corner `r_`/`b_` prefixes, authoritative) and `fighter_details.csv` (one row per fighter, stable unique hex `id`). `fight_details.csv`/`event_details.csv` are redundant subsets — ignored.
+- Stable fighter IDs exist (`id`, `r_id`/`b_id`, `winner_id`) → **no name-slug IDs needed**; `slugify` stays for the scraper phase.
+- Strikes/takedowns already split numeric (`r_sig_str_landed`/`r_sig_str_atmpted`); control time already seconds (`r_ctrl`); heights/reaches numeric **cm**; weights kg. No string parsing needed for this dataset.
+- `method` strings match ufcstats vocabulary → `map_method` works unchanged. `division` is lowercase weight class (some tournament noise → `parse_weight_class` returns None for those). `title_fight` is already 0/1. `total_rounds` = scheduled rounds (31 NaN). Dataset `finish_round` is populated for all fights (= last round for decisions) — builders null it for non-finishes per spec.
+- `winner` = fighter name string, `winner_id` = hex id, 147 nulls (draw/NC) — winner code derived from `winner_id` vs `r_id`/`b_id`; null winner → 'draw' if method is a decision else 'nc'.
+- Dates: `YYYY/MM/DD` in UFC.csv; DOB `"Apr 22, 1991"` in fighter_details.csv.
+
+Revised table contracts:
+- **fighters** (from fighter_details.csv): `fighter_id` (hex id), `name`, `height_cm`, `reach_cm`, `stance`, `dob`. Career-average columns (splm, str_acc, ...) are **dropped** — they're as-of-scrape values and would leak the future if joined to historical fights.
+- **fights** (from UFC.csv): `fight_id` (dataset's), `date`, `fighter_a_id`=`r_id`, `fighter_b_id`=`b_id`, `winner` ('a'/'b'/'draw'/'nc'), `method`, `method_raw`, `decision_subtype`, `finish_round` (finishes only), `scheduled_rounds` (Int64), `weight_class`, `title_fight` (bool).
+- **fight_stats** (from UFC.csv, unpivoted): `fight_id`, `fighter_id`, `corner`, `kd`, `sig_landed`, `sig_attempted`, `total_landed`, `total_attempted`, `td_landed`, `td_attempted`, `sub_att`, `ctrl_sec`.
+- `make_dataset.py` reads `UFC.csv` + `fighter_details.csv`.
+
 ## Done criteria (Phase 1)
 
 - `pytest` fully green, including processed-data integrity tests.
