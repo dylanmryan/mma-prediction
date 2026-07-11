@@ -144,7 +144,7 @@ def build_history(
             ("b", fight.fighter_b_id, score_b, stats_b, stats_a, "a"),
         ):
             states[fighter_id].update(
-                score, own, opp, method, fight.match_time_sec, fight.date,
+                score, own, opp, method, fight.duration_sec, fight.date,
                 elo_lookup.get((fight.fight_id, opp_corner)),
             )
 

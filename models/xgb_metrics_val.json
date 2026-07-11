@@ -1,21 +1,21 @@
 {
   "winner": {
     "n_val": 1507,
-    "accuracy": 0.6012,
-    "log_loss": 0.6584,
-    "brier": 0.2333,
+    "accuracy": 0.5952,
+    "log_loss": 0.6578,
+    "brier": 0.2329,
     "best_iteration": 126
   },
   "method": {
     "n_val": 1503,
-    "accuracy": 0.4857,
-    "macro_f1": 0.2674,
+    "accuracy": 0.489,
+    "macro_f1": 0.2811,
     "majority_baseline_accuracy": 0.485
   },
   "finish_round": {
     "n_val": 774,
-    "accuracy": 0.478,
-    "macro_f1": 0.1719,
+    "accuracy": 0.4767,
+    "macro_f1": 0.1669,
     "majority_baseline_accuracy": 0.4742
   }
 }

@@ -31,7 +31,7 @@ def build_snapshots(
             ("b", fight.fighter_b_id, score_b, stats_b, stats_a, "a"),
         ):
             states.setdefault(fighter_id, _FighterState()).update(
-                score, own, opp, method, fight.match_time_sec, fight.date,
+                score, own, opp, method, fight.duration_sec, fight.date,
                 elo_lookup.get((fight.fight_id, opp_corner)),
             )
 

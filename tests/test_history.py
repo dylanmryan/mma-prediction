@@ -13,7 +13,7 @@ def _fights():
             "fighter_b_id": ["y", "z"],
             "winner": ["a", "a"],
             "method": ["ko_tko", "decision"],
-            "match_time_sec": [300.0, 900.0],
+            "duration_sec": [300.0, 900.0],
         }
     )
 
