@@ -88,6 +88,7 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
             "title_fight": pd.to_numeric(raw["title_fight"], errors="coerce")
             .fillna(0)
             .astype(bool),
+            "match_time_sec": pd.to_numeric(raw["match_time_sec"], errors="coerce"),
         }
     )
     # finish_round only for finishes: decisions go the distance by definition,
@@ -102,7 +103,7 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
     columns = [
         "fight_id", "date", "fighter_a_id", "fighter_b_id", "winner",
         "method", "method_raw", "decision_subtype", "finish_round",
-        "scheduled_rounds", "weight_class", "title_fight",
+        "scheduled_rounds", "weight_class", "title_fight", "match_time_sec",
     ]
     return (
         fights[columns]

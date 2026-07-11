@@ -18,6 +18,7 @@ def _raw_fights():
             "total_rounds": [5.0, 3.0, None],
             "division": ["light heavyweight", "lightweight", "6 tournament"],
             "title_fight": [1, 0, 0],
+            "match_time_sec": [260.0, 900.0, 452.0],
         }
     )
 
@@ -27,7 +28,7 @@ def test_schema_order_and_sorting():
     assert list(fights.columns) == [
         "fight_id", "date", "fighter_a_id", "fighter_b_id", "winner",
         "method", "method_raw", "decision_subtype", "finish_round",
-        "scheduled_rounds", "weight_class", "title_fight",
+        "scheduled_rounds", "weight_class", "title_fight", "match_time_sec",
     ]
     assert list(fights["fight_id"]) == ["f1", "f2", "f3"]  # date-sorted
 
@@ -88,3 +89,11 @@ def test_duplicate_fight_ids_rejected():
     raw = pd.concat([_raw_fights(), _raw_fights().iloc[[0]]])
     with pytest.raises(ValueError):
         build_fights(raw)
+
+
+def test_match_time_sec_kept():
+    raw = _raw_fights()
+    raw["match_time_sec"] = [260.0, 900.0, None]
+    fights = build_fights(raw)
+    assert fights[fights["fight_id"] == "f2"].iloc[0]["match_time_sec"] == 260.0
+    assert pd.isna(fights[fights["fight_id"] == "f3"].iloc[0]["match_time_sec"])
