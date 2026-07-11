@@ -88,7 +88,6 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
             "title_fight": pd.to_numeric(raw["title_fight"], errors="coerce")
             .fillna(0)
             .astype(bool),
-            "match_time_sec": pd.to_numeric(raw["match_time_sec"], errors="coerce"),
         }
     )
     # finish_round only for finishes: decisions go the distance by definition,
@@ -97,13 +96,46 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
     is_finish = fights["method"].isin(["ko_tko", "submission"])
     fights["finish_round"] = last_round.where(is_finish)
 
+    # match_time_sec in the raw data is the clock time WITHIN the final round
+    # fought, not total fight duration (verified: 5-round decisions always
+    # show exactly 300s there). Derive true elapsed duration_sec instead,
+    # approximating every round as a fixed 5 minutes (300s) -- the UFC's
+    # standard round length, though not strictly true for old non-title
+    # 3-round-cap or historic no-time-limit bouts:
+    #   - finish (output finish_round not NA): (finish_round - 1) * 300 + last_round_sec
+    #   - true decision (method == "decision"): went the distance by
+    #     definition -> scheduled_rounds * 300
+    #   - everything else (DQ, Overturned, Could Not Continue, "Other", and
+    #     early no-time-limit-era fights): these are NOT finishes by our
+    #     method mapping, but scheduled_rounds being present does NOT mean
+    #     they went the distance -- most end early (79 of 113 such rows in
+    #     the raw data have finish_round < total_rounds). Fall back to the
+    #     RAW finish_round column, which is populated for every fight in the
+    #     source csv (our own `finish_round` output above is nulled for
+    #     non-finishes, so we can't reuse it here).
+    last_round_sec = pd.to_numeric(raw["match_time_sec"], errors="coerce")
+    raw_last_round = last_round.astype("Float64")
+    duration_sec = pd.Series(pd.NA, index=fights.index, dtype="Float64")
+    duration_sec = duration_sec.where(
+        fights["finish_round"].isna(),
+        (fights["finish_round"].astype("Float64") - 1) * 300 + last_round_sec,
+    )
+    distance_mask = duration_sec.isna() & (fights["method"] == "decision")
+    duration_sec = duration_sec.where(
+        ~distance_mask, fights["scheduled_rounds"].astype("Float64") * 300
+    )
+    fallback_mask = duration_sec.isna()
+    fallback = (raw_last_round - 1) * 300 + last_round_sec
+    duration_sec = duration_sec.where(~fallback_mask, fallback)
+    fights["duration_sec"] = duration_sec
+
     for column in ("winner", "method", "method_raw", "decision_subtype", "weight_class"):
         fights[column] = fights[column].astype("string")
 
     columns = [
         "fight_id", "date", "fighter_a_id", "fighter_b_id", "winner",
         "method", "method_raw", "decision_subtype", "finish_round",
-        "scheduled_rounds", "weight_class", "title_fight", "match_time_sec",
+        "scheduled_rounds", "weight_class", "title_fight", "duration_sec",
     ]
     return (
         fights[columns]

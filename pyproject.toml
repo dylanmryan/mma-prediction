@@ -21,6 +21,9 @@ dev = [
     "pytest>=8.0",
     "kagglehub>=0.3",
 ]
+app = [
+    "streamlit>=1.35",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

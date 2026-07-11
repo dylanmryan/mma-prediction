@@ -28,7 +28,7 @@ def test_schema_order_and_sorting():
     assert list(fights.columns) == [
         "fight_id", "date", "fighter_a_id", "fighter_b_id", "winner",
         "method", "method_raw", "decision_subtype", "finish_round",
-        "scheduled_rounds", "weight_class", "title_fight", "match_time_sec",
+        "scheduled_rounds", "weight_class", "title_fight", "duration_sec",
     ]
     assert list(fights["fight_id"]) == ["f1", "f2", "f3"]  # date-sorted
 
@@ -91,9 +91,20 @@ def test_duplicate_fight_ids_rejected():
         build_fights(raw)
 
 
-def test_match_time_sec_kept():
-    raw = _raw_fights()
-    raw["match_time_sec"] = [260.0, 900.0, None]
-    fights = build_fights(raw)
-    assert fights[fights["fight_id"] == "f2"].iloc[0]["match_time_sec"] == 260.0
-    assert pd.isna(fights[fights["fight_id"] == "f3"].iloc[0]["match_time_sec"])
+def test_duration_derived():
+    fights = build_fights(_raw_fights())
+    assert "match_time_sec" not in fights.columns
+
+    # f2: KO/TKO in round 3, last-round clock 260s -> (3-1)*300 + 260 = 860
+    row_f2 = fights[fights["fight_id"] == "f2"].iloc[0]
+    assert row_f2["duration_sec"] == 860.0
+
+    # f1: 3-round decision (went the distance) -> 3 * 300 = 900
+    row_f1 = fights[fights["fight_id"] == "f1"].iloc[0]
+    assert row_f1["duration_sec"] == 900.0
+
+    # f3: Overturned -> not a finish (finish_round output is NA) and no
+    # scheduled_rounds on record, so falls back to the RAW finish_round
+    # column (2) and raw match_time_sec (452.0): (2-1)*300 + 452 = 752
+    row_f3 = fights[fights["fight_id"] == "f3"].iloc[0]
+    assert row_f3["duration_sec"] == 752.0

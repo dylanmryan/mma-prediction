@@ -24,7 +24,7 @@ def _tables():
             "scheduled_rounds": pd.array([3], dtype="Int64"),
             "weight_class": ["Lightweight"],
             "title_fight": [False],
-            "match_time_sec": [500.0],
+            "duration_sec": [500.0],
         }
     )
     fighters = pd.DataFrame(
