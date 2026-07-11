@@ -2,16 +2,27 @@
 from __future__ import annotations
 
 import os
+import sys
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 from pathlib import Path
 
+# Streamlit Cloud installs from requirements.txt only (no `pip install -e .`),
+# so the `mma` package under src/ isn't on sys.path unless we put it there.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-from mma.inference import Ensemble, build_matchup, predict_symmetrized
+from mma.inference import (
+    Ensemble,
+    apply_prior_correction,
+    build_matchup,
+    compute_display_priors,
+    predict_symmetrized,
+)
 from mma.snapshots import build_snapshots
 
 ROOT = Path(__file__).resolve().parent
@@ -30,10 +41,15 @@ def load_everything():
     ensemble = Ensemble.load()
     as_of = fights["date"].max()
     weight_classes = sorted(fights["weight_class"].dropna().unique().tolist())
-    return fights, fighters.set_index("fighter_id"), ratings, snapshots, ensemble, as_of, weight_classes
+    features = pd.read_parquet(PROCESSED / "features.parquet")
+    priors = compute_display_priors(features)
+    return (
+        fights, fighters.set_index("fighter_id"), ratings, snapshots, ensemble,
+        as_of, weight_classes, priors,
+    )
 
 
-fights, fighters, ratings, snapshots, ensemble, as_of, weight_classes = load_everything()
+fights, fighters, ratings, snapshots, ensemble, as_of, weight_classes, priors = load_everything()
 
 eligible = snapshots.join(fighters[["name"]], how="inner").sort_values("name")
 names = eligible["name"].tolist()
@@ -122,28 +138,42 @@ if name_a and name_b and name_a != name_b:
         height=160,
     )
 
-    method = result["method_probs"]
-    rounds = result["round_probs"]
+    # Final review finding: the raw model heads are trained with class-weighted
+    # loss, so their softmax outputs overstate rare classes (e.g. predicted
+    # P(rounds 4-5) for 5-round fights was ~3.8x the empirical rate). We
+    # prior-correct before display (mma.inference.apply_prior_correction) and
+    # never show the raw numbers -- see docstring on compute_display_priors.
+    method_raw = dict(zip(result["method_classes"], result["method_probs"]))
+    round_raw = dict(zip(result["round_classes"], result["round_probs"]))
+    round_key = "round_3" if scheduled_rounds <= 3 else "round_5"
+    method = apply_prior_correction(method_raw, priors["method"])
+    rounds = apply_prior_correction(round_raw, priors[round_key])
+
     labels = {"ko_tko": "KO/TKO", "submission": "Submission", "decision": "Decision"}
     outcome_rows = []
     for fighter, p_fighter in ((name_a, p_a), (name_b, 1 - p_a)):
-        for index, method_name in enumerate(result["method_classes"]):
+        for method_name in result["method_classes"]:
             outcome_rows.append(
                 {
                     "Winner": fighter,
                     "Method": labels[method_name],
-                    "Probability": f"{p_fighter * method[index]:.1%}",
+                    "Probability": f"{p_fighter * method[method_name]:.1%}",
                 }
             )
     st.subheader("How it ends")
+    st.caption(
+        "Method and round splits are prior-corrected model tendencies, not betting odds."
+    )
     st.dataframe(pd.DataFrame(outcome_rows), hide_index=True)
     round_labels = ["Round 1", "Round 2", "Round 3", "Rounds 4-5"]
-    finish_share = 1 - method[result["method_classes"].index("decision")]
+    finish_share = 1 - method["decision"]
     st.caption(
         "If it doesn't go the distance ("
         + f"{finish_share:.0%} chance), the finish comes in: "
         + "  ·  ".join(
-            f"{label} {p:.0%}" for label, p in zip(round_labels, rounds) if p > 0.001
+            f"{label} {rounds[cls]:.0%}"
+            for label, cls in zip(round_labels, result["round_classes"])
+            if rounds[cls] > 0.001
         )
     )
 

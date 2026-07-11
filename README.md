@@ -18,7 +18,7 @@ python3 -m venv .venv
 
 ## Results so far
 
-All models are evaluated on a strict time split: tuned on pre-2020 fights,
+All models are evaluated on a strict time split: trained on pre-2021 fights,
 reported on 2021–2023 validation fights. **Test years (2024+) are held out
 until the final model comparison.**
 

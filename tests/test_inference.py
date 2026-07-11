@@ -90,6 +90,57 @@ def test_predict_symmetrized_is_exactly_self_consistent(ensemble, matchup):
     )
 
 
+def test_apply_prior_correction_matches_hand_computed_example():
+    from mma.inference import apply_prior_correction
+
+    probs = {"a": 0.7, "b": 0.3}
+    priors = {"a": 0.1, "b": 0.9}
+    corrected = apply_prior_correction(probs, priors)
+    assert corrected["a"] == pytest.approx(0.2059, abs=1e-4)
+    assert corrected["b"] == pytest.approx(0.7941, abs=1e-4)
+    assert sum(corrected.values()) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_apply_prior_correction_guards_zero_sum():
+    from mma.inference import apply_prior_correction
+
+    probs = {"a": 0.7, "b": 0.3}
+    priors = {"a": 0.0, "b": 0.0}
+    assert apply_prior_correction(probs, priors) == probs
+
+
+def test_compute_display_priors_synthetic_frame():
+    from mma.inference import compute_display_priors
+
+    # Two train-split rows (date < 2021-01-01) and one post-cutoff row that
+    # must be excluded from the priors entirely.
+    features = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2019-01-01", "2019-06-01", "2020-01-01", "2020-06-01", "2022-01-01"]
+            ),
+            "y_method": ["ko_tko", "ko_tko", "submission", "decision", "ko_tko"],
+            "y_finish_round": ["1", "2", "1", pd.NA, "45"],
+            "scheduled_rounds": pd.array([3, 3, 5, 3, 5], dtype="Int64"),
+        }
+    )
+    priors = compute_display_priors(features)
+
+    # Method prior uses all 4 train rows (2019-2020), post-cutoff row excluded.
+    assert priors["method"]["ko_tko"] == pytest.approx(0.5)
+    assert priors["method"]["submission"] == pytest.approx(0.25)
+    assert priors["method"]["decision"] == pytest.approx(0.25)
+    assert sum(priors["method"].values()) == pytest.approx(1.0)
+
+    # 3-round fights can never finish in rounds 4-5.
+    assert priors["round_3"]["45"] == 0.0
+    assert sum(priors["round_3"].values()) == pytest.approx(1.0)
+
+    # round_5 prior computed only from the single 5-round train finish.
+    assert priors["round_5"]["1"] == pytest.approx(1.0)
+    assert sum(priors["round_5"].values()) == pytest.approx(1.0)
+
+
 def test_mc_dropout_preserves_batchnorm(ensemble, matchup):
     frame, _ = matchup
     net = ensemble.nets[0]

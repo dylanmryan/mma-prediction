@@ -14,6 +14,72 @@ from mma.tensors import Preprocessor
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# Same train/tuning cutoff used by scripts/train_xgb.py and scripts/train_torch.py.
+TRAIN_END = "2021-01-01"
+
+
+def compute_display_priors(features: pd.DataFrame) -> dict:
+    """Empirical class frequencies from the training split (date < TRAIN_END).
+
+    Phase 5 final review finding: the method/round heads are trained with
+    class-weighted loss (`class_weights` in train_loop.py) so the model
+    doesn't collapse onto the majority class. That makes the raw softmax
+    outputs class-weight-biased, not calibrated probabilities -- on
+    validation finishes, 5-round fights show predicted P(rounds 4-5) = 0.696
+    vs an empirical rate of 0.182 (~3.8x overstated), and 3-round fights'
+    P(round 3) is roughly doubled. We correct this Saerens-style at display
+    time (see `apply_prior_correction`): multiply model probabilities by
+    empirical training-set priors and renormalize, which converts the
+    class-weighted output back into a frequency-respecting one. Priors come
+    from the training split only, to avoid leaking validation/test-period
+    class balance into the displayed numbers.
+    """
+    train = features[features["date"] < TRAIN_END]
+
+    method_counts = train["y_method"].value_counts()
+    method_total = method_counts.sum()
+    method_prior = {
+        cls: (float(method_counts.get(cls, 0)) / method_total if method_total else 0.0)
+        for cls in METHOD_CLASSES
+    }
+
+    def _round_prior(subset: pd.DataFrame) -> dict:
+        finishes = subset[subset["y_finish_round"].notna()]
+        counts = finishes["y_finish_round"].value_counts()
+        total = counts.sum()
+        return {
+            cls: (float(counts.get(cls, 0)) / total if total else 0.0)
+            for cls in ROUND_CLASSES
+        }
+
+    # scheduled_rounds is nullable (Int64); fillna(3) matches the same
+    # three-round default used for the "45" logit mask in MultiTaskNet.round_probs.
+    sched = train["scheduled_rounds"].fillna(3)
+    round_3 = _round_prior(train[sched <= 3])
+    round_3["45"] = 0.0  # 3-round fights cannot reach rounds 4-5 by construction
+    total_3 = sum(round_3.values())
+    if total_3 > 0:
+        round_3 = {cls: v / total_3 for cls, v in round_3.items()}
+
+    round_5 = _round_prior(train[sched == 5])
+
+    return {"method": method_prior, "round_3": round_3, "round_5": round_5}
+
+
+def apply_prior_correction(probs: dict, priors: dict) -> dict:
+    """Saerens-style posterior correction: p_display(c) ∝ p_model(c) * prior(c).
+
+    `probs` and `priors` are both {class_label: value} dicts over the same
+    class set. Renormalizes so the output sums to 1. If the weighted sum is
+    zero (e.g. all overlapping priors are zero), returns `probs` unchanged
+    rather than dividing by zero.
+    """
+    corrected = {cls: p * priors.get(cls, 0.0) for cls, p in probs.items()}
+    total = sum(corrected.values())
+    if total <= 0:
+        return dict(probs)
+    return {cls: v / total for cls, v in corrected.items()}
+
 
 class Ensemble:
     def __init__(self, nets, temperatures, preprocessor):
@@ -179,6 +245,14 @@ def build_matchup(
         "title_fight": title_fight,
         "scheduled_rounds": scheduled_rounds,
     }
+    # NOTE: elo_fights_diff (via "pre_fights") and career_fights_diff (via
+    # history_names below) both read side(...)["career_fights"], i.e. the
+    # same snapshot["career_fights"] value. In training these came from two
+    # separate counters -- the ratings-table fight count and the fight-history
+    # table's count -- which could differ slightly for a fighter if a bout
+    # was recorded in one table but not the other. At inference time we only
+    # have the single current-state snapshot, so both diffs coincide exactly;
+    # this is negligible after standardization (Preprocessor.transform).
     diff_names = {
         "pre_overall": "elo", "pre_striking": "striking_elo",
         "pre_grappling": "grappling_elo", "pre_fights": "elo_fights",
