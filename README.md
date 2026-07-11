@@ -71,3 +71,26 @@ All-time peak Elo (through 2025-09):
 | 8 | Francis Ngannou | 1870 |
 | 9 | Khabib Nurmagomedov | 1867 |
 | 10 | Tony Ferguson | 1867 |
+
+## Interactive app
+
+`app.py` is a Streamlit front end over the committed ensemble: pick two
+fighters, a weight class, round count, and title-fight flag, and it renders
+the win probability, ensemble spread, MC-dropout uncertainty histogram,
+method-of-victory / finish-round breakdown, and both fighters' Elo
+trajectories — all from the artifacts already checked into `models/torch/`,
+no training required. Predictions are symmetrized across both fighter
+orderings (`mma.inference.predict_symmetrized`) so the reported probability
+is always self-consistent.
+
+Run it locally:
+
+```bash
+.venv/bin/pip install -e ".[dev,app]"
+.venv/bin/streamlit run app.py
+```
+
+Deploy to Streamlit Community Cloud: push this repo to a public GitHub
+remote, go to [share.streamlit.io](https://share.streamlit.io), click
+**New app**, and point it at this repo/branch with `app.py` as the entry
+point.

@@ -72,6 +72,24 @@ def test_round_45_zero_for_three_round_fight(ensemble, matchup):
     assert result["method_probs"][0].sum() == pytest.approx(1.0, abs=1e-5)
 
 
+def test_predict_symmetrized_is_exactly_self_consistent(ensemble, matchup):
+    from mma.inference import predict_symmetrized
+
+    forward, reverse = matchup
+    result_fwd = predict_symmetrized(ensemble, forward, reverse)
+    result_rev = predict_symmetrized(ensemble, reverse, forward)
+    assert result_fwd["winner_prob"] + result_rev["winner_prob"] == pytest.approx(1.0, abs=1e-9)
+    assert result_fwd["winner_prob"] > 0.5
+    assert result_fwd["winner_spread"] >= 0.0
+    assert result_fwd["method_probs"].sum() == pytest.approx(1.0, abs=1e-5)
+    np.testing.assert_allclose(
+        result_fwd["method_probs"], result_rev["method_probs"], atol=1e-6
+    )
+    np.testing.assert_allclose(
+        result_fwd["round_probs"], result_rev["round_probs"], atol=1e-6
+    )
+
+
 def test_mc_dropout_preserves_batchnorm(ensemble, matchup):
     frame, _ = matchup
     net = ensemble.nets[0]

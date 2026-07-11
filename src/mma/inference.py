@@ -94,6 +94,48 @@ class Ensemble:
         return np.stack(samples)
 
 
+def predict_symmetrized(
+    ensemble: "Ensemble", matchup_ab: pd.DataFrame, matchup_ba: pd.DataFrame
+) -> dict:
+    """Predict a matchup from both orientations and average them.
+
+    Phase 5 finding: the model is not perfectly symmetric under fighter
+    order -- P(A beats B) + P(B beats A) can be off from 1.0 by ~15
+    percentage points in a smoke test (see test_stronger_fighter_favored_and_symmetric,
+    which only asserts within 0.08). This averages both orientations so the
+    reported probability is exactly self-consistent: p + (1-p) == 1.
+
+    `matchup_ab` and `matchup_ba` must be `build_matchup(...)` outputs for the
+    same pair with fighters swapped (A-vs-B and B-vs-A respectively).
+    Method and finish-round distributions describe the fight, not a corner,
+    so they are averaged elementwise across orientations rather than flipped.
+    Ensemble spread is reported as the max of the two orientations' spreads
+    (a conservative uncertainty estimate). The `mc_dropout_shift` field is
+    the correction needed to re-center A-orientation-only MC dropout samples
+    on the symmetrized headline probability, so callers can avoid a second,
+    more expensive MC dropout pass on the B orientation.
+    """
+    result_ab = ensemble.predict(matchup_ab)
+    result_ba = ensemble.predict(matchup_ba)
+    p_ab = float(result_ab["winner_prob"][0])
+    p_ba = float(result_ba["winner_prob"][0])
+    p = 0.5 * (p_ab + (1.0 - p_ba))
+    spread = max(float(result_ab["winner_spread"][0]), float(result_ba["winner_spread"][0]))
+    method = 0.5 * (result_ab["method_probs"][0] + result_ba["method_probs"][0])
+    rounds = 0.5 * (result_ab["round_probs"][0] + result_ba["round_probs"][0])
+    return {
+        "winner_prob": p,
+        "winner_spread": spread,
+        "method_probs": method,
+        "round_probs": rounds,
+        "method_classes": result_ab["method_classes"],
+        "round_classes": result_ab["round_classes"],
+        "orientation_ab_prob": p_ab,
+        "orientation_ba_prob": p_ba,
+        "mc_dropout_shift": p - p_ab,
+    }
+
+
 def build_matchup(
     snapshot_a: pd.Series, snapshot_b: pd.Series,
     bio_a: pd.Series, bio_b: pd.Series,
