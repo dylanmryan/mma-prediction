@@ -109,6 +109,53 @@ def test_apply_prior_correction_guards_zero_sum():
     assert apply_prior_correction(probs, priors) == probs
 
 
+def test_compute_correction_factors_hand_computed():
+    from mma.inference import compute_correction_factors
+
+    empirical = {"a": 0.2, "b": 0.8}
+    mean_predicted = {"a": 0.5, "b": 0.5}
+    factors = compute_correction_factors(empirical, mean_predicted)
+    assert factors["a"] == pytest.approx(0.4)
+    assert factors["b"] == pytest.approx(1.6)
+
+
+def test_compute_correction_factors_mean_matches_aggregate():
+    # The defining property: applying the factors to the model's mean
+    # predicted distribution recovers the empirical prior exactly.
+    from mma.inference import apply_prior_correction, compute_correction_factors
+
+    empirical = {"1": 0.4, "2": 0.25, "3": 0.17, "45": 0.18}
+    mean_predicted = {"1": 0.07, "2": 0.08, "3": 0.09, "45": 0.76}
+    factors = compute_correction_factors(empirical, mean_predicted)
+    recovered = apply_prior_correction(mean_predicted, factors)
+    for cls, value in empirical.items():
+        assert recovered[cls] == pytest.approx(value, abs=1e-9)
+
+
+def test_compute_correction_factors_guards_tiny_mean_predicted():
+    from mma.inference import compute_correction_factors
+
+    empirical = {"a": 0.5, "b": 0.5, "c": 0.0}
+    mean_predicted = {"a": 0.999999, "b": 1e-9, "c": 1e-9}
+    factors = compute_correction_factors(empirical, mean_predicted)
+    assert factors["b"] == 0.0  # capped instead of exploding
+    assert factors["c"] == 0.0
+
+
+def test_committed_display_priors_json_structure():
+    import json
+
+    payload = json.loads(
+        (ROOT / "models" / "torch" / "display_priors.json").read_text()
+    )
+    assert set(payload) == {"method", "round_3", "round_5"}
+    assert set(payload["method"]) == {"ko_tko", "submission", "decision"}
+    for key in ("round_3", "round_5"):
+        assert set(payload[key]) == {"1", "2", "3", "45"}
+    assert payload["round_3"]["45"] == 0.0
+    assert all(v >= 0.0 for group in payload.values() for v in group.values())
+
+
 def test_compute_display_priors_synthetic_frame():
     from mma.inference import compute_display_priors
 

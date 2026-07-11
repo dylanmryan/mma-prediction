@@ -27,12 +27,13 @@ def compute_display_priors(features: pd.DataFrame) -> dict:
     outputs class-weight-biased, not calibrated probabilities -- on
     validation finishes, 5-round fights show predicted P(rounds 4-5) = 0.696
     vs an empirical rate of 0.182 (~3.8x overstated), and 3-round fights'
-    P(round 3) is roughly doubled. We correct this Saerens-style at display
-    time (see `apply_prior_correction`): multiply model probabilities by
-    empirical training-set priors and renormalize, which converts the
-    class-weighted output back into a frequency-respecting one. Priors come
-    from the training split only, to avoid leaking validation/test-period
-    class balance into the displayed numbers.
+    P(round 3) is roughly doubled.
+
+    These empirical priors are the numerators of the mean-matching
+    correction factors built by scripts/build_display_priors.py (see
+    `compute_correction_factors`); they come from the training split only,
+    to avoid leaking validation/test-period class balance into the
+    displayed numbers.
     """
     train = features[features["date"] < TRAIN_END]
 
@@ -66,15 +67,45 @@ def compute_display_priors(features: pd.DataFrame) -> dict:
     return {"method": method_prior, "round_3": round_3, "round_5": round_5}
 
 
-def apply_prior_correction(probs: dict, priors: dict) -> dict:
-    """Saerens-style posterior correction: p_display(c) ∝ p_model(c) * prior(c).
+def compute_correction_factors(empirical: dict, mean_predicted: dict) -> dict:
+    """Mean-matching factors: factor(c) = empirical_prior(c) / mean_model_predicted(c).
 
-    `probs` and `priors` are both {class_label: value} dicts over the same
-    class set. Renormalizes so the output sums to 1. If the weighted sum is
-    zero (e.g. all overlapping priors are zero), returns `probs` unchanged
+    A plain multiply-by-prior (Saerens) correction was too weak here because
+    the class-weighted heads' likelihood *ratios* are themselves miscalibrated
+    (e.g. mean predicted P(rounds 4-5) on train 5-round finishes is ~0.7 vs an
+    empirical 0.18, so even after multiplying by the prior the displayed P(45)
+    stayed ~0.68). Dividing by the model's own mean predicted probability on
+    the training split makes the *aggregate* corrected distribution match the
+    empirical base rates exactly (before per-row renormalization) while
+    preserving each fight's relative signal.
+
+    `mean_predicted` is the ensemble's mean predicted distribution over the
+    matching training-split rows (built by scripts/build_display_priors.py).
+    Guard: if mean_predicted(c) < 1e-6 (e.g. the "45" class for 3-round
+    fights, which the model masks to ~0), the factor is set to 0.0 rather
+    than exploding.
+    """
+    return {
+        cls: (
+            float(empirical[cls]) / float(mean_predicted[cls])
+            if mean_predicted.get(cls, 0.0) >= 1e-6
+            else 0.0
+        )
+        for cls in empirical
+    }
+
+
+def apply_prior_correction(probs: dict, factors: dict) -> dict:
+    """Elementwise correction: p_display(c) ∝ p_model(c) * factor(c).
+
+    `probs` and `factors` are both {class_label: value} dicts over the same
+    class set. `factors` are the mean-matching correction factors from
+    `compute_correction_factors` (models/torch/display_priors.json).
+    Renormalizes so the output sums to 1. If the weighted sum is zero
+    (e.g. all overlapping factors are zero), returns `probs` unchanged
     rather than dividing by zero.
     """
-    corrected = {cls: p * priors.get(cls, 0.0) for cls, p in probs.items()}
+    corrected = {cls: p * factors.get(cls, 0.0) for cls, p in probs.items()}
     total = sum(corrected.values())
     if total <= 0:
         return dict(probs)

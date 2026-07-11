@@ -1,6 +1,7 @@
 """MMA matchup predictor -- Streamlit app over the committed ensemble."""
 from __future__ import annotations
 
+import json
 import os
 import sys
 
@@ -20,13 +21,13 @@ from mma.inference import (
     Ensemble,
     apply_prior_correction,
     build_matchup,
-    compute_display_priors,
     predict_symmetrized,
 )
 from mma.snapshots import build_snapshots
 
 ROOT = Path(__file__).resolve().parent
 PROCESSED = ROOT / "data" / "processed"
+DISPLAY_PRIORS = ROOT / "models" / "torch" / "display_priors.json"
 
 st.set_page_config(page_title="MMA Fight Predictor", page_icon="🥊", layout="wide")
 
@@ -41,15 +42,16 @@ def load_everything():
     ensemble = Ensemble.load()
     as_of = fights["date"].max()
     weight_classes = sorted(fights["weight_class"].dropna().unique().tolist())
-    features = pd.read_parquet(PROCESSED / "features.parquet")
-    priors = compute_display_priors(features)
+    # Mean-matching correction factors precomputed by
+    # scripts/build_display_priors.py from the training split + ensemble.
+    display_factors = json.loads(DISPLAY_PRIORS.read_text())
     return (
         fights, fighters.set_index("fighter_id"), ratings, snapshots, ensemble,
-        as_of, weight_classes, priors,
+        as_of, weight_classes, display_factors,
     )
 
 
-fights, fighters, ratings, snapshots, ensemble, as_of, weight_classes, priors = load_everything()
+fights, fighters, ratings, snapshots, ensemble, as_of, weight_classes, display_factors = load_everything()
 
 eligible = snapshots.join(fighters[["name"]], how="inner").sort_values("name")
 names = eligible["name"].tolist()
@@ -141,13 +143,14 @@ if name_a and name_b and name_a != name_b:
     # Final review finding: the raw model heads are trained with class-weighted
     # loss, so their softmax outputs overstate rare classes (e.g. predicted
     # P(rounds 4-5) for 5-round fights was ~3.8x the empirical rate). We
-    # prior-correct before display (mma.inference.apply_prior_correction) and
-    # never show the raw numbers -- see docstring on compute_display_priors.
+    # recalibrate before display with mean-matching factors
+    # (empirical prior / mean model prediction on the training split, see
+    # mma.inference.compute_correction_factors) and never show raw numbers.
     method_raw = dict(zip(result["method_classes"], result["method_probs"]))
     round_raw = dict(zip(result["round_classes"], result["round_probs"]))
     round_key = "round_3" if scheduled_rounds <= 3 else "round_5"
-    method = apply_prior_correction(method_raw, priors["method"])
-    rounds = apply_prior_correction(round_raw, priors[round_key])
+    method = apply_prior_correction(method_raw, display_factors["method"])
+    rounds = apply_prior_correction(round_raw, display_factors[round_key])
 
     labels = {"ko_tko": "KO/TKO", "submission": "Submission", "decision": "Decision"}
     outcome_rows = []
@@ -162,7 +165,8 @@ if name_a and name_b and name_a != name_b:
             )
     st.subheader("How it ends")
     st.caption(
-        "Method and round splits are prior-corrected model tendencies, not betting odds."
+        "Method and round splits are recalibrated to historical base rates; "
+        "treat as tendencies, not betting odds."
     )
     st.dataframe(pd.DataFrame(outcome_rows), hide_index=True)
     round_labels = ["Round 1", "Round 2", "Round 3", "Rounds 4-5"]
