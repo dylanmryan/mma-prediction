@@ -22,11 +22,25 @@ All models are evaluated on a strict time split: tuned on pre-2020 fights,
 reported on 2021–2023 validation fights. **Test years (2024+) are held out
 until the final model comparison.**
 
+**Winner prediction** (1,507 validation fights):
+
 | Model | Accuracy | Log-loss | Brier |
 |---|---|---|---|
 | Coin flip | 0.500 | 0.693 | 0.250 |
 | Higher-Elo-wins dummy | 0.573 | — | — |
-| **Elo baseline** | **0.576** | **0.678** | **0.242** |
+| Elo baseline | 0.576 | 0.678 | 0.242 |
+| **XGBoost** (46 features) | **0.601** | **0.658** | **0.233** |
+
+**Method of victory** (3 classes): XGBoost 0.486 accuracy vs 0.485 majority-class
+baseline, macro-F1 0.267. **Finish round** (R1/R2/R3/R4-5, finishes only):
+0.478 accuracy vs 0.474 majority baseline, macro-F1 0.172. Predicting *how*
+fights end is genuinely hard — these are reported as honest baselines for the
+multi-task neural net to attack.
+
+What predicts the winner? Reach and age differentials, Elo differential, and
+opponent-quality-adjusted activity rates top the feature importances. A caveat
+worth knowing: reach-*missingness* indicators rank highly, which likely proxies
+for era and fighter obscurity rather than physiology.
 
 The Elo system: fighters start at 1500; K = 64 for a fighter's first 5 UFC
 fights then 48 (tuned by grid search on pre-2020 log-loss); KO/sub wins get a
