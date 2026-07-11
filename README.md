@@ -29,13 +29,23 @@ until the final model comparison.**
 | Coin flip | 0.500 | 0.693 | 0.250 |
 | Higher-Elo-wins dummy | 0.573 | — | — |
 | Elo baseline | 0.576 | 0.678 | 0.242 |
-| **XGBoost** (46 features) | **0.601** | **0.658** | **0.233** |
+| XGBoost (46 features) | 0.601 | 0.658 | 0.233 |
+| **Neural net** (5-seed ensemble, calibrated) | **0.601** | **0.656** | **0.232** |
 
 **Method of victory** (3 classes): XGBoost 0.486 accuracy vs 0.485 majority-class
-baseline, macro-F1 0.267. **Finish round** (R1/R2/R3/R4-5, finishes only):
-0.478 accuracy vs 0.474 majority baseline, macro-F1 0.172. Predicting *how*
-fights end is genuinely hard — these are reported as honest baselines for the
-multi-task neural net to attack.
+baseline, macro-F1 0.267. The neural net's class-weighted method head makes a
+different trade: 0.399 accuracy but **macro-F1 0.360** — it actually identifies
+submissions and KOs instead of defaulting to "decision". **Finish round**
+(R1/R2/R3/R4-5, finishes only): XGBoost 0.478 accuracy vs 0.474 majority
+baseline, macro-F1 0.172. Predicting *how* fights end is genuinely hard; these
+numbers are reported honestly rather than hidden.
+
+The neural net is a multi-task network (shared trunk; winner, method, and
+finish-round heads) trained as a deterministic 5-seed ensemble with per-seed
+temperature scaling — fitted temperatures all land near 1.0, i.e. the raw
+model was already well calibrated. Uncertainty comes from ensemble spread
+(mean 0.084) and MC dropout. Per the Phase 3 ablation, the era-proxy
+`*_missing` flags are excluded from its inputs.
 
 What predicts the winner? Reach and age differentials, Elo differential, and
 opponent-quality-adjusted activity rates top the feature importances. A caveat
