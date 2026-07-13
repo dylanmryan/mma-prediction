@@ -15,13 +15,18 @@ DATASET = "neelagiriaditya/ufc-datasets-1994-2025"
 RAW_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
 
-def main() -> None:
+def download(raw_dir: Path) -> None:
+    """Download the Kaggle dataset snapshot and copy its CSVs into raw_dir."""
     cache_path = Path(kagglehub.dataset_download(DATASET))
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    raw_dir.mkdir(parents=True, exist_ok=True)
     for src in cache_path.rglob("*.csv"):
-        dest = RAW_DIR / src.name
+        dest = raw_dir / src.name
         shutil.copy2(src, dest)
         print(f"copied {src.name}")
+
+
+def main() -> None:
+    download(RAW_DIR)
 
     print("\n=== SCHEMA REPORT ===")
     for csv in sorted(RAW_DIR.glob("*.csv")):

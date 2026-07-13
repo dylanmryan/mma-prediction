@@ -1,4 +1,16 @@
-# Phase 6: ufcstats Scraper Implementation Plan
+# Phase 6: Data Auto-Refresh Implementation Plan
+
+> **PIVOT (2026-07-11):** ufcstats.com fronts all pages with a JavaScript proof-of-work
+> anti-bot challenge (verified live — two polite requests, then stopped). Bypassing
+> bot-detection is out of bounds, and a scraper against a site actively refusing
+> automated clients would be adversarial and fragile anyway. Per user decision, Phase 6
+> is now a **weekly Kaggle auto-refresh**: pull the latest version of the same
+> maintained ufcstats-mirror dataset via the sanctioned Kaggle API, rebuild all
+> artifacts, commit if changed. Tasks 1–3 and 6 below (scraper parsers/orchestrator)
+> are RETIRED — superseded by the two tasks in the Addendum at the bottom. The
+> original text is retained for the record.
+
+# (Retired) Phase 6: ufcstats Scraper Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -102,9 +114,51 @@ MUST reuse `mma.parsing` functions (this is what they were built for) and add a 
 
 - [ ] Opus final review (adversarial): politeness/ToS posture (rate limit, UA, cache), parser robustness against fixture drift, orchestrator idempotency, no-network-in-tests guarantee, Action correctness (secrets? none needed; push auth via GITHUB_TOKEN), metrics-unchanged verification, README accuracy. Then merge to main per established preference, push, delete branch.
 
-## Done criteria (Phase 6)
+---
 
-- Suite green including fixture-based parser tests and orchestrator idempotency tests; zero network in pytest.
-- Real incremental run appended the missing ~10 months; integrity checks pass on the enlarged dataset; app snapshots include the new fights.
-- Weekly Action committed (first live run to be monitored by the user).
-- README documents the data flow end to end.
+## Addendum — active tasks after the pivot
+
+### Task A: Refresh script
+
+**Files:** Create `scripts/refresh_data.py`, `tests/test_refresh.py`.
+
+- `refresh_needed(raw_dir, processed_dir) -> tuple[bool, str]`: compares the freshly
+  downloaded raw `UFC.csv`'s max date + row count against `data/processed/fights.parquet`;
+  returns (True, reason) when raw is newer/larger, (False, reason) otherwise. Pure
+  function over two DataFrames — unit-tested with tiny synthetic frames (no network).
+- `main()`: run the existing `scripts/download_data.py` logic (import its `main` or
+  refactor its download into a callable), then `refresh_needed`; print the verdict;
+  exit 0 always, but write the verdict to stdout as `REFRESH_NEEDED=true|false` for CI
+  consumption. `--force` flag skips the check.
+- README: replace the scraper mention in the data-flow description with the Kaggle
+  auto-refresh story; note parsing.py is retained for potential future raw-string sources.
+- pyproject: drop `beautifulsoup4` (unused after pivot); keep `requests`.
+- Commit: `"Add data refresh check script"`.
+
+### Task B: Weekly GitHub Action
+
+**Files:** `.github/workflows/refresh-data.yml`.
+
+- Weekly cron (Mon 12:00 UTC) + workflow_dispatch; concurrency group; permissions
+  contents: write; ubuntu-latest, python 3.11; install with CPU-torch extra-index;
+  step 1 `python scripts/refresh_data.py` — parse `REFRESH_NEEDED` from output into a
+  step output; subsequent steps gated on it: make_dataset → build_ratings →
+  build_features → train_xgb → train_torch → build_display_priors → `pytest -q` →
+  commit "Weekly data refresh" as github-actions[bot] + push if `git status --porcelain`
+  non-empty. 30-min timeout. Note in README (one line). Kaggle access: kagglehub works
+  anonymously for public datasets; if CI hits auth errors, the user adds KAGGLE_USERNAME /
+  KAGGLE_KEY secrets and the workflow exports them (include the env lines commented-out
+  with a pointer).
+- Validate YAML parses; flag that the first live run must be watched by the user.
+- Commit: `"Add weekly data-refresh workflow"`.
+
+### Task C: Final review + merge (unchanged in spirit)
+
+- Opus adversarial review of the branch (script correctness, Action correctness,
+  README accuracy, no leftover scraper stubs), then merge to main, push.
+
+## Done criteria (Phase 6, post-pivot)
+
+- Suite green; refresh_needed unit-tested without network.
+- Action YAML valid; refresh path documented in README; first live run flagged for user monitoring.
+- No bot-detection circumvention anywhere in the repo.
