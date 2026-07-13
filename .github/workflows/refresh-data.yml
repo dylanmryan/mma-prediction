@@ -34,8 +34,8 @@ jobs:
         #   KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         #   KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
-          python scripts/refresh_data.py | tee refresh_output.txt
-          grep '^REFRESH_NEEDED=' refresh_output.txt | sed 's/REFRESH_NEEDED=/refresh=/' >> "$GITHUB_OUTPUT"
+          python scripts/refresh_data.py | tee "$RUNNER_TEMP/refresh_output.txt"
+          grep '^REFRESH_NEEDED=' "$RUNNER_TEMP/refresh_output.txt" | sed 's/REFRESH_NEEDED=/refresh=/' >> "$GITHUB_OUTPUT"
 
       - name: Rebuild processed dataset
         if: steps.refresh.outputs.refresh == 'true'

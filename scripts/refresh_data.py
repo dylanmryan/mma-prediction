@@ -54,6 +54,9 @@ def refresh_needed(
             f"max date {processed_max_date.date()}"
         )
 
+    # Secondary tie-break only: raw and processed rows are 1:1 today, but if
+    # make_dataset.py ever filters rows this comparison would stay permanently
+    # True — the date check above is the robust primary signal.
     if raw_rows > processed_rows:
         return True, f"raw has more rows ({raw_rows}) than processed ({processed_rows})"
 
