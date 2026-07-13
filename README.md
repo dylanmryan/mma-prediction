@@ -1,9 +1,29 @@
 # MMA Fight Prediction
 
-Predicting UFC fight winners, method of victory, and finish round.
-Elo baseline -> XGBoost -> PyTorch multi-task net, honestly evaluated.
+![Weekly data refresh](https://github.com/dylanmryan/mma-prediction/actions/workflows/refresh-data.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-Work in progress. Design: `docs/superpowers/specs/2026-07-10-mma-prediction-design.md`
+Predicting UFC fight winners, method of victory, and finish round —
+an Elo rating system, gradient boosting, and a calibrated multi-task
+neural-network ensemble, each evaluated honestly on strict time splits,
+plus an interactive Streamlit matchup explorer.
+
+**Highlights**
+
+- **Point-in-time discipline, machine-verified**: every feature is built only
+  from data available before each fight; a truncation-invariance test proves
+  no feature can see the future.
+- **Baseline ladder**: coin flip → Elo (0.576 acc) → XGBoost (0.595) →
+  5-seed calibrated neural ensemble (0.606, best log-loss) on 1,507
+  never-tuned-on validation fights.
+- **Uncertainty done properly**: deep-ensemble spread + MC dropout, per-seed
+  temperature scaling, display probabilities recalibrated to historical base rates.
+- **Self-updating**: a weekly GitHub Action refreshes the dataset and rebuilds
+  every artifact; the entire pipeline reproduces byte-for-byte.
+
+Design doc: `docs/superpowers/specs/2026-07-10-mma-prediction-design.md` ·
+Phase plans: `docs/superpowers/plans/`
 
 ## Quickstart
 
@@ -15,6 +35,9 @@ python3 -m venv .venv
 .venv/bin/python scripts/build_ratings.py   # tune + build Elo ratings
 .venv/bin/pytest
 ```
+
+Interactive app: `streamlit run app.py` (pick any two fighters, get win
+probability with uncertainty, method and finish-round tendencies).
 
 Data bootstraps from the [Kaggle UFC dataset](https://www.kaggle.com/datasets/neelagiriaditya/ufc-datasets-1994-2025)
 via `kagglehub` and auto-refreshes weekly from the same maintained mirror
