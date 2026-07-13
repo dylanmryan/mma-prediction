@@ -1,0 +1,75 @@
+{
+  "computed_once_on": "2026-07-13",
+  "test_split": "date >= 2024-01-01",
+  "winner": {
+    "coin_flip": {
+      "n_test": 873,
+      "accuracy": 0.4719,
+      "log_loss": 0.6931,
+      "brier": 0.25
+    },
+    "higher_elo_dummy": {
+      "n_test": 873,
+      "accuracy": 0.5578,
+      "log_loss": null,
+      "brier": null
+    },
+    "elo": {
+      "n_test": 873,
+      "accuracy": 0.5533,
+      "log_loss": 0.6701,
+      "brier": 0.2389
+    },
+    "xgboost": {
+      "n_test": 873,
+      "accuracy": 0.6415,
+      "log_loss": 0.6347,
+      "brier": 0.222
+    },
+    "torch_ensemble": {
+      "n_test": 873,
+      "accuracy": 0.6449,
+      "log_loss": 0.633,
+      "brier": 0.2214
+    }
+  },
+  "method": {
+    "n_test": 871,
+    "xgboost": {
+      "accuracy": 0.535,
+      "macro_f1": 0.2976,
+      "majority_baseline": {
+        "class": "decision",
+        "accuracy": 0.5396,
+        "macro_f1": 0.2337
+      }
+    },
+    "torch_ensemble": {
+      "accuracy": 0.434,
+      "macro_f1": 0.38,
+      "majority_baseline": {
+        "class": "decision",
+        "accuracy": 0.5396,
+        "macro_f1": 0.2337
+      }
+    }
+  },
+  "finish_round": {
+    "n_test": 401,
+    "xgboost": {
+      "accuracy": 0.4938,
+      "macro_f1": 0.1691,
+      "majority_baseline": {
+        "class": "1",
+        "accuracy": 0.4988,
+        "macro_f1": 0.1664
+      }
+    }
+  },
+  "n_test": {
+    "winner_features": 873,
+    "winner_elo": 873,
+    "method": 871,
+    "finish_round": 401
+  }
+}

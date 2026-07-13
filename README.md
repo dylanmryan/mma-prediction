@@ -71,6 +71,39 @@ submissions and KOs instead of defaulting to "decision". **Finish round**
 baseline, macro-F1 0.167. Predicting *how* fights end is genuinely hard; these
 numbers are reported honestly rather than hidden.
 
+## Final held-out test results (2024+)
+
+These numbers were computed exactly once, by `scripts/final_test_eval.py`,
+after all development was frozen — the 2024+ fights were never read by any
+training, tuning, or calibration code at any point in the project (the
+per-seed temperatures were fit on 2021–2023 validation and reused as-is).
+
+**Winner prediction** (873 test fights):
+
+| Model | Accuracy | Log-loss | Brier |
+|---|---|---|---|
+| Coin flip | 0.472 | 0.693 | 0.250 |
+| Higher-Elo-wins dummy | 0.558 | — | — |
+| Elo baseline | 0.553 | 0.670 | 0.239 |
+| XGBoost | 0.642 | 0.635 | 0.222 |
+| **Neural net** (5-seed ensemble, calibrated) | **0.645** | **0.633** | **0.221** |
+
+(The coin flip's 0.472 is just the test split's class balance: p = 0.5
+ties break toward "A wins", and corner A won 47.2% of test rows.)
+
+**Method of victory** (871 test fights): XGBoost 0.535 accuracy /
+macro-F1 0.298; the neural ensemble 0.434 accuracy / **macro-F1 0.380**;
+majority-class ("decision") baseline 0.540 accuracy / macro-F1 0.234 —
+the same trade-off each model made on validation. **Finish round**
+(401 test finishes): XGBoost 0.494 accuracy / macro-F1 0.169 vs a
+majority ("round 1") baseline of 0.499 / 0.166 — still barely
+distinguishable from the base rate.
+
+The validation results held up on test: the learned models actually
+improved out of sample (XGBoost 0.595 → 0.642 accuracy, neural net
+0.606 → 0.645, both with better log-loss) while the Elo baseline slipped
+slightly (0.576 → 0.553), and the ladder's ordering was preserved.
+
 The neural net is a multi-task network (shared trunk; winner, method, and
 finish-round heads) trained as a deterministic 5-seed ensemble with per-seed
 temperature scaling — fitted temperatures all land near 1.0, i.e. the raw
