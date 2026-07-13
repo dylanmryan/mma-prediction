@@ -21,7 +21,8 @@ via `kagglehub` and auto-refreshes weekly from the same maintained mirror
 (`scripts/refresh_data.py`). A direct ufcstats.com scraper was planned but
 dropped — the site gates automated clients behind an anti-bot challenge;
 `src/mma/parsing.py` is retained in case a future raw-string data source
-needs its parsing helpers.
+needs its parsing helpers. The `.github/workflows/refresh-data.yml` Action
+runs this refresh weekly and commits any rebuilt artifacts automatically.
 
 ## Results so far
 

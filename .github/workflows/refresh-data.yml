@@ -1,0 +1,93 @@
+name: Weekly data refresh
+
+on:
+  schedule:
+    - cron: '0 12 * * 1'
+  workflow_dispatch:
+
+concurrency: refresh-data
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Refresh Kaggle data
+        id: refresh
+        # Uncomment these two lines and add KAGGLE_USERNAME / KAGGLE_KEY as
+        # repo secrets if anonymous Kaggle access fails in CI.
+        # env:
+        #   KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        #   KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          python scripts/refresh_data.py | tee refresh_output.txt
+          grep '^REFRESH_NEEDED=' refresh_output.txt | sed 's/REFRESH_NEEDED=/refresh=/' >> "$GITHUB_OUTPUT"
+
+      - name: Rebuild processed dataset
+        if: steps.refresh.outputs.refresh == 'true'
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/make_dataset.py
+
+      - name: Rebuild Elo ratings
+        if: steps.refresh.outputs.refresh == 'true'
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/build_ratings.py
+
+      - name: Rebuild features
+        if: steps.refresh.outputs.refresh == 'true'
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/build_features.py
+
+      - name: Retrain XGBoost models
+        if: steps.refresh.outputs.refresh == 'true'
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/train_xgb.py
+
+      - name: Retrain torch ensemble
+        if: steps.refresh.outputs.refresh == 'true'
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/train_torch.py
+
+      - name: Rebuild display priors
+        if: steps.refresh.outputs.refresh == 'true'
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/build_display_priors.py
+
+      - name: Run test suite
+        if: steps.refresh.outputs.refresh == 'true'
+        env:
+          OMP_NUM_THREADS: "1"
+        run: pytest -q
+
+      - name: Commit and push refreshed data
+        if: steps.refresh.outputs.refresh == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "Weekly data refresh"
+            git push
+          else
+            echo "no changes to commit"
+          fi
