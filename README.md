@@ -167,8 +167,11 @@ runs `scripts/predict_upcoming.py`, which:
    guessed, and every prediction records which tier matched it
    (`match_tier`). If the scheduled-events parse ever returns nothing at
    all — which can only mean Wikipedia's page structure changed, since the
-   UFC always has future events booked — the run fails loudly instead of
-   reporting an empty success.
+   UFC always has future events booked — this step fails loudly instead of
+   reporting an empty success. That failure only stops *new* predictions;
+   the Action's grading, retrain-check, and commit steps are wired with
+   `if: always()` so a broken Wikipedia parser can't stall grading of
+   predictions already committed to git.
 3. Predicts every matched fight with the exact committed ensemble
    (`mma.inference.predict_symmetrized`) and writes one JSON record per
    event to `predictions/`, stamped with the prediction time and the git
