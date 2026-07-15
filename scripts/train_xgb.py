@@ -1,6 +1,7 @@
 """Train XGBoost baselines; report validation-years metrics only."""
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -19,11 +20,24 @@ ROUND_CLASSES = ["1", "2", "3", "45"]
 
 
 def main() -> None:
+    # --train-end/--val-start/--val-end/--models-dir default to the module
+    # constants above (the standard pre-2021/2021-2023 split used by every
+    # other script and by app.py). scripts/roll_window.py --execute passes
+    # different values to re-validate a walk-forward retrain on a newer
+    # slice without touching this script's normal weekly-refresh behavior.
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--train-end", default=TRAIN_END)
+    parser.add_argument("--val-start", default=VAL_START)
+    parser.add_argument("--val-end", default=VAL_END)
+    parser.add_argument("--models-dir", type=Path, default=MODELS)
+    args = parser.parse_args()
+
     features = pd.read_parquet(PROCESSED / "features.parquet")
     x = feature_frame(features)
-    train = features["date"] < TRAIN_END
-    val = (features["date"] >= VAL_START) & (features["date"] <= VAL_END)
-    MODELS.mkdir(exist_ok=True)
+    train = features["date"] < args.train_end
+    val = (features["date"] >= args.val_start) & (features["date"] <= args.val_end)
+    models_dir = args.models_dir
+    models_dir.mkdir(exist_ok=True, parents=True)
     metrics = {}
 
     # winner
@@ -37,7 +51,7 @@ def main() -> None:
         "brier": round(brier_score(y[val], p_val), 4),
         "best_iteration": int(winner.best_iteration),
     }
-    winner.save_model(MODELS / "xgb_winner.json")
+    winner.save_model(models_dir / "xgb_winner.json")
 
     # method (rows with known method)
     known = features["y_method"].notna()
@@ -55,7 +69,7 @@ def main() -> None:
         "macro_f1": round(macro_f1(truth, pred), 4),
         "majority_baseline_accuracy": round(float(sum(t == majority for t in truth) / len(truth)), 4),
     }
-    method.save_model(MODELS / "xgb_method.json")
+    method.save_model(models_dir / "xgb_method.json")
 
     # finish round (finishes only)
     finish = features["y_finish_round"].notna()
@@ -73,9 +87,9 @@ def main() -> None:
         "macro_f1": round(macro_f1(truth, pred), 4),
         "majority_baseline_accuracy": round(float(sum(t == majority for t in truth) / len(truth)), 4),
     }
-    rounds.save_model(MODELS / "xgb_round.json")
+    rounds.save_model(models_dir / "xgb_round.json")
 
-    (MODELS / "xgb_metrics_val.json").write_text(json.dumps(metrics, indent=2))
+    (models_dir / "xgb_metrics_val.json").write_text(json.dumps(metrics, indent=2))
     print(json.dumps(metrics, indent=2))
 
     importances = pd.Series(
