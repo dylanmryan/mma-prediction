@@ -1,6 +1,7 @@
 """Train the 5-seed ensemble; report validation-years metrics only."""
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -24,10 +25,21 @@ SEEDS = (0, 1, 2, 3, 4)
 
 
 def main() -> None:
+    # See scripts/train_xgb.py for why these are overridable: a walk-forward
+    # retrain (scripts/roll_window.py --execute) needs the same training
+    # procedure on a newer train/val split, without changing the default
+    # weekly-refresh behavior when no args are passed.
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--train-end", default=TRAIN_END)
+    parser.add_argument("--val-start", default=VAL_START)
+    parser.add_argument("--val-end", default=VAL_END)
+    parser.add_argument("--out-dir", type=Path, default=OUT)
+    args = parser.parse_args()
+
     features = pd.read_parquet(PROCESSED / "features.parquet")
-    train = (features["date"] < TRAIN_END).to_numpy()
+    train = (features["date"] < args.train_end).to_numpy()
     val = (
-        (features["date"] >= VAL_START) & (features["date"] <= VAL_END)
+        (features["date"] >= args.val_start) & (features["date"] <= args.val_end)
     ).to_numpy()
 
     prep = Preprocessor.fit(features, train_mask=train)
@@ -37,8 +49,9 @@ def main() -> None:
     def sliced(mask):
         return {key: value[torch.tensor(mask)] for key, value in targets.items()}
 
-    OUT.mkdir(parents=True, exist_ok=True)
-    prep.save(OUT / "preprocess.json")
+    out_dir = args.out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+    prep.save(out_dir / "preprocess.json")
 
     y_val = targets["y_winner"][torch.tensor(val)].numpy()
     per_seed, winner_probs = [], []
@@ -70,7 +83,7 @@ def main() -> None:
         torch.save(
             {"state_dict": net.state_dict(), "temperature": temperature,
              "n_features": x.shape[1], "n_weight_classes": prep.n_weight_classes},
-            OUT / f"net_seed{seed}.pt",
+            out_dir / f"net_seed{seed}.pt",
         )
 
     ensemble = np.mean(winner_probs, axis=0)
@@ -102,7 +115,7 @@ def main() -> None:
         "macro_f1": round(macro_f1(method_true, method_pred), 4),
     }
 
-    (OUT / "metrics_val.json").write_text(json.dumps(metrics, indent=2))
+    (out_dir / "metrics_val.json").write_text(json.dumps(metrics, indent=2))
     print(json.dumps(metrics, indent=2))
 
 
