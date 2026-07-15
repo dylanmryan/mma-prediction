@@ -428,6 +428,127 @@ def test_load_event_record_returns_none_for_missing_file(tmp_path):
     assert load_event_record(tmp_path / "nonexistent.json") is None
 
 
+# --- dedup on unordered id pair, not ordered name tuple --------------------
+
+
+def test_write_event_prediction_swapped_corner_order_does_not_duplicate(tmp_path):
+    # Real prediction with a & b matched to specific ids.
+    fights = [{"fighter_a_name": "A", "fighter_b_name": "B", "skipped": False,
+               "p_a_wins": 0.6, "fighter_a_id": "id_x", "fighter_b_id": "id_y"}]
+    write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "abc1234", "2026-07-15T00:00:00Z", fights,
+    )
+    # Wikipedia re-renders the card with corners swapped -- same ids, same
+    # fight, just fighter_a/fighter_b flipped.
+    swapped = [{"fighter_a_name": "B", "fighter_b_name": "A", "skipped": False,
+                "p_a_wins": 0.4, "fighter_a_id": "id_y", "fighter_b_id": "id_x"}]
+    path, record, n_written = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "def5678", "2026-07-20T00:00:00Z", swapped,
+    )
+    assert n_written == 0
+    assert len(record["fights"]) == 1
+    assert record["fights"][0]["p_a_wins"] == 0.6  # original untouched
+    assert record["fights"][0]["fighter_a_id"] == "id_x"
+
+
+def test_write_event_prediction_diacritic_name_change_same_ids_does_not_duplicate(tmp_path):
+    fights = [{"fighter_a_name": "Aleksandar Rakic", "fighter_b_name": "Fighter B",
+               "skipped": False, "p_a_wins": 0.6,
+               "fighter_a_id": "id_x", "fighter_b_id": "id_y"}]
+    write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "abc1234", "2026-07-15T00:00:00Z", fights,
+    )
+    # Wikipedia later renders the name with full diacritics; same ids.
+    reaccented = [{"fighter_a_name": "Aleksandar Rakić", "fighter_b_name": "Fighter B",
+                   "skipped": False, "p_a_wins": 0.9,
+                   "fighter_a_id": "id_x", "fighter_b_id": "id_y"}]
+    path, record, n_written = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "def5678", "2026-07-20T00:00:00Z", reaccented,
+    )
+    assert n_written == 0
+    assert len(record["fights"]) == 1
+    assert record["fights"][0]["p_a_wins"] == 0.6  # original untouched
+
+
+def test_write_event_prediction_stub_to_real_replacement_uses_name_pair_dedup(tmp_path):
+    # A skipped stub has no ids, so it must still dedup on the unordered
+    # NORMALIZED name pair -- and a matched re-run replaces it.
+    stub = [{"fighter_a_name": "A", "fighter_b_name": "B", "skipped": True,
+             "reason": "no fighter matches name 'A'"}]
+    write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "abc1234", "2026-07-15T00:00:00Z", stub,
+    )
+    real = [{"fighter_a_name": "B", "fighter_b_name": "A", "skipped": False,
+             "p_a_wins": 0.7, "fighter_a_id": "id_y", "fighter_b_id": "id_x"}]
+    path, record, n_written = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "def5678", "2026-07-20T00:00:00Z", real,
+    )
+    assert n_written == 1
+    assert len(record["fights"]) == 1
+    fight = record["fights"][0]
+    assert fight["skipped"] is False
+    assert fight["p_a_wins"] == 0.7
+    assert "reason" not in fight
+
+
+def test_write_event_prediction_real_prediction_beats_colliding_stub_name_pair(tmp_path):
+    # A real prediction exists for an id pair. A later run produces a
+    # SKIPPED stub whose name pair happens to collide (e.g. a different
+    # spelling that fails to match). The real prediction must not be
+    # replaced by the stub.
+    real = [{"fighter_a_name": "A", "fighter_b_name": "B", "skipped": False,
+             "p_a_wins": 0.6, "fighter_a_id": "id_x", "fighter_b_id": "id_y"}]
+    path, _, _ = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "abc1234", "2026-07-15T00:00:00Z", real,
+    )
+    original_bytes = path.read_bytes()
+    colliding_stub = [{"fighter_a_name": "A", "fighter_b_name": "B", "skipped": True,
+                       "reason": "spurious re-match failure"}]
+    _, record, n_written = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "def5678", "2026-07-20T00:00:00Z", colliding_stub,
+    )
+    assert n_written == 0
+    assert path.read_bytes() == original_bytes
+    assert record["fights"][0]["p_a_wins"] == 0.6
+
+
+def test_write_event_prediction_two_different_fights_same_card_both_written(tmp_path):
+    fights = [
+        {"fighter_a_name": "A", "fighter_b_name": "B", "skipped": False,
+         "p_a_wins": 0.6, "fighter_a_id": "id_x", "fighter_b_id": "id_y"},
+        {"fighter_a_name": "C", "fighter_b_name": "D", "skipped": False,
+         "p_a_wins": 0.55, "fighter_a_id": "id_p", "fighter_b_id": "id_q"},
+    ]
+    path, record, n_written = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "abc1234", "2026-07-15T00:00:00Z", fights,
+    )
+    assert n_written == 2
+    assert len(record["fights"]) == 2
+
+    # Re-running with the SAME two (genuinely different) fights writes nothing new.
+    rerun = [
+        {"fighter_a_name": "B", "fighter_b_name": "A", "skipped": False,
+         "p_a_wins": 0.4, "fighter_a_id": "id_y", "fighter_b_id": "id_x"},
+        {"fighter_a_name": "D", "fighter_b_name": "C", "skipped": False,
+         "p_a_wins": 0.45, "fighter_a_id": "id_q", "fighter_b_id": "id_p"},
+    ]
+    _, record2, n_written2 = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "def5678", "2026-07-20T00:00:00Z", rerun,
+    )
+    assert n_written2 == 0
+    assert len(record2["fights"]) == 2
+
+
 # --- integration test against real committed artifacts --------------------
 
 
