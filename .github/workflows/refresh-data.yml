@@ -91,3 +91,35 @@ jobs:
           else
             echo "no changes to commit"
           fi
+
+      # Everything below runs EVERY week regardless of whether Kaggle had
+      # new data -- prospective predictions and grading don't depend on a
+      # data refresh happening, and this is the project's flagship
+      # credibility feature (timestamped predictions, committed before
+      # events, graded automatically after).
+      - name: Predict upcoming events
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/predict_upcoming.py
+
+      - name: Grade past predictions
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/grade_predictions.py
+
+      - name: Check walk-forward retrain status (report only)
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/roll_window.py
+
+      - name: Commit and push predictions
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain predictions/)" ]; then
+            git add predictions/
+            git commit -m "Weekly predictions and grading"
+            git push
+          else
+            echo "no prediction changes to commit"
+          fi
