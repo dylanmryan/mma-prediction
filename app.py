@@ -220,6 +220,41 @@ if name_a and name_b and name_a != name_b:
     st.subheader("Elo trajectories")
     st.line_chart(trajectory, height=240)
 
+# Prospective track record: public, timestamped predictions for real
+# upcoming events (predictions/, written weekly by scripts/predict_upcoming.py)
+# graded automatically after each event (scripts/grade_predictions.py). This
+# is the strongest evaluation in the project -- committed before results are
+# known -- so it's surfaced here too, not just in the README. Silently
+# skipped if track_record.json doesn't exist yet or has nothing graded, so
+# the app never shows a broken or all-null section.
+TRACK_RECORD = ROOT / "predictions" / "track_record.json"
+if TRACK_RECORD.exists():
+    track_record = json.loads(TRACK_RECORD.read_text())
+    if track_record.get("overall", {}).get("n_graded", 0) > 0:
+        st.divider()
+        st.subheader("Prospective track record")
+        st.caption(
+            "Real upcoming UFC events, predicted and committed to git before "
+            "they happen, graded automatically afterward. See "
+            "[predictions/](https://github.com/dylanmryan/mma-prediction/tree/main/predictions) "
+            "and [track_record.json](https://github.com/dylanmryan/mma-prediction/blob/main/predictions/track_record.json)."
+        )
+        overall = track_record["overall"]
+        cols = st.columns(4)
+        cols[0].metric("Fights predicted", overall["n_predicted"])
+        cols[1].metric("Fights graded", overall["n_graded"])
+        cols[2].metric("Accuracy", f"{overall['accuracy']:.1%}" if overall["accuracy"] is not None else "—")
+        cols[3].metric("Log-loss", f"{overall['log_loss']:.3f}" if overall["log_loss"] is not None else "—")
+        baselines = track_record.get("baselines", {})
+        coin_flip = baselines.get("coin_flip", {})
+        elo_dummy = baselines.get("higher_elo_dummy", {})
+        if coin_flip.get("accuracy") is not None:
+            st.caption(
+                f"vs. coin flip {coin_flip['accuracy']:.1%} accuracy / "
+                f"{coin_flip['log_loss']:.3f} log-loss, higher-Elo dummy "
+                f"{elo_dummy.get('accuracy', float('nan')):.1%} accuracy."
+            )
+
 st.divider()
 st.caption(
     "Model card: multi-task net (winner/method/finish-round), 5-seed ensemble, "

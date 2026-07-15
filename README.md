@@ -23,6 +23,9 @@ plus an interactive Streamlit matchup explorer.
   temperature scaling, display probabilities recalibrated to historical base rates.
 - **Self-updating**: a weekly GitHub Action refreshes the dataset and rebuilds
   every artifact; the entire pipeline reproduces byte-for-byte.
+- **Prospective evaluation**: real upcoming UFC events get predicted and
+  committed to git *before* they happen, then auto-graded afterward — see
+  [Prospective track record](#prospective-track-record) below.
 
 Design doc: `docs/superpowers/specs/2026-07-10-mma-prediction-design.md` ·
 Phase plans: `docs/superpowers/plans/`
@@ -138,6 +141,67 @@ All-time peak Elo (through 2025-09):
 | 8 | Francis Ngannou | 1870 |
 | 9 | Khabib Nurmagomedov | 1867 |
 | 10 | Tony Ferguson | 1867 |
+
+## Prospective track record
+
+Every result above is a backtest: the model already knows the outcome of
+every fight it's scored on, and it's possible (even with honest time
+splits) to unconsciously tune a project until it looks good in hindsight.
+So this project also makes **public, timestamped predictions for real
+upcoming UFC events, committed to git before those events happen, and
+graded automatically afterward.**
+
+This is the strongest evaluation in the repo, for one reason: a prediction
+committed to git history with a timestamp *cannot be edited after the fact*
+to look better than it was. Every Monday, `.github/workflows/refresh-data.yml`
+runs `scripts/predict_upcoming.py`, which:
+
+1. Fetches the "List of UFC events" page from Wikipedia (MediaWiki API,
+   polite rate limit) and keeps events in the next 30 days.
+2. Fetches each event's fight card and matches fighter names against
+   `fighters.parquet` by exact, unicode-normalized string match. A name
+   that matches zero or multiple fighters is **skipped with a logged
+   reason** rather than guessed.
+3. Predicts every matched fight with the exact committed ensemble
+   (`mma.inference.predict_symmetrized`) and writes one JSON record per
+   event to `predictions/`, stamped with the prediction time and the git
+   sha of the model that made it.
+4. Writing is idempotent: re-running never overwrites an existing
+   prediction, even if the fighters' stats or the model itself have since
+   changed. Fights announced later are appended with their own timestamp.
+
+A second step, `scripts/grade_predictions.py`, runs every week too: once an
+event's date has passed, it looks up the actual result in
+`data/processed/fights.parquet` (matched on the fighter pair + date within
+3 days) and appends grading fields — never touching the original
+prediction — to the same file. Two comparison baselines are graded
+alongside the model on every fight: a coin flip and a "higher Elo wins"
+dummy (using the Elo ratings recorded at prediction time, so the dummy
+stays gradeable even as ratings keep moving). Aggregate stats land in
+[`predictions/track_record.json`](predictions/track_record.json).
+
+**Current status** (honest — this just started):
+
+| Model version | Fights predicted | Fights graded | Accuracy | Log-loss |
+|---|---|---|---|---|
+| `79135ef` (current) | 13 | 0 | — | — |
+
+All 13 predictions are pending: they cover 4 events between 2026-07-18 and
+2026-08-08, none of which have happened yet. Grading itself can lag a
+finished event by days to weeks, because it depends on the Kaggle mirror
+picking up the result — the same lag documented for the weekly data
+refresh above. Nothing here is cherry-picked: every prediction this
+pipeline ever makes gets a row, win or lose.
+
+A walk-forward retraining hook (`scripts/roll_window.py`) watches this
+track record: once 150 graded prospective fights have accumulated since
+the current model's data cutoff, it reports a pre-registered promotion
+protocol (retrain on a pushed-forward cutoff, validate on the newest 2
+years, promote only if the new model beats the incumbent re-evaluated on
+that *same* slice by more than 0.002 log-loss). Promotion is deliberately
+a manual, human-reviewed step (`--execute`, run by hand via
+`workflow_dispatch`) — the weekly Action only ever runs it in `--dry-run`
+and prints the report.
 
 ## Interactive app
 
