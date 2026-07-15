@@ -222,6 +222,81 @@ a manual, human-reviewed step (`--execute`, run by hand via
 `workflow_dispatch`) — the weekly Action only ever runs it in `--dry-run`
 and prints the report.
 
+## Model vs. the betting market
+
+Every metric above compares the model to other models (or to itself).
+The real question for any prediction system is whether it beats the
+market — professional bookmaker lines are one of the sharpest, most
+efficient forecasts that exist for a sporting event, built from liquid
+money and constant correction, and closing lines in particular are
+close to the ceiling of what's knowable pre-fight. So `scripts/build_odds_benchmark.py`
+pulls historical UFC moneylines ([`jerzyszocik/ufc-betting-odds-daily-dataset`](https://www.kaggle.com/datasets/jerzyszocik/ufc-betting-odds-daily-dataset),
+CC0, via kagglehub) and scores the committed neural ensemble against the
+devigged market-implied probability on the same fights. **The odds are
+used only as an evaluation comparator — they are never a model feature**;
+nothing in this benchmark touches training, tuning, or inference.
+
+Alignment uses the shared 16-hex ufcstats fight id embedded in both
+datasets' URLs, with each fight's two bookmaker-quoted fighters matched to
+our `fighter_a`/`fighter_b` convention by their ufcstats fighter ids
+(present for every fight in this dataset, so the name-based accent-folding
+fallback — reused from the prospective pipeline — never had to fire: 6,274
+fights aligned by id, 0 by name, 238 skipped for having no usable odds
+rows). Alignment is sanity-checked against five famous fights with known,
+independently-verifiable betting favorites — including two where the
+favorite *lost* (Holly Holm over Ronda Rousey, Chris Weidman over Anderson
+Silva) and one rematch where the odds file lists the same two fighters in
+reversed column order (proving this isn't a "column 1 is always the
+favorite" bug) — before any aggregate numbers are trusted.
+
+The **headline comparison** restricts to fights on or after 2021-01-01 —
+the model's validation+test era, which it never trained on — so the model
+isn't credited for fights it already knows the answer to. Odds coverage
+isn't total, but on the matched, 2021+, odds-available set (**1,956
+fights**):
+
+| | Accuracy | Log-loss | Brier |
+|---|---|---|---|
+| **Model** (neural ensemble) | 0.619 | 0.644 | 0.227 |
+| **Market** (devigged consensus odds) | **0.671** | **0.606** | **0.209** |
+
+The market wins on every metric, by a comfortable but not suspicious
+margin (Δlog-loss = +0.038 in the market's favor). **This is the expected,
+correct outcome, not a disappointing one** — a model built from
+box-score-derived features losing to a market that also prices in
+injuries, weight cuts, camp changes, and everything else the betting
+public knows the morning of the fight is exactly what a well-behaved
+evaluation should show. The honesty gate in `build_odds_benchmark.py`
+would have stopped the pipeline and refused to report clean numbers if the
+model had implausibly *beaten* the market instead (a >0.02 log-loss edge
+in the model's favor almost always means a leakage or alignment bug, not a
+real edge). A secondary cut over all 6,273 matched fights (including
+pre-2021 fights the model trained on, so treat this as a looser sanity
+check rather than an honest comparison) shows the same ordering: market
+0.610 log-loss vs. model 0.641.
+
+**Calibration**: both are well-behaved across probability deciles — mean
+predicted probability tracks the empirical win rate bin-by-bin for both
+the model and the market — but the market's predictions spread further
+into the confident tails (more fights called at >70% or <20%), while the
+model stays comparatively conservative in the middle of the range. That
+extra confidence, where warranted, is a big part of where the market's
+sharper log-loss comes from.
+
+**Simulated ROI** (flat 1-unit stake, betting whenever the model's
+probability exceeds the market's devigged implied probability by a
+threshold, settled at that fighter's actual decimal odds) is negative at
+every threshold tested, for both the favorite-edge and underdog-edge
+variants — consistent with a sharp market and a model that doesn't beat
+it. This is an **in-sample-of-the-market backtest, not a strategy
+claim**: no bankroll management, no line-shopping or timing realism, no
+transaction costs, and it's evaluated on the same historical lines used
+for the log-loss comparison above.
+
+Full numbers (n_fights, per-metric breakdowns, 10-bin calibration tables,
+and the full ROI sweep at 0%/5%/10% thresholds) are in the committed
+[`models/market_benchmark.json`](models/market_benchmark.json).
+
 ## Interactive app
 
 `app.py` is a Streamlit front end over the committed ensemble: pick two

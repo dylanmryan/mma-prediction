@@ -1,0 +1,342 @@
+{
+  "computed_once_on": "2026-07-15",
+  "odds_dataset": "jerzyszocik/ufc-betting-odds-daily-dataset",
+  "note": "Betting odds are an EVALUATION-ONLY comparator here, never a model feature. Headline comparison restricts to date >= 2021-01-01 (the model's validation+test era, never seen in training); 'all_matched_fights_secondary' includes pre-2021 fights the model WAS trained on, so treat it as a looser sanity cut, not an honest out-of-sample comparison.",
+  "alignment": {
+    "n_aligned_by_id": 6274,
+    "n_aligned_by_name": 0,
+    "n_skipped": 238
+  },
+  "headline_2021_plus": {
+    "n_fights": 1956,
+    "model": {
+      "accuracy": 0.6191,
+      "log_loss": 0.644,
+      "brier": 0.2266
+    },
+    "market": {
+      "accuracy": 0.6713,
+      "log_loss": 0.6061,
+      "brier": 0.2093
+    },
+    "delta_model_minus_market": {
+      "accuracy": -0.0522,
+      "log_loss": 0.0379,
+      "brier": 0.0173
+    },
+    "calibration": {
+      "model": [
+        {
+          "bin": "[0.0, 0.1)",
+          "count": 1,
+          "mean_pred": 0.043,
+          "empirical_rate": 0.0
+        },
+        {
+          "bin": "[0.1, 0.2)",
+          "count": 6,
+          "mean_pred": 0.1716,
+          "empirical_rate": 0.0
+        },
+        {
+          "bin": "[0.2, 0.3)",
+          "count": 106,
+          "mean_pred": 0.2637,
+          "empirical_rate": 0.1792
+        },
+        {
+          "bin": "[0.3, 0.4)",
+          "count": 375,
+          "mean_pred": 0.3553,
+          "empirical_rate": 0.328
+        },
+        {
+          "bin": "[0.4, 0.5)",
+          "count": 549,
+          "mean_pred": 0.4504,
+          "empirical_rate": 0.4463
+        },
+        {
+          "bin": "[0.5, 0.6)",
+          "count": 488,
+          "mean_pred": 0.5473,
+          "empirical_rate": 0.5205
+        },
+        {
+          "bin": "[0.6, 0.7)",
+          "count": 290,
+          "mean_pred": 0.6433,
+          "empirical_rate": 0.6793
+        },
+        {
+          "bin": "[0.7, 0.8)",
+          "count": 127,
+          "mean_pred": 0.7369,
+          "empirical_rate": 0.7638
+        },
+        {
+          "bin": "[0.8, 0.9)",
+          "count": 14,
+          "mean_pred": 0.8334,
+          "empirical_rate": 0.9286
+        },
+        {
+          "bin": "[0.9, 1.0)",
+          "count": 0,
+          "mean_pred": null,
+          "empirical_rate": null
+        }
+      ],
+      "market": [
+        {
+          "bin": "[0.0, 0.1)",
+          "count": 3,
+          "mean_pred": 0.0878,
+          "empirical_rate": 0.0
+        },
+        {
+          "bin": "[0.1, 0.2)",
+          "count": 78,
+          "mean_pred": 0.162,
+          "empirical_rate": 0.1154
+        },
+        {
+          "bin": "[0.2, 0.3)",
+          "count": 214,
+          "mean_pred": 0.2576,
+          "empirical_rate": 0.1963
+        },
+        {
+          "bin": "[0.3, 0.4)",
+          "count": 340,
+          "mean_pred": 0.3496,
+          "empirical_rate": 0.3382
+        },
+        {
+          "bin": "[0.4, 0.5)",
+          "count": 335,
+          "mean_pred": 0.4479,
+          "empirical_rate": 0.4
+        },
+        {
+          "bin": "[0.5, 0.6)",
+          "count": 329,
+          "mean_pred": 0.5546,
+          "empirical_rate": 0.5137
+        },
+        {
+          "bin": "[0.6, 0.7)",
+          "count": 361,
+          "mean_pred": 0.6491,
+          "empirical_rate": 0.6731
+        },
+        {
+          "bin": "[0.7, 0.8)",
+          "count": 212,
+          "mean_pred": 0.7468,
+          "empirical_rate": 0.7689
+        },
+        {
+          "bin": "[0.8, 0.9)",
+          "count": 84,
+          "mean_pred": 0.8364,
+          "empirical_rate": 0.869
+        },
+        {
+          "bin": "[0.9, 1.0)",
+          "count": 0,
+          "mean_pred": null,
+          "empirical_rate": null
+        }
+      ]
+    },
+    "roi": {
+      "0.00": {
+        "favorite_edge_on_a": {
+          "n_bets": 930,
+          "staked": 930.0,
+          "net": -87.897,
+          "roi_pct": -9.451
+        },
+        "underdog_edge_on_b": {
+          "n_bets": 1026,
+          "staked": 1026.0,
+          "net": -19.424,
+          "roi_pct": -1.893
+        }
+      },
+      "0.05": {
+        "favorite_edge_on_a": {
+          "n_bets": 667,
+          "staked": 667.0,
+          "net": -93.132,
+          "roi_pct": -13.963
+        },
+        "underdog_edge_on_b": {
+          "n_bets": 740,
+          "staked": 740.0,
+          "net": -40.383,
+          "roi_pct": -5.457
+        }
+      },
+      "0.10": {
+        "favorite_edge_on_a": {
+          "n_bets": 437,
+          "staked": 437.0,
+          "net": -64.666,
+          "roi_pct": -14.798
+        },
+        "underdog_edge_on_b": {
+          "n_bets": 478,
+          "staked": 478.0,
+          "net": -35.207,
+          "roi_pct": -7.365
+        }
+      }
+    }
+  },
+  "all_matched_fights_secondary": {
+    "n_fights": 6273,
+    "model": {
+      "accuracy": 0.631,
+      "log_loss": 0.6409,
+      "brier": 0.225
+    },
+    "market": {
+      "accuracy": 0.66,
+      "log_loss": 0.6104,
+      "brier": 0.2113
+    },
+    "delta_model_minus_market": {
+      "accuracy": -0.029,
+      "log_loss": 0.0305,
+      "brier": 0.0137
+    },
+    "calibration": {
+      "model": [
+        {
+          "bin": "[0.0, 0.1)",
+          "count": 1,
+          "mean_pred": 0.043,
+          "empirical_rate": 0.0
+        },
+        {
+          "bin": "[0.1, 0.2)",
+          "count": 23,
+          "mean_pred": 0.1727,
+          "empirical_rate": 0.087
+        },
+        {
+          "bin": "[0.2, 0.3)",
+          "count": 346,
+          "mean_pred": 0.2643,
+          "empirical_rate": 0.1908
+        },
+        {
+          "bin": "[0.3, 0.4)",
+          "count": 1166,
+          "mean_pred": 0.3562,
+          "empirical_rate": 0.3276
+        },
+        {
+          "bin": "[0.4, 0.5)",
+          "count": 1757,
+          "mean_pred": 0.4518,
+          "empirical_rate": 0.4343
+        },
+        {
+          "bin": "[0.5, 0.6)",
+          "count": 1637,
+          "mean_pred": 0.5494,
+          "empirical_rate": 0.5535
+        },
+        {
+          "bin": "[0.6, 0.7)",
+          "count": 970,
+          "mean_pred": 0.6425,
+          "empirical_rate": 0.6969
+        },
+        {
+          "bin": "[0.7, 0.8)",
+          "count": 334,
+          "mean_pred": 0.7358,
+          "empirical_rate": 0.7784
+        },
+        {
+          "bin": "[0.8, 0.9)",
+          "count": 39,
+          "mean_pred": 0.835,
+          "empirical_rate": 0.9231
+        },
+        {
+          "bin": "[0.9, 1.0)",
+          "count": 0,
+          "mean_pred": null,
+          "empirical_rate": null
+        }
+      ],
+      "market": [
+        {
+          "bin": "[0.0, 0.1)",
+          "count": 11,
+          "mean_pred": 0.087,
+          "empirical_rate": 0.0
+        },
+        {
+          "bin": "[0.1, 0.2)",
+          "count": 257,
+          "mean_pred": 0.1644,
+          "empirical_rate": 0.144
+        },
+        {
+          "bin": "[0.2, 0.3)",
+          "count": 734,
+          "mean_pred": 0.2542,
+          "empirical_rate": 0.2234
+        },
+        {
+          "bin": "[0.3, 0.4)",
+          "count": 1085,
+          "mean_pred": 0.3514,
+          "empirical_rate": 0.3456
+        },
+        {
+          "bin": "[0.4, 0.5)",
+          "count": 1138,
+          "mean_pred": 0.4485,
+          "empirical_rate": 0.4455
+        },
+        {
+          "bin": "[0.5, 0.6)",
+          "count": 1010,
+          "mean_pred": 0.5558,
+          "empirical_rate": 0.5257
+        },
+        {
+          "bin": "[0.6, 0.7)",
+          "count": 1040,
+          "mean_pred": 0.6484,
+          "empirical_rate": 0.6433
+        },
+        {
+          "bin": "[0.7, 0.8)",
+          "count": 731,
+          "mean_pred": 0.7455,
+          "empirical_rate": 0.7825
+        },
+        {
+          "bin": "[0.8, 0.9)",
+          "count": 265,
+          "mean_pred": 0.8374,
+          "empirical_rate": 0.883
+        },
+        {
+          "bin": "[0.9, 1.0)",
+          "count": 2,
+          "mean_pred": 0.9066,
+          "empirical_rate": 1.0
+        }
+      ]
+    }
+  }
+}
