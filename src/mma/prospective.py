@@ -201,6 +201,30 @@ def load_event_record(path: Path) -> dict | None:
     return json.loads(path.read_text()) if path.exists() else None
 
 
+def _id_pair_key(fight: dict) -> frozenset | None:
+    """Unordered id-pair key for a REAL prediction (has both ids), else None.
+
+    Corner order and name spelling are irrelevant once a fight has matched
+    fighter ids -- the id pair is the ground truth identity of the fight.
+    """
+    id_a, id_b = fight.get("fighter_a_id"), fight.get("fighter_b_id")
+    if id_a is None or id_b is None:
+        return None
+    return frozenset((id_a, id_b))
+
+
+def _name_pair_key(fight: dict) -> frozenset:
+    """Unordered, accent-folded, casefolded name-pair key.
+
+    Used for SKIPPED stubs, which have no ids to key on. Folding (not just
+    normalize_name) means a stub written for "Rakic" still dedups against a
+    later run that renders the same fight as "Rakić".
+    """
+    return frozenset(
+        (fold_accents(fight.get("fighter_a_name", "")), fold_accents(fight.get("fighter_b_name", "")))
+    )
+
+
 def write_event_prediction(
     predictions_dir: Path,
     event_name: str,
@@ -229,6 +253,14 @@ def write_event_prediction(
        ever runs for upcoming cards. A skip re-attempted and still skipped
        leaves the original stub untouched (no churn).
 
+    "Already present" is keyed on the UNORDERED fighter-id pair for real
+    predictions (immune to Wikipedia swapping corner order or changing a
+    name's diacritic rendering between runs) and on the unordered
+    accent-folded name pair for skipped stubs (which have no ids yet).
+    A real prediction always wins: a stub can replace a stub, and a real
+    prediction can replace a stub (by either key), but nothing ever
+    replaces a real prediction.
+
     Returns (path, record, n_fights_written) where n_fights_written counts
     appended + stub-replaced fights.
     """
@@ -256,21 +288,66 @@ def write_event_prediction(
         path.write_text(json.dumps(record, indent=2) + "\n")
         return path, record, len(stamped)
 
-    index_by_pair = {
-        (f.get("fighter_a_name"), f.get("fighter_b_name")): i
-        for i, f in enumerate(existing["fights"])
-    }
+    index_by_id_pair: dict[frozenset, int] = {}
+    index_by_name_pair: dict[frozenset, int] = {}
+    for i, f in enumerate(existing["fights"]):
+        id_key = _id_pair_key(f)
+        if id_key is not None:
+            index_by_id_pair[id_key] = i
+        else:
+            index_by_name_pair[_name_pair_key(f)] = i
+
     n_written = 0
     for fight in stamped:
-        pair = (fight["fighter_a_name"], fight["fighter_b_name"])
-        if pair not in index_by_pair:
+        id_key = _id_pair_key(fight)
+        if id_key is not None and id_key in index_by_id_pair:
+            # Already present as a real prediction (by id) -- immutable.
+            continue
+        if id_key is not None:
+            # New real prediction. It may still replace a pre-existing
+            # skipped stub for the same fight, matched by name pair.
+            name_key = _name_pair_key(fight)
+            existing_idx = index_by_name_pair.get(name_key)
+            if existing_idx is not None:
+                current = existing["fights"][existing_idx]
+                if current.get("skipped"):
+                    existing["fights"][existing_idx] = fight
+                    index_by_id_pair[id_key] = existing_idx
+                    del index_by_name_pair[name_key]
+                    n_written += 1
+                # else: a real prediction is already there under this name
+                # pair (shouldn't happen -- it would have an id key -- but
+                # never overwrite it regardless).
+                continue
             existing["fights"].append(fight)
+            index_by_id_pair[id_key] = len(existing["fights"]) - 1
             n_written += 1
             continue
-        current = existing["fights"][index_by_pair[pair]]
-        if current.get("skipped") and not fight.get("skipped"):
-            existing["fights"][index_by_pair[pair]] = fight
-            n_written += 1
+
+        # `fight` is a skipped stub (no ids) -- dedup on the name pair only.
+        # A real prediction (by id) always wins, so only replace an
+        # existing entry if that entry is itself a stub at the same
+        # name-pair slot; never touch a slot claimed by a real prediction.
+        name_key = _name_pair_key(fight)
+        if name_key in index_by_name_pair:
+            existing_idx = index_by_name_pair[name_key]
+            current = existing["fights"][existing_idx]
+            if current.get("skipped") and not fight.get("skipped"):
+                existing["fights"][existing_idx] = fight
+                n_written += 1
+            continue
+        if any(
+            _name_pair_key(f) == name_key
+            for f in existing["fights"]
+            if _id_pair_key(f) is not None
+        ):
+            # A real prediction already covers this name pair (real always
+            # wins) -- do not append a duplicate stub for the same fight.
+            continue
+        existing["fights"].append(fight)
+        index_by_name_pair[name_key] = len(existing["fights"]) - 1
+        n_written += 1
+
     if n_written:
         path.write_text(json.dumps(existing, indent=2) + "\n")
     return path, existing, n_written
