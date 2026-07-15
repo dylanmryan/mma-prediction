@@ -10,6 +10,7 @@ import pytest
 from mma.prospective import (
     build_name_index,
     event_filename,
+    fold_accents,
     load_event_record,
     match_fighter_id,
     normalize_name,
@@ -38,34 +39,83 @@ def test_normalize_name_does_not_strip_accents():
     assert normalize_name("José Aldo") != normalize_name("Jose Aldo")
 
 
+def test_fold_accents_strips_diacritics():
+    assert fold_accents("Aleksandar Rakić") == fold_accents("Aleksandar Rakic")
+    assert fold_accents("Uroš Medić") == "uros medic"
+    assert fold_accents("Ľudovít Klein") == "ludovit klein"
+    assert fold_accents("Mateusz Rębecki") == "mateusz rebecki"
+
+
 def _fighters():
     return pd.DataFrame(
         {
-            "fighter_id": ["id1", "id2", "id3"],
-            "name": ["Jon Jones", "Israel Adesanya", "Jon Jones"],  # id1/id3 collide
+            "fighter_id": ["id1", "id2", "id3", "id4"],
+            # id1/id3 collide exactly; id4 is the ASCII-stored form of a
+            # name Wikipedia renders with diacritics ("Rakić").
+            "name": ["Jon Jones", "Israel Adesanya", "Jon Jones", "Aleksandar Rakic"],
         }
     )
 
 
-def test_match_fighter_id_unique_match():
+def test_match_fighter_id_unique_exact_match():
     index = build_name_index(_fighters())
-    fighter_id, reason = match_fighter_id("israel adesanya", index)
+    fighter_id, tier, reason = match_fighter_id("israel adesanya", index)
     assert fighter_id == "id2"
+    assert tier == "exact"
     assert reason is None
 
 
 def test_match_fighter_id_zero_matches_is_skipped():
     index = build_name_index(_fighters())
-    fighter_id, reason = match_fighter_id("Some Unknown Fighter", index)
+    fighter_id, tier, reason = match_fighter_id("Some Unknown Fighter", index)
     assert fighter_id is None
+    assert tier is None
     assert "no fighter" in reason.lower()
 
 
 def test_match_fighter_id_ambiguous_is_skipped():
     index = build_name_index(_fighters())
-    fighter_id, reason = match_fighter_id("Jon Jones", index)
+    fighter_id, tier, reason = match_fighter_id("Jon Jones", index)
+    assert fighter_id is None
+    assert tier is None
+    assert "ambiguous" in reason.lower()
+
+
+def test_match_fighter_id_accent_folded_fallback():
+    # Wikipedia's "Rakić" has no exact match but folds to the stored "Rakic".
+    index = build_name_index(_fighters())
+    fighter_id, tier, reason = match_fighter_id("Aleksandar Rakić", index)
+    assert fighter_id == "id4"
+    assert tier == "accent_folded"
+    assert reason is None
+
+
+def test_match_fighter_id_folded_collision_still_skips():
+    # Two DISTINCT fighters whose names collide after accent folding.
+    fighters = pd.DataFrame(
+        {
+            "fighter_id": ["idx", "idy"],
+            "name": ["José Silva", "Jose Silva"],
+        }
+    )
+    index = build_name_index(fighters)
+    # An accented spelling that exists exactly resolves at tier 1...
+    fighter_id, tier, _ = match_fighter_id("José Silva", index)
+    assert (fighter_id, tier) == ("idx", "exact")
+    # ...but a third spelling that only matches via folding hits BOTH
+    # fighters in the folded index -> ambiguous -> skip, never guess.
+    fighter_id, tier, reason = match_fighter_id("Josè Silva", index)  # grave accent
+    assert fighter_id is None
+    assert tier is None
+    assert "ambiguous after accent folding" in reason.lower()
+
+
+def test_match_fighter_id_exact_ambiguity_does_not_fall_through_to_folding():
+    index = build_name_index(_fighters())
+    fighter_id, tier, reason = match_fighter_id("JON JONES", index)
     assert fighter_id is None
     assert "ambiguous" in reason.lower()
+    assert "after accent folding" not in reason.lower()  # stopped at tier 1
 
 
 # --- event_filename -----------------------------------------------------
@@ -132,11 +182,14 @@ def _fighters_bio():
 
 
 def _name_index():
-    return {
-        normalize_name("Fighter A"): ["fid_a"],
-        normalize_name("Fighter B"): ["fid_b"],
-        normalize_name("Duplicate Name"): ["dup1", "dup2"],
-    }
+    return build_name_index(
+        pd.DataFrame(
+            {
+                "fighter_id": ["fid_a", "fid_b", "dup1", "dup2"],
+                "name": ["Fighter A", "Fighter B", "Duplicate Name", "Duplicate Name"],
+            }
+        )
+    )
 
 
 def test_predict_fight_success_case():
@@ -151,6 +204,7 @@ def test_predict_fight_success_case():
     assert result["skipped"] is False
     assert result["fighter_a_id"] == "fid_a"
     assert result["fighter_b_id"] == "fid_b"
+    assert result["match_tier"] == "exact"
     assert 0.0 <= result["p_a_wins"] <= 1.0
     assert result["p_a_wins"] > 0.5  # A has the higher Elo
     assert result["scheduled_rounds"] == 5  # main event
@@ -188,9 +242,33 @@ def test_predict_fight_ambiguous_name_is_skipped():
     assert "ambiguous" in result["reason"].lower()
 
 
+def test_predict_fight_accent_folded_match_records_tier():
+    name_index = build_name_index(
+        pd.DataFrame(
+            {
+                "fighter_id": ["fid_a", "fid_b"],
+                # stored ASCII; Wikipedia will render "Fíghter A" with an accent
+                "name": ["Fighter A", "Fighter B"],
+            }
+        )
+    )
+    wiki_fight = {
+        "fighter_a_name": "Fíghter A", "fighter_b_name": "Fighter B",
+        "weight_class": "Lightweight", "title_fight": False, "main_event": False,
+    }
+    result = predict_fight(
+        wiki_fight, name_index, _snapshots(), _fighters_bio(),
+        _FakeEnsemble(), as_of=pd.Timestamp("2026-07-18"),
+    )
+    assert result["skipped"] is False
+    assert result["fighter_a_id"] == "fid_a"
+    assert result["match_tier"] == "accent_folded"
+
+
 def test_predict_fight_matched_id_but_no_snapshot_is_skipped():
-    name_index = dict(_name_index())
-    name_index[normalize_name("No History")] = ["fid_ghost"]
+    name_index = _name_index()
+    name_index["exact"][normalize_name("No History")] = ["fid_ghost"]
+    name_index["folded"][fold_accents("No History")] = ["fid_ghost"]
     wiki_fight = {
         "fighter_a_name": "No History", "fighter_b_name": "Fighter B",
         "weight_class": "Lightweight",
@@ -281,6 +359,71 @@ def test_write_event_prediction_appends_genuinely_new_fights(tmp_path):
     assert record["fights"][0]["predicted_at_utc"] == "2026-07-15T00:00:00Z"
 
 
+def test_write_event_prediction_replaces_skipped_stub_with_real_prediction(tmp_path):
+    # Re-attempt policy: a skipped stub holds no prediction, so a later run
+    # that CAN predict the fight replaces the stub (fresh timestamp, still
+    # pre-event).
+    stub = [{"fighter_a_name": "A", "fighter_b_name": "B", "skipped": True,
+             "reason": "no fighter matches name 'A'"}]
+    path, _, _ = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "abc1234", "2026-07-15T00:00:00Z", stub,
+    )
+    real = [{"fighter_a_name": "A", "fighter_b_name": "B", "skipped": False,
+             "p_a_wins": 0.7}]
+    _, record, n_written = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "def5678", "2026-07-20T00:00:00Z", real,
+    )
+    assert n_written == 1
+    assert len(record["fights"]) == 1
+    fight = record["fights"][0]
+    assert fight["skipped"] is False
+    assert fight["p_a_wins"] == 0.7
+    assert fight["predicted_at_utc"] == "2026-07-20T00:00:00Z"  # fresh stamp
+    assert fight["model_version"] == "def5678"
+    assert "reason" not in fight
+
+
+def test_write_event_prediction_skip_reattempted_and_still_skipped_is_untouched(tmp_path):
+    stub = [{"fighter_a_name": "A", "fighter_b_name": "B", "skipped": True,
+             "reason": "original reason"}]
+    path, _, _ = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "abc1234", "2026-07-15T00:00:00Z", stub,
+    )
+    original_bytes = path.read_bytes()
+    still_skipped = [{"fighter_a_name": "A", "fighter_b_name": "B", "skipped": True,
+                      "reason": "different reason"}]
+    _, record, n_written = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "def5678", "2026-07-20T00:00:00Z", still_skipped,
+    )
+    assert n_written == 0
+    assert path.read_bytes() == original_bytes
+    assert record["fights"][0]["reason"] == "original reason"
+
+
+def test_write_event_prediction_never_replaces_a_real_prediction(tmp_path):
+    real = [{"fighter_a_name": "A", "fighter_b_name": "B", "skipped": False,
+             "p_a_wins": 0.6}]
+    path, _, _ = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "abc1234", "2026-07-15T00:00:00Z", real,
+    )
+    original_bytes = path.read_bytes()
+    # Even a later SKIP for the same pair must not displace a prediction.
+    late_skip = [{"fighter_a_name": "A", "fighter_b_name": "B", "skipped": True,
+                  "reason": "spurious"}]
+    _, record, n_written = write_event_prediction(
+        tmp_path, "UFC 999", "2026-08-01", "https://en.wikipedia.org/wiki/UFC_999",
+        "def5678", "2026-07-20T00:00:00Z", late_skip,
+    )
+    assert n_written == 0
+    assert path.read_bytes() == original_bytes
+    assert record["fights"][0]["p_a_wins"] == 0.6
+
+
 def test_load_event_record_returns_none_for_missing_file(tmp_path):
     assert load_event_record(tmp_path / "nonexistent.json") is None
 
@@ -311,7 +454,7 @@ def test_predict_fight_integration_with_real_artifacts():
     # Pick two real fighters with a unique name match and a snapshot.
     candidates = [
         (name, fid)
-        for name, ids in name_index.items()
+        for name, ids in name_index["exact"].items()
         for fid in ids
         if len(ids) == 1 and fid in snapshots.index
     ]

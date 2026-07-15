@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from datetime import date
 
-from scripts.predict_upcoming import select_upcoming_events
+import pytest
+
+from scripts.predict_upcoming import (
+    ensure_scheduled_events_parsed,
+    select_upcoming_events,
+    warn_if_empty_fight_card,
+)
 
 
 def _events():
@@ -46,3 +52,29 @@ def test_select_upcoming_events_includes_today_and_boundary():
 
 def test_select_upcoming_events_empty_input():
     assert select_upcoming_events([], date(2026, 7, 15), 30) == []
+
+
+def test_ensure_scheduled_events_parsed_exits_1_on_empty(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        ensure_scheduled_events_parsed([])
+    assert excinfo.value.code == 1
+    err = capsys.readouterr().err
+    assert "page structure likely changed" in err
+
+
+def test_ensure_scheduled_events_parsed_passes_with_events():
+    ensure_scheduled_events_parsed([{"event_name": "UFC 331", "date": "2026-09-19"}])
+
+
+def test_warn_if_empty_fight_card_fires_and_names_event(capsys):
+    fired = warn_if_empty_fight_card("UFC Fight Night: Broken Page", [])
+    assert fired is True
+    err = capsys.readouterr().err
+    assert "UFC Fight Night: Broken Page" in err
+    assert "0 fights" in err
+
+
+def test_warn_if_empty_fight_card_silent_when_card_parsed(capsys):
+    fights = [{"fighter_a_name": "A", "fighter_b_name": "B"}]
+    assert warn_if_empty_fight_card("UFC 999", fights) is False
+    assert capsys.readouterr().err == ""

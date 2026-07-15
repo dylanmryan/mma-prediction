@@ -18,36 +18,74 @@ from mma.inference import build_matchup, predict_symmetrized
 
 
 def normalize_name(name: str) -> str:
-    """Unicode-normalize (NFC) + casefold for exact, non-fuzzy name matching.
+    """Unicode-normalize (NFC) + casefold for exact (tier-1) name matching.
 
     Deliberately does NOT strip accents: "Jose Aldo" and "Jose Aldo"
     (composed vs. decomposed forms of the same string) are equal, but
-    "Jose Aldo" and "Jose Aldo" (accent dropped) are not -- per the design,
-    matching must be exact-after-normalization, never a fuzzy guess.
+    "Jose Aldo" and "Jose Aldo" (accent dropped) are not. Accent bridging
+    is tier 2's job -- see `fold_accents` -- and still never guesses.
     """
     return unicodedata.normalize("NFC", name).strip().casefold()
 
 
-def build_name_index(fighters: pd.DataFrame) -> dict[str, list[str]]:
-    """normalized name -> list of fighter_ids sharing that normalized name."""
-    index: dict[str, list[str]] = {}
+def fold_accents(name: str) -> str:
+    """Tier-2 normalization: NFKD-decompose, strip combining marks, casefold.
+
+    Wikipedia renders fighters' names with full diacritics ("Rakić",
+    "Uroš") while fighters.parquet stores ufcstats' ASCII transliterations
+    ("Rakic", "Uros") -- the single biggest source of skips in the first
+    live run. Folding BOTH sides bridges that gap. A folded match must
+    still be UNIQUE (two distinct fighters that collide after folding are
+    ambiguous and skipped), so this widens the net without ever guessing.
+    """
+    decomposed = unicodedata.normalize("NFKD", name)
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return stripped.strip().casefold()
+
+
+def build_name_index(fighters: pd.DataFrame) -> dict[str, dict[str, list[str]]]:
+    """Two-tier lookup: {"exact": normalized name -> fighter_ids,
+    "folded": accent-folded name -> fighter_ids}."""
+    exact: dict[str, list[str]] = {}
+    folded: dict[str, list[str]] = {}
     for fighter_id, name in zip(fighters["fighter_id"], fighters["name"]):
         if pd.isna(name):
             continue
-        index.setdefault(normalize_name(name), []).append(fighter_id)
-    return index
+        exact.setdefault(normalize_name(name), []).append(fighter_id)
+        folded.setdefault(fold_accents(name), []).append(fighter_id)
+    return {"exact": exact, "folded": folded}
 
 
 def match_fighter_id(
-    name: str, index: dict[str, list[str]]
-) -> tuple[str | None, str | None]:
-    """Exact match only. 0 or >=2 matches are both failures -- never guess."""
-    matches = index.get(normalize_name(name), [])
-    if len(matches) == 1:
-        return matches[0], None
-    if len(matches) == 0:
-        return None, f"no fighter in fighters.parquet matches name {name!r}"
-    return None, f"name {name!r} is ambiguous: matches {len(matches)} fighter ids"
+    name: str, index: dict[str, dict[str, list[str]]]
+) -> tuple[str | None, str | None, str | None]:
+    """Two-tier match; returns (fighter_id, match_tier, skip_reason).
+
+    Tier 1: exact unicode-normalized match. Tier 2 (only when tier 1 finds
+    ZERO candidates): accent-folded match on both sides. Either tier must
+    yield exactly ONE fighter id -- 0 or >=2 candidates skip the fight with
+    a reason, never guess. An exact-tier ambiguity does NOT fall through to
+    folding (folding can only make an ambiguous name more ambiguous).
+    """
+    exact_matches = index["exact"].get(normalize_name(name), [])
+    if len(exact_matches) == 1:
+        return exact_matches[0], "exact", None
+    if len(exact_matches) >= 2:
+        return None, None, (
+            f"name {name!r} is ambiguous: matches {len(exact_matches)} fighter ids"
+        )
+    folded_matches = index["folded"].get(fold_accents(name), [])
+    if len(folded_matches) == 1:
+        return folded_matches[0], "accent_folded", None
+    if len(folded_matches) >= 2:
+        return None, None, (
+            f"name {name!r} is ambiguous after accent folding: "
+            f"matches {len(folded_matches)} fighter ids"
+        )
+    return None, None, (
+        f"no fighter in fighters.parquet matches name {name!r} "
+        "(exact or accent-folded)"
+    )
 
 
 def event_filename(event_name: str, event_date: str) -> str:
@@ -60,7 +98,7 @@ def event_filename(event_name: str, event_date: str) -> str:
 
 def predict_fight(
     wiki_fight: dict,
-    name_index: dict[str, list[str]],
+    name_index: dict[str, dict[str, list[str]]],
     snapshots: pd.DataFrame,
     fighters: pd.DataFrame,
     ensemble,
@@ -82,11 +120,14 @@ def predict_fight(
         "weight_class": wiki_fight.get("weight_class"),
     }
 
-    id_a, reason_a = match_fighter_id(name_a, name_index)
-    id_b, reason_b = match_fighter_id(name_b, name_index)
+    id_a, tier_a, reason_a = match_fighter_id(name_a, name_index)
+    id_b, tier_b, reason_b = match_fighter_id(name_b, name_index)
     if id_a is None or id_b is None:
         reasons = [r for r in (reason_a, reason_b) if r]
         return {**base, "skipped": True, "reason": "; ".join(reasons)}
+    # Weakest tier wins the label: if either side needed accent folding,
+    # the whole match is recorded as "accent_folded" for auditability.
+    match_tier = "accent_folded" if "accent_folded" in (tier_a, tier_b) else "exact"
 
     missing_snapshot = [
         n for n, fid in ((name_a, id_a), (name_b, id_b)) if fid not in snapshots.index
@@ -119,6 +160,7 @@ def predict_fight(
         **base,
         "fighter_a_id": id_a,
         "fighter_b_id": id_b,
+        "match_tier": match_tier,
         "title_fight": title_fight,
         "scheduled_rounds": scheduled_rounds,
         "p_a_wins": float(result["winner_prob"]),
@@ -141,7 +183,7 @@ def predict_fight(
 def predict_event(
     event: dict,
     wiki_fights: list[dict],
-    name_index: dict[str, list[str]],
+    name_index: dict[str, dict[str, list[str]]],
     snapshots: pd.DataFrame,
     fighters: pd.DataFrame,
     ensemble,
@@ -168,13 +210,27 @@ def write_event_prediction(
     predicted_at_utc: str,
     fight_predictions: list[dict],
 ) -> tuple[Path, dict, int]:
-    """Idempotently create-or-append an event's prediction record.
+    """Idempotently create-or-merge an event's prediction record.
 
-    A fight already present in the file (matched by fighter-name pair) is
-    NEVER modified -- its prediction and timestamp are the point of this
-    whole system. Only fights not already recorded are appended, each
-    stamped with its own predicted_at_utc/model_version. Returns
-    (path, record, n_new_fights_written).
+    Immutability rule: a fight already present WITH A REAL PREDICTION
+    (skipped: false) is NEVER modified -- its probability and timestamp are
+    the point of this whole system. Two kinds of writes are allowed on an
+    existing file:
+
+    1. Fights not previously recorded are appended, each stamped with its
+       own predicted_at_utc/model_version.
+    2. Re-attempt policy for skips: an existing `skipped: true` stub
+       contains no prediction, only a failure reason, so there is nothing
+       whose timestamp integrity could be violated by replacing it. If a
+       re-run now produces a real prediction for that same fighter pair
+       (e.g. the fighter has since entered fighters.parquet, or the
+       matcher improved), the stub is REPLACED by the prediction with a
+       fresh predicted_at_utc -- still strictly pre-event, since this only
+       ever runs for upcoming cards. A skip re-attempted and still skipped
+       leaves the original stub untouched (no churn).
+
+    Returns (path, record, n_fights_written) where n_fights_written counts
+    appended + stub-replaced fights.
     """
     predictions_dir = Path(predictions_dir)
     predictions_dir.mkdir(parents=True, exist_ok=True)
@@ -200,14 +256,21 @@ def write_event_prediction(
         path.write_text(json.dumps(record, indent=2) + "\n")
         return path, record, len(stamped)
 
-    existing_pairs = {
-        (f.get("fighter_a_name"), f.get("fighter_b_name")) for f in existing["fights"]
+    index_by_pair = {
+        (f.get("fighter_a_name"), f.get("fighter_b_name")): i
+        for i, f in enumerate(existing["fights"])
     }
-    new_fights = [
-        f for f in stamped
-        if (f["fighter_a_name"], f["fighter_b_name"]) not in existing_pairs
-    ]
-    if new_fights:
-        existing["fights"].extend(new_fights)
+    n_written = 0
+    for fight in stamped:
+        pair = (fight["fighter_a_name"], fight["fighter_b_name"])
+        if pair not in index_by_pair:
+            existing["fights"].append(fight)
+            n_written += 1
+            continue
+        current = existing["fights"][index_by_pair[pair]]
+        if current.get("skipped") and not fight.get("skipped"):
+            existing["fights"][index_by_pair[pair]] = fight
+            n_written += 1
+    if n_written:
         path.write_text(json.dumps(existing, indent=2) + "\n")
-    return path, existing, len(new_fights)
+    return path, existing, n_written

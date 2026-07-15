@@ -159,9 +159,16 @@ runs `scripts/predict_upcoming.py`, which:
 1. Fetches the "List of UFC events" page from Wikipedia (MediaWiki API,
    polite rate limit) and keeps events in the next 30 days.
 2. Fetches each event's fight card and matches fighter names against
-   `fighters.parquet` by exact, unicode-normalized string match. A name
-   that matches zero or multiple fighters is **skipped with a logged
-   reason** rather than guessed.
+   `fighters.parquet` in two tiers: an exact unicode-normalized match
+   first, then (only if the exact match finds nothing) an accent-folded
+   match — Wikipedia writes "Rakić" where the dataset stores "Rakic".
+   Either tier must find exactly **one** fighter; a name matching zero or
+   multiple fighters is **skipped with a logged reason** rather than
+   guessed, and every prediction records which tier matched it
+   (`match_tier`). If the scheduled-events parse ever returns nothing at
+   all — which can only mean Wikipedia's page structure changed, since the
+   UFC always has future events booked — the run fails loudly instead of
+   reporting an empty success.
 3. Predicts every matched fight with the exact committed ensemble
    (`mma.inference.predict_symmetrized`) and writes one JSON record per
    event to `predictions/`, stamped with the prediction time and the git
@@ -169,6 +176,12 @@ runs `scripts/predict_upcoming.py`, which:
 4. Writing is idempotent: re-running never overwrites an existing
    prediction, even if the fighters' stats or the model itself have since
    changed. Fights announced later are appended with their own timestamp.
+   One deliberate exception: a fight previously recorded as *skipped*
+   contains no prediction, only a failure reason — so re-runs re-attempt
+   it, and if it now matches (a debuting fighter entering the dataset, a
+   matcher improvement), the skip stub is replaced by a real prediction
+   with a fresh timestamp. That's still strictly pre-event, so the
+   integrity guarantee holds; actual predictions remain immutable.
 
 A second step, `scripts/grade_predictions.py`, runs every week too: once an
 event's date has passed, it looks up the actual result in
