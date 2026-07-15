@@ -1,0 +1,125 @@
+{
+  "event_name": "UFC Fight Night: Medi\u0107 vs. Rodriguez",
+  "event_date": "2026-08-01",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Medi%C4%87_vs._Rodriguez",
+  "predicted_at_utc": "2026-07-15T16:48:25Z",
+  "model_version": "79135ef",
+  "fights": [
+    {
+      "fighter_a_name": "Uro\u0161 Medi\u0107",
+      "fighter_b_name": "Daniel Rodriguez",
+      "weight_class": "Welterweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Uro\u0161 Medi\u0107'",
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Aleksandar Raki\u0107",
+      "fighter_b_name": "Marcin Tybura",
+      "weight_class": "Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Aleksandar Raki\u0107'",
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Du\u0161ko Todorovi\u0107",
+      "fighter_b_name": "Robert Valentin",
+      "weight_class": "Middleweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Du\u0161ko Todorovi\u0107'",
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Vlasto \u010cepo",
+      "fighter_b_name": "Gilbert Urbina",
+      "weight_class": "Middleweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Vlasto \u010cepo'",
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "\u013dudov\u00edt Klein",
+      "fighter_b_name": "Tofiq Musayev",
+      "weight_class": "Lightweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name '\u013dudov\u00edt Klein'",
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Oban Elliott",
+      "fighter_b_name": "Michael Oliveira",
+      "weight_class": "Welterweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Michael Oliveira'",
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Mark Vologdin",
+      "fighter_b_name": "Josias Musasa",
+      "weight_class": "Bantamweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Mark Vologdin'",
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Dennis Buzukja",
+      "fighter_b_name": "Bogdan Grad",
+      "weight_class": "Featherweight",
+      "fighter_a_id": "c4d039123e62f6a9",
+      "fighter_b_id": "fb37795db81f93f3",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.3337199240922928,
+      "method_probs": {
+        "ko_tko": 0.29640841484069824,
+        "submission": 0.2997511029243469,
+        "decision": 0.40384048223495483
+      },
+      "round_probs": {
+        "1": 0.28671127557754517,
+        "2": 0.3598959743976593,
+        "3": 0.35339272022247314,
+        "45": 0.0
+      },
+      "elo_a": 1446.6553113704836,
+      "elo_b": 1509.6802490054256,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Mateusz R\u0119becki",
+      "fighter_b_name": "Kyle Prepolec",
+      "weight_class": "Lightweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Mateusz R\u0119becki'",
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Nina Nikolija Milo\u0161evi\u0107",
+      "fighter_b_name": "Hailey Cowan",
+      "weight_class": "Women's Bantamweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Nina Nikolija Milo\u0161evi\u0107'",
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Jovan Leka",
+      "fighter_b_name": "Max Gimenis",
+      "weight_class": "Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Jovan Leka'; no fighter in fighters.parquet matches name 'Max Gimenis'",
+      "predicted_at_utc": "2026-07-15T16:48:25Z",
+      "model_version": "79135ef"
+    }
+  ]
+}

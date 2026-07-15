@@ -1,0 +1,218 @@
+{
+  "event_name": "UFC Fight Night: Ankalaev vs. Guskov",
+  "event_date": "2026-07-25",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Ankalaev_vs._Guskov",
+  "predicted_at_utc": "2026-07-15T16:48:24Z",
+  "model_version": "79135ef",
+  "fights": [
+    {
+      "fighter_a_name": "Magomed Ankalaev",
+      "fighter_b_name": "Bogdan Guskov",
+      "weight_class": "Light Heavyweight",
+      "fighter_a_id": "d802174b0c0c1f4e",
+      "fighter_b_id": "ef5dcb10d2bd4b0f",
+      "title_fight": false,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.7369895875453949,
+      "method_probs": {
+        "ko_tko": 0.5021682977676392,
+        "submission": 0.21847662329673767,
+        "decision": 0.27935507893562317
+      },
+      "round_probs": {
+        "1": 0.0936836302280426,
+        "2": 0.11003375053405762,
+        "3": 0.1384832262992859,
+        "45": 0.6577993631362915
+      },
+      "elo_a": 1812.0116196019721,
+      "elo_b": 1649.9821114938761,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:24Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Steve Erceg",
+      "fighter_b_name": "Ramazan Temirov",
+      "weight_class": "Flyweight",
+      "fighter_a_id": "32ab52e5de93092d",
+      "fighter_b_id": "7d0a1968b38ca439",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5205346196889877,
+      "method_probs": {
+        "ko_tko": 0.3810780644416809,
+        "submission": 0.2815242409706116,
+        "decision": 0.3373977243900299
+      },
+      "round_probs": {
+        "1": 0.3332430124282837,
+        "2": 0.34897494316101074,
+        "3": 0.3177820146083832,
+        "45": 0.0
+      },
+      "elo_a": 1548.333295902926,
+      "elo_b": 1579.4328342943895,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:24Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Islam Dulatov",
+      "fighter_b_name": "Wellington Turman",
+      "weight_class": "Welterweight",
+      "fighter_a_id": "e803242fb2e41112",
+      "fighter_b_id": "4dcfb28c011c11b2",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.644654706120491,
+      "method_probs": {
+        "ko_tko": 0.3346273601055145,
+        "submission": 0.3246900737285614,
+        "decision": 0.3406825661659241
+      },
+      "round_probs": {
+        "1": 0.3330658972263336,
+        "2": 0.34949153661727905,
+        "3": 0.3174425959587097,
+        "45": 0.0
+      },
+      "elo_a": 1545.7141891449683,
+      "elo_b": 1435.7583132706086,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:24Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Magomed Zaynukov",
+      "fighter_b_name": "Damian Rzepecki",
+      "weight_class": "Lightweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Magomed Zaynukov'; no fighter in fighters.parquet matches name 'Damian Rzepecki'",
+      "predicted_at_utc": "2026-07-15T16:48:24Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Rizvan Kuniev",
+      "fighter_b_name": "Tyrell Fortune",
+      "weight_class": "Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Tyrell Fortune'",
+      "predicted_at_utc": "2026-07-15T16:48:24Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Ismael Bonfim",
+      "fighter_b_name": "Axel Sola",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "eb393afdbe3293d5",
+      "fighter_b_id": "1d2d98ddd05b38fb",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.4543003737926483,
+      "method_probs": {
+        "ko_tko": 0.3090844750404358,
+        "submission": 0.3262503743171692,
+        "decision": 0.364665150642395
+      },
+      "round_probs": {
+        "1": 0.3324730396270752,
+        "2": 0.35171347856521606,
+        "3": 0.31581348180770874,
+        "45": 0.0
+      },
+      "elo_a": 1510.6949707919568,
+      "elo_b": 1537.5247551489463,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:24Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Valter Walker",
+      "fighter_b_name": "Thomas Petersen",
+      "weight_class": "Heavyweight",
+      "fighter_a_id": "f5779a2303ed76ec",
+      "fighter_b_id": "764d39074a352e33",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5575814247131348,
+      "method_probs": {
+        "ko_tko": 0.33468854427337646,
+        "submission": 0.33333146572113037,
+        "decision": 0.33197999000549316
+      },
+      "round_probs": {
+        "1": 0.34703993797302246,
+        "2": 0.3445740044116974,
+        "3": 0.30838605761528015,
+        "45": 0.0
+      },
+      "elo_a": 1600.8870783903644,
+      "elo_b": 1500.4588121155607,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:24Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Santiago Ponzinibbio",
+      "fighter_b_name": "Sam Patterson",
+      "weight_class": "Welterweight",
+      "fighter_a_id": "6d1bffff14897645",
+      "fighter_b_id": "8b6e5dc2ba1edbe7",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.38870780169963837,
+      "method_probs": {
+        "ko_tko": 0.3691865801811218,
+        "submission": 0.26483428478240967,
+        "decision": 0.36597907543182373
+      },
+      "round_probs": {
+        "1": 0.321097195148468,
+        "2": 0.3392488360404968,
+        "3": 0.33965399861335754,
+        "45": 0.0
+      },
+      "elo_a": 1610.8149532737734,
+      "elo_b": 1630.0472332804227,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:24Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Magomed Tuchalov",
+      "fighter_b_name": "Brendson Ribeiro",
+      "weight_class": "Light Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Magomed Tuchalov'",
+      "predicted_at_utc": "2026-07-15T16:48:24Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Nurullo Aliev",
+      "fighter_b_name": "Mike Davis",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "ca28cdf526d6b6e9",
+      "fighter_b_id": "fb3e61720be4690c",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5454879552125931,
+      "method_probs": {
+        "ko_tko": 0.3142496347427368,
+        "submission": 0.3206333816051483,
+        "decision": 0.36511701345443726
+      },
+      "round_probs": {
+        "1": 0.30927878618240356,
+        "2": 0.3518519401550293,
+        "3": 0.33886927366256714,
+        "45": 0.0
+      },
+      "elo_a": 1567.4611365995054,
+      "elo_b": 1610.3715281568286,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:24Z",
+      "model_version": "79135ef"
+    }
+  ]
+}

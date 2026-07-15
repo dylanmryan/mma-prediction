@@ -1,0 +1,32 @@
+{
+  "generated_at_utc": "2026-07-15T16:49:28Z",
+  "overall": {
+    "n_predicted": 13,
+    "n_graded": 0,
+    "accuracy": null,
+    "log_loss": null,
+    "brier": null
+  },
+  "model_versions": {
+    "79135ef": {
+      "n_predicted": 13,
+      "n_graded": 0,
+      "accuracy": null,
+      "log_loss": null,
+      "brier": null,
+      "first_prediction_at": "2026-07-15T16:48:23Z"
+    }
+  },
+  "baselines": {
+    "coin_flip": {
+      "n_graded": 0,
+      "accuracy": null,
+      "log_loss": null,
+      "brier": null
+    },
+    "higher_elo_dummy": {
+      "n_graded": 0,
+      "accuracy": null
+    }
+  }
+}

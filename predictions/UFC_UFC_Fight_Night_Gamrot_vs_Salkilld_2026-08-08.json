@@ -1,0 +1,35 @@
+{
+  "event_name": "UFC Fight Night: Gamrot vs. Salkilld",
+  "event_date": "2026-08-08",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Gamrot_vs._Salkilld",
+  "predicted_at_utc": "2026-07-15T16:48:26Z",
+  "model_version": "79135ef",
+  "fights": [
+    {
+      "fighter_a_name": "Mateusz Gamrot",
+      "fighter_b_name": "Quillan Salkilld",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "72db2a14ffa73ece",
+      "fighter_b_id": "17734443a833cdf7",
+      "title_fight": false,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.5426936596632004,
+      "method_probs": {
+        "ko_tko": 0.3882446885108948,
+        "submission": 0.2904548645019531,
+        "decision": 0.3213004469871521
+      },
+      "round_probs": {
+        "1": 0.08846737444400787,
+        "2": 0.12380340695381165,
+        "3": 0.12215946614742279,
+        "45": 0.6655697822570801
+      },
+      "elo_a": 1721.970917047101,
+      "elo_b": 1574.461912392679,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:26Z",
+      "model_version": "79135ef"
+    }
+  ]
+}

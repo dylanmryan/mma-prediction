@@ -1,0 +1,176 @@
+{
+  "event_name": "UFC Fight Night: du Plessis vs. Usman",
+  "event_date": "2026-07-18",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_du_Plessis_vs._Usman",
+  "predicted_at_utc": "2026-07-15T16:48:23Z",
+  "model_version": "79135ef",
+  "fights": [
+    {
+      "fighter_a_name": "Dricus du Plessis",
+      "fighter_b_name": "Kamaru Usman",
+      "weight_class": "Middleweight",
+      "fighter_a_id": "0d7b51c9d2649a6e",
+      "fighter_b_id": "f1b2aa7853d1ed6e",
+      "title_fight": false,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.5687722563743591,
+      "method_probs": {
+        "ko_tko": 0.506937563419342,
+        "submission": 0.20357947051525116,
+        "decision": 0.2894830107688904
+      },
+      "round_probs": {
+        "1": 0.08092790096998215,
+        "2": 0.10327291488647461,
+        "3": 0.12411661446094513,
+        "45": 0.6916825771331787
+      },
+      "elo_a": 1813.732271617006,
+      "elo_b": 1822.1731825347372,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Jared Cannonier",
+      "fighter_b_name": "Christian Leroy Duncan",
+      "weight_class": "Middleweight",
+      "fighter_a_id": "13a0275fa13c4d26",
+      "fighter_b_id": "a93f94c923c3a9cb",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.3717610239982605,
+      "method_probs": {
+        "ko_tko": 0.4178540110588074,
+        "submission": 0.22433406114578247,
+        "decision": 0.35781192779541016
+      },
+      "round_probs": {
+        "1": 0.31583666801452637,
+        "2": 0.36595016717910767,
+        "3": 0.31821316480636597,
+        "45": 0.0
+      },
+      "elo_a": 1663.365612750966,
+      "elo_b": 1607.7798348055715,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Chase Hooper",
+      "fighter_b_name": "Mitch Ramirez",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "971246648e162f0d",
+      "fighter_b_id": "e99eb0ef25885de5",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.8086091503500938,
+      "method_probs": {
+        "ko_tko": 0.31181132793426514,
+        "submission": 0.355478972196579,
+        "decision": 0.3327096700668335
+      },
+      "round_probs": {
+        "1": 0.3678048253059387,
+        "2": 0.3398638963699341,
+        "3": 0.2923312783241272,
+        "45": 0.0
+      },
+      "elo_a": 1606.6165651660544,
+      "elo_b": 1434.3087956363447,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Tabatha Ricci",
+      "fighter_b_name": "Fatima Kline",
+      "weight_class": "Women's Strawweight",
+      "fighter_a_id": "d25240135aee03e5",
+      "fighter_b_id": "745fa7b605f8e2da",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.46419233083724976,
+      "method_probs": {
+        "ko_tko": 0.28043854236602783,
+        "submission": 0.34629762172698975,
+        "decision": 0.3732638359069824
+      },
+      "round_probs": {
+        "1": 0.3321070075035095,
+        "2": 0.3502611517906189,
+        "3": 0.3176318407058716,
+        "45": 0.0
+      },
+      "elo_a": 1630.7995734164554,
+      "elo_b": 1565.1291394776679,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Tommy McMillen",
+      "fighter_b_name": "Alberto Montes",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Tommy McMillen'; no fighter in fighters.parquet matches name 'Alberto Montes'",
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Austin Bashi",
+      "fighter_b_name": "Jose Miguel Delgado",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Jose Miguel Delgado'",
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Jean-Paul Lebosnoyani",
+      "fighter_b_name": "Ko Seok-hyeon",
+      "weight_class": "Welterweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Jean-Paul Lebosnoyani'; no fighter in fighters.parquet matches name 'Ko Seok-hyeon'",
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Levi Rodrigues Jr.",
+      "fighter_b_name": "Felipe Franco",
+      "weight_class": "Light Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Levi Rodrigues Jr.'; no fighter in fighters.parquet matches name 'Felipe Franco'",
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Alden Coria",
+      "fighter_b_name": "Stewart Nicoll",
+      "weight_class": "Flyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Alden Coria'",
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "RJ Harris",
+      "fighter_b_name": "Alvin Hines",
+      "weight_class": "Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'RJ Harris'",
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Anna Melisano",
+      "fighter_b_name": "Dione Barbosa",
+      "weight_class": "Women's Flyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Anna Melisano'",
+      "predicted_at_utc": "2026-07-15T16:48:23Z",
+      "model_version": "79135ef"
+    }
+  ]
+}
