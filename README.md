@@ -197,10 +197,13 @@ stays gradeable even as ratings keep moving). Aggregate stats land in
 
 | Model version | Fights predicted | Fights graded | Accuracy | Log-loss |
 |---|---|---|---|---|
-| `79135ef` (current) | 13 | 0 | — | — |
+| `79135ef` | 13 | 0 | — | — |
+| `e47f720` | 5 | 0 | — | — |
 
-All 13 predictions are pending: they cover 4 events between 2026-07-18 and
-2026-08-08, none of which have happened yet. Grading itself can lag a
+All 18 predictions are pending: they cover 4 events between 2026-07-18 and
+2026-08-08, none of which have happened yet. (The second version row is
+the accent-folding matcher fix converting 5 previously-skipped fights,
+committed the same day.) Grading itself can lag a
 finished event by days to weeks, because it depends on the Kaggle mirror
 picking up the result — the same lag documented for the weekly data
 refresh above. Nothing here is cherry-picked: every prediction this
