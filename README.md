@@ -4,6 +4,8 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
+**[▶ Try the live app](https://mma-prediction-lxqvmgheqvzccdpyord3q9.streamlit.app/)** — pick any two UFC fighters, get calibrated win probabilities with uncertainty.
+
 Predicting UFC fight winners, method of victory, and finish round —
 an Elo rating system, gradient boosting, and a calibrated multi-task
 neural-network ensemble, each evaluated honestly on strict time splits,
