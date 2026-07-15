@@ -39,7 +39,8 @@ python3 -m venv .venv
 ```
 
 Interactive app: `streamlit run app.py` (pick any two fighters, get win
-probability with uncertainty, method and finish-round tendencies).
+probability with uncertainty, method and finish-round tendencies, and a
+"Why this prediction?" breakdown of the top factors behind the call).
 
 Data bootstraps from the [Kaggle UFC dataset](https://www.kaggle.com/datasets/neelagiriaditya/ufc-datasets-1994-2025)
 via `kagglehub` and auto-refreshes weekly from the same maintained mirror
@@ -143,11 +144,13 @@ All-time peak Elo (through 2025-09):
 `app.py` is a Streamlit front end over the committed ensemble: pick two
 fighters, a weight class, round count, and title-fight flag, and it renders
 the win probability, ensemble spread, MC-dropout uncertainty histogram,
-method-of-victory / finish-round breakdown, and both fighters' Elo
-trajectories — all from the artifacts already checked into `models/torch/`,
-no training required. Predictions are symmetrized across both fighter
-orderings (`mma.inference.predict_symmetrized`) so the reported probability
-is always self-consistent.
+method-of-victory / finish-round breakdown, both fighters' Elo
+trajectories, and a "Why this prediction?" panel breaking down the top
+factors driving the call — all from the artifacts already checked into
+`models/torch/` and `models/xgb_winner.json`, no training required.
+Predictions are symmetrized across both fighter orderings
+(`mma.inference.predict_symmetrized`) so the reported probability is always
+self-consistent.
 
 Run it locally:
 
