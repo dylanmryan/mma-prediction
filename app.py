@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from mma.explain import contributions, humanize, load_booster
 from mma.inference import (
     Ensemble,
     apply_prior_correction,
@@ -30,6 +31,11 @@ PROCESSED = ROOT / "data" / "processed"
 DISPLAY_PRIORS = ROOT / "models" / "torch" / "display_priors.json"
 
 st.set_page_config(page_title="MMA Fight Predictor", page_icon="🥊", layout="wide")
+
+
+@st.cache_resource
+def load_xgb_booster():
+    return load_booster()
 
 
 @st.cache_resource
@@ -139,6 +145,28 @@ if name_a and name_b and name_a != name_b:
                      index=[f"{edge / 20:.2f}" for edge in range(20)]),
         height=160,
     )
+
+    # Explanations come from the companion XGBoost winner model's native
+    # TreeSHAP contributions (exact per-prediction attribution), not the
+    # torch ensemble that drives the headline probability above -- the
+    # ensemble has no built-in per-prediction attribution. See
+    # mma.explain.contributions for the symmetrization details.
+    with st.expander("Why this prediction?"):
+        booster = load_xgb_booster()
+        factors = humanize(
+            contributions(matchup_ab, matchup_ba, booster=booster),
+            name_a, name_b, top_n=6,
+        )
+        chart = pd.DataFrame(
+            {"Log-odds contribution": [row["contribution"] for row in factors]},
+            index=[f"{row['label']} (favors {row['favors']})" for row in factors],
+        )
+        st.bar_chart(chart, horizontal=True, height=260)
+        st.caption(
+            "Factor attributions from the companion XGBoost model (TreeSHAP, "
+            "exact); the headline probability comes from the neural ensemble "
+            "— the two agree closely (val log-loss 0.658 vs 0.654)."
+        )
 
     # Final review finding: the raw model heads are trained with class-weighted
     # loss, so their softmax outputs overstate rare classes (e.g. predicted

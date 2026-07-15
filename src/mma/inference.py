@@ -253,6 +253,8 @@ def build_matchup(
             "age": age,
             "height_cm": bio["height_cm"],
             "reach_cm": bio["reach_cm"],
+            "reach_missing": pd.isna(bio["reach_cm"]),
+            "dob_missing": pd.isna(bio["dob"]),
             "southpaw": bio["stance"] == "Southpaw",
             "days_since_last": days,
             "pre_overall": snapshot["elo_overall"],
@@ -302,6 +304,8 @@ def build_matchup(
     for label, data in (("a", first), ("b", second)):
         row[f"age_{label}"] = data["age"]
         row[f"career_fights_{label}"] = data["career_fights"]
+        row[f"reach_missing_{label}"] = bool(data["reach_missing"])
+        row[f"dob_missing_{label}"] = bool(data["dob_missing"])
         row[f"southpaw_{label}"] = bool(data["southpaw"])
         row[f"debut_{label}"] = (data["career_fights"] or 0) == 0
     row["debut_matchup"] = row["debut_a"] ^ row["debut_b"]
