@@ -174,6 +174,22 @@ def _retrain_candidate(
     )
 
 
+def _rebuild_display_priors() -> None:
+    """Regenerate models/torch/display_priors.json from the staged ensemble.
+
+    scripts/build_display_priors.py loads the committed ensemble
+    (Ensemble.load() -> models/torch) and writes models/torch/
+    display_priors.json, so running it AFTER the candidate is staged into
+    models/torch makes the priors match the new ensemble. The display priors
+    are train-split base-rate correction factors -- a new train window
+    changes them, so a promotion leaves them stale unless rebuilt.
+    """
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "build_display_priors.py")],
+        cwd=ROOT, check=True,
+    )
+
+
 def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
     latest = pd.Timestamp(features["date"].max())
     new_train_end = (latest - pd.DateOffset(years=VAL_WINDOW_YEARS)).date().isoformat()
@@ -213,6 +229,25 @@ def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
             for src in candidate_torch_dir.iterdir():
                 if src.is_file():
                     shutil.copy2(src, torch_dir / src.name)
+
+            # Keep the staged artifact set internally consistent: the display
+            # priors are train-split base rates, now stale for the new
+            # ensemble. Regenerate them from the just-staged ensemble. A
+            # rebuild failure must NOT unstage the model -- warn and continue.
+            try:
+                _rebuild_display_priors()
+                priors_line = (
+                    "  1. display_priors.json has been regenerated for the new "
+                    "ensemble (consistent with the staged artifacts)."
+                )
+            except Exception as exc:  # noqa: BLE001 -- graceful, never abort promotion
+                priors_line = (
+                    f"  1. WARNING: display_priors.json rebuild FAILED ({exc}). "
+                    "The ensemble is still staged -- regenerate the priors "
+                    "manually with `python scripts/build_display_priors.py` "
+                    "before committing."
+                )
+
             print(
                 f"\nPROMOTED: {candidate_ll:.4f} beats incumbent "
                 f"{incumbent_ll:.4f} by more than {PROMOTION_MARGIN}.\n"
@@ -220,8 +255,7 @@ def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
                 f"(incumbent backed up in {backup_dir}). Nothing has been "
                 "committed -- this command makes no git writes. Next steps "
                 "(manual, by design -- a human reviews before this ships):\n"
-                "  1. Rebuild display priors: python scripts/build_display_priors.py "
-                "(they are train-split base rates; the new train window changed).\n"
+                f"{priors_line}\n"
                 "  2. Run the full test suite.\n"
                 "  3. Review the metrics diff (models/torch/metrics_val.json), then "
                 "commit -- the new commit's git sha becomes the model_version for "
