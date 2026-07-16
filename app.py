@@ -255,6 +255,75 @@ if TRACK_RECORD.exists():
                 f"{elo_dummy.get('accuracy', float('nan')):.1%} accuracy."
             )
 
+# Model vs. the betting market: the honest "does it beat Vegas?" answer, from
+# scripts/build_odds_benchmark.py comparing the ensemble against devigged
+# sportsbook closing lines on out-of-sample (2021+) fights. Betting odds are
+# an evaluation comparator only, never a model feature. Skipped silently if
+# the benchmark artifact isn't present.
+MARKET_BENCHMARK = ROOT / "models" / "market_benchmark.json"
+if MARKET_BENCHMARK.exists():
+    benchmark = json.loads(MARKET_BENCHMARK.read_text())
+    head = benchmark["headline_2021_plus"]
+    st.divider()
+    st.subheader("Model vs. the betting market")
+    st.caption(
+        f"On {head['n_fights']:,} out-of-sample fights (2021+, never seen in "
+        "training), the model's win probabilities vs. devigged sportsbook "
+        "closing lines. Betting odds are an evaluation yardstick here, never a "
+        "model input."
+    )
+    compare = pd.DataFrame(
+        {
+            "Model": [
+                f"{head['model']['accuracy']:.3f}",
+                f"{head['model']['log_loss']:.3f}",
+                f"{head['model']['brier']:.3f}",
+            ],
+            "Market (Vegas)": [
+                f"{head['market']['accuracy']:.3f}",
+                f"{head['market']['log_loss']:.3f}",
+                f"{head['market']['brier']:.3f}",
+            ],
+        },
+        index=["Accuracy", "Log-loss", "Brier"],
+    )
+    st.table(compare)
+    st.caption(
+        "The market is sharper — closing lines are near the sharpest public "
+        "signal in MMA, and the model lands close but doesn't beat them "
+        f"(log-loss {head['model']['log_loss']:.3f} vs "
+        f"{head['market']['log_loss']:.3f}). That's the honest, expected result."
+    )
+
+    def _bin_rates(rows):
+        return {
+            round((i + 0.5) / 10, 2): row["empirical_rate"]
+            for i, row in enumerate(rows)
+            if row["empirical_rate"] is not None
+        }
+
+    midpoints = [round((i + 0.5) / 10, 2) for i in range(10)]
+    calibration = pd.DataFrame(
+        {
+            "Ideal": {m: m for m in midpoints},
+            "Model": _bin_rates(head["calibration"]["model"]),
+            "Market": _bin_rates(head["calibration"]["market"]),
+        }
+    ).sort_index()
+    st.caption(
+        "Calibration — predicted win probability (x) vs. actual win rate (y), "
+        "by decile; closer to the *Ideal* diagonal is better:"
+    )
+    st.line_chart(calibration, height=240)
+    st.caption(
+        "Flat-stake backtest: betting the model's disagreements with the market "
+        "loses money at every edge threshold "
+        f"({head['roi']['0.00']['favorite_edge_on_a']['roi_pct']:.1f}% to "
+        f"{head['roi']['0.10']['favorite_edge_on_a']['roi_pct']:.1f}% ROI on "
+        "favorite edges) — the vig plus a sharp market leave no exploitable gap. "
+        "[Details](https://github.com/dylanmryan/mma-prediction/blob/main/models/market_benchmark.json)."
+    )
+
 st.divider()
 st.caption(
     "Model card: multi-task net (winner/method/finish-round), 5-seed ensemble, "
