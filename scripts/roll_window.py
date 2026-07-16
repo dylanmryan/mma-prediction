@@ -5,19 +5,33 @@ accumulated since the current model's data cutoff and, if >= PROMOTION_
 THRESHOLD, prints the pre-registered promotion protocol. Never touches any
 file. This is what the weekly refresh-data.yml Action runs and only prints.
 
-`--execute`: actually runs the protocol once the threshold is met --
-retrains the XGBoost winner model with train < NEW_CUTOFF, validates on the
-newest 2 years, and promotes (keeps the new artifacts) only if the new
-validation log-loss beats the incumbent's -- RE-EVALUATED ON THE SAME NEW
-SLICE, not its original historic number -- by more than PROMOTION_MARGIN.
+`--execute`: actually runs the protocol once the threshold is met. It gates
+on the TORCH ENSEMBLE -- the exact model the app serves -- not a proxy:
 
-Scope note: --execute's promotion gate is decided on the XGBoost winner
-model only (fast, deterministic-ish, and this is a rarely-run, human-
-triggered mechanism, not something that needs the full 5-seed torch
-ensemble on every check). If promotion is approved, it prints the exact
-`scripts/train_torch.py` invocation (same train/val window) to rebuild the
-full ensemble before committing -- deliberately manual, per the design, to
-keep a human reviewing the diff before anything ships.
+  1. Windows: NEW_CUTOFF = latest data date - VAL_WINDOW_YEARS; the held-
+     forward validation slice is [NEW_CUTOFF, latest]. Both incumbent and
+     candidate are scored on this same slice. It is out-of-time for the
+     incumbent (its training cutoff is earlier), so there is no leakage.
+  2. Incumbent: load the committed models/torch ensemble (per-seed
+     temperatures included), predict on the new val slice, winner log-loss.
+  3. Candidate: retrain the full 5-seed ensemble via scripts/train_torch.py
+     into a TEMP dir (train < NEW_CUTOFF, val = the slice), load it, predict
+     on the SAME slice, winner log-loss. The candidate fits its own per-seed
+     temperatures on its own val slice -- each model is scored as its
+     complete, self-contained artifact.
+  4. Promote iff candidate_log_loss < incumbent_log_loss - PROMOTION_MARGIN.
+
+If promoted, the candidate ensemble artifacts are STAGED into models/torch
+(the incumbent is backed up on disk first) but NOTHING is committed: this
+command performs NO git writes. A human then runs the full test suite,
+reviews the metrics diff, and commits by hand -- that commit's git sha
+becomes the new model_version, which starts a fresh track_record.json
+section automatically (prospective predictions already key every fight by
+the model_version active when it was made). If rejected, models/torch is
+left untouched and the negative result is printed.
+
+This is a manual, stage-only mechanism: it is deliberately NOT wired into
+CI auto-promotion. The weekly Action only ever runs it in `--dry-run`.
 """
 from __future__ import annotations
 
@@ -40,9 +54,9 @@ MODELS_DIR = ROOT / "models"
 PROMOTION_THRESHOLD = 150
 PROMOTION_MARGIN = 0.002
 VAL_WINDOW_YEARS = 2
-MODEL_ARTIFACTS = (
-    "xgb_winner.json", "xgb_method.json", "xgb_round.json", "xgb_metrics_val.json",
-)
+TORCH_SUBDIR = "torch"
+CANDIDATE_DIR_NAME = "_roll_window_candidate"
+BACKUP_DIR_NAME = "_roll_window_torch_backup"
 
 
 def current_data_cutoff(features: pd.DataFrame) -> pd.Timestamp:
@@ -84,9 +98,11 @@ def promotion_protocol_text(n_accumulated: int, cutoff: pd.Timestamp) -> str:
         "  5. If promoted, the new model_version (next commit's git sha) starts a "
         "fresh track_record.json section automatically -- prospective predictions "
         "already key every fight by the model_version active when it was made.\n\n"
-        "Run `python scripts/roll_window.py --execute` to run this end to end "
-        "(promotion gate uses the XGBoost winner model; a full ensemble retrain "
-        "if promoted is a manual follow-up step -- see printed instructions)."
+        "Run `python scripts/roll_window.py --execute` to run this end to end. "
+        "The promotion gate retrains and scores the full 5-seed TORCH ENSEMBLE "
+        "(the model the app serves) directly. On promotion the candidate ensemble "
+        "is STAGED into models/torch -- this command makes NO git commit; a human "
+        "runs the suite, reviews the diff, and commits by hand."
     )
 
 
@@ -118,78 +134,144 @@ def _report(features: pd.DataFrame, predictions_dir: Path) -> tuple[pd.Timestamp
     return cutoff, graded
 
 
+def _ensemble_val_log_loss(
+    ensemble_dir: Path, features: pd.DataFrame, val_start: str, val_end: str
+) -> float:
+    """Winner log-loss of the ensemble in `ensemble_dir` on the val slice.
+
+    Loads the ensemble exactly as the app and scripts/final_test_eval.py do
+    (per-seed checkpoints + committed temperatures), predicts the mean
+    calibrated winner probability on the date-masked slice of
+    features.parquet, and scores it against y_winner. This is the single
+    evaluation both the incumbent (models/torch) and the freshly retrained
+    candidate (a temp dir) go through, so each is measured as its complete,
+    self-contained artifact on the identical held-forward slice.
+    """
+    from mma.evaluate import log_loss as compute_log_loss
+    from mma.inference import Ensemble
+
+    val_mask = (features["date"] >= val_start) & (features["date"] <= val_end)
+    val = features.loc[val_mask]
+    ensemble = Ensemble.load(ensemble_dir)
+    p = ensemble.predict(val)["winner_prob"]
+    y = val["y_winner"].to_numpy(dtype=float)
+    return compute_log_loss(y, p)
+
+
+def _retrain_candidate(
+    out_dir: Path, train_end: str, val_start: str, val_end: str
+) -> None:
+    """Retrain the full 5-seed ensemble into `out_dir` (minutes-long)."""
+    subprocess.run(
+        [
+            sys.executable, str(ROOT / "scripts" / "train_torch.py"),
+            "--train-end", train_end,
+            "--val-start", val_start,
+            "--val-end", val_end,
+            "--out-dir", str(out_dir),
+        ],
+        cwd=ROOT, check=True,
+    )
+
+
+def _rebuild_display_priors() -> None:
+    """Regenerate models/torch/display_priors.json from the staged ensemble.
+
+    scripts/build_display_priors.py loads the committed ensemble
+    (Ensemble.load() -> models/torch) and writes models/torch/
+    display_priors.json, so running it AFTER the candidate is staged into
+    models/torch makes the priors match the new ensemble. The display priors
+    are train-split base-rate correction factors -- a new train window
+    changes them, so a promotion leaves them stale unless rebuilt.
+    """
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "build_display_priors.py")],
+        cwd=ROOT, check=True,
+    )
+
+
 def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
     latest = pd.Timestamp(features["date"].max())
     new_train_end = (latest - pd.DateOffset(years=VAL_WINDOW_YEARS)).date().isoformat()
     new_val_start = new_train_end
     new_val_end = latest.date().isoformat()
-    print(f"\nExecuting walk-forward retrain: train < {new_train_end}, "
+    print(f"\nExecuting walk-forward ensemble retrain: train < {new_train_end}, "
           f"val [{new_val_start}, {new_val_end}]")
 
-    from mma.evaluate import log_loss as compute_log_loss
-    from mma.models.xgb import feature_frame
-    import xgboost as xgb
-
-    val_mask = (features["date"] >= new_val_start) & (features["date"] <= new_val_end)
-    x_new_val = feature_frame(features[val_mask])
-    y_new_val = features.loc[val_mask, "y_winner"]
-
-    incumbent_path = MODELS_DIR / "xgb_winner.json"
-    if not incumbent_path.exists():
-        print("No incumbent xgb_winner.json found -- nothing to compare against. Aborting.")
+    torch_dir = MODELS_DIR / TORCH_SUBDIR
+    if not list(torch_dir.glob("net_seed*.pt")):
+        print(f"No incumbent ensemble in {torch_dir} -- nothing to compare "
+              "against. Aborting.")
         return
-    incumbent = xgb.XGBClassifier()
-    incumbent.load_model(incumbent_path)
-    incumbent_p = incumbent.predict_proba(x_new_val)[:, 1]
-    incumbent_log_loss = compute_log_loss(y_new_val, incumbent_p)
-    print(f"Incumbent log-loss re-evaluated on the new val slice: {incumbent_log_loss:.4f}")
 
-    backup_dir = MODELS_DIR / "_roll_window_backup"
-    backup_dir.mkdir(exist_ok=True)
-    for name in MODEL_ARTIFACTS:
-        src = MODELS_DIR / name
-        if src.exists():
-            shutil.copy2(src, backup_dir / name)
-
-    subprocess.run(
-        [
-            sys.executable, str(ROOT / "scripts" / "train_xgb.py"),
-            "--train-end", new_train_end,
-            "--val-start", new_val_start,
-            "--val-end", new_val_end,
-        ],
-        cwd=ROOT, check=True,
+    incumbent_ll = _ensemble_val_log_loss(
+        torch_dir, features, new_val_start, new_val_end
     )
+    print(f"Incumbent ensemble log-loss on the new val slice: {incumbent_ll:.4f}")
 
-    new_metrics = json.loads((MODELS_DIR / "xgb_metrics_val.json").read_text())
-    new_log_loss = new_metrics["winner"]["log_loss"]
-    print(f"Retrained model log-loss on the same slice: {new_log_loss:.4f}")
+    candidate_dir = MODELS_DIR / CANDIDATE_DIR_NAME
+    candidate_torch_dir = candidate_dir / TORCH_SUBDIR
+    shutil.rmtree(candidate_dir, ignore_errors=True)  # clear any stale run
+    candidate_torch_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        _retrain_candidate(
+            candidate_torch_dir, new_train_end, new_val_start, new_val_end
+        )
+        candidate_ll = _ensemble_val_log_loss(
+            candidate_torch_dir, features, new_val_start, new_val_end
+        )
+        print(f"Candidate ensemble log-loss on the same slice: {candidate_ll:.4f}")
 
-    if decide_promotion(new_log_loss, incumbent_log_loss):
-        print(
-            f"\nPROMOTED: {new_log_loss:.4f} beats incumbent "
-            f"{incumbent_log_loss:.4f} by more than {PROMOTION_MARGIN}.\n"
-            "New XGBoost artifacts are staged in models/. Next steps (manual, "
-            "by design -- a human reviews before this ships):\n"
-            f"  1. Rebuild the full ensemble: python scripts/train_torch.py "
-            f"--train-end {new_train_end} --val-start {new_val_start} "
-            f"--val-end {new_val_end}\n"
-            "  2. Run the full test suite.\n"
-            "  3. Review the metrics diff, then commit -- the new commit's git sha "
-            "becomes the new model_version for future predictions."
-        )
-        shutil.rmtree(backup_dir, ignore_errors=True)
-    else:
-        print(
-            f"\nREJECTED: {new_log_loss:.4f} does not beat incumbent "
-            f"{incumbent_log_loss:.4f} by more than {PROMOTION_MARGIN}. "
-            "Restoring incumbent artifacts (negative result -- documented, not shipped)."
-        )
-        for name in MODEL_ARTIFACTS:
-            backup = backup_dir / name
-            if backup.exists():
-                shutil.copy2(backup, MODELS_DIR / name)
-        shutil.rmtree(backup_dir, ignore_errors=True)
+        if decide_promotion(candidate_ll, incumbent_ll):
+            backup_dir = MODELS_DIR / BACKUP_DIR_NAME
+            shutil.rmtree(backup_dir, ignore_errors=True)
+            shutil.copytree(torch_dir, backup_dir)  # incumbent safety copy
+            for src in candidate_torch_dir.iterdir():
+                if src.is_file():
+                    shutil.copy2(src, torch_dir / src.name)
+
+            # Keep the staged artifact set internally consistent: the display
+            # priors are train-split base rates, now stale for the new
+            # ensemble. Regenerate them from the just-staged ensemble. A
+            # rebuild failure must NOT unstage the model -- warn and continue.
+            try:
+                _rebuild_display_priors()
+                priors_line = (
+                    "  1. display_priors.json has been regenerated for the new "
+                    "ensemble (consistent with the staged artifacts)."
+                )
+            except Exception as exc:  # noqa: BLE001 -- graceful, never abort promotion
+                priors_line = (
+                    f"  1. WARNING: display_priors.json rebuild FAILED ({exc}). "
+                    "The ensemble is still staged -- regenerate the priors "
+                    "manually with `python scripts/build_display_priors.py` "
+                    "before committing."
+                )
+
+            print(
+                f"\nPROMOTED: {candidate_ll:.4f} beats incumbent "
+                f"{incumbent_ll:.4f} by more than {PROMOTION_MARGIN}.\n"
+                f"Candidate ensemble artifacts are STAGED into {torch_dir} "
+                f"(incumbent backed up in {backup_dir}). Nothing has been "
+                "committed -- this command makes no git writes. Next steps "
+                "(manual, by design -- a human reviews before this ships):\n"
+                f"{priors_line}\n"
+                "  2. Run the full test suite.\n"
+                "  3. Review the metrics diff (models/torch/metrics_val.json), then "
+                "commit -- the new commit's git sha becomes the model_version for "
+                "future predictions and starts a fresh track_record.json section.\n"
+                f"  (To abandon: restore from {backup_dir}. Both {backup_dir} and "
+                f"{candidate_dir} are gitignored.)"
+            )
+        else:
+            print(
+                f"\nREJECTED: {candidate_ll:.4f} does not beat incumbent "
+                f"{incumbent_ll:.4f} by more than {PROMOTION_MARGIN}. "
+                f"Leaving {torch_dir} untouched (negative result -- documented, "
+                "not shipped)."
+            )
+    finally:
+        shutil.rmtree(candidate_dir, ignore_errors=True)
 
 
 def main() -> None:

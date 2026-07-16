@@ -215,12 +215,20 @@ pipeline ever makes gets a row, win or lose.
 A walk-forward retraining hook (`scripts/roll_window.py`) watches this
 track record: once 150 graded prospective fights have accumulated since
 the current model's data cutoff, it reports a pre-registered promotion
-protocol (retrain on a pushed-forward cutoff, validate on the newest 2
-years, promote only if the new model beats the incumbent re-evaluated on
-that *same* slice by more than 0.002 log-loss). Promotion is deliberately
-a manual, human-reviewed step (`--execute`, run by hand via
-`workflow_dispatch`) — the weekly Action only ever runs it in `--dry-run`
-and prints the report.
+protocol. The gate operates on the **full 5-seed torch ensemble — the exact
+model the app serves**, not a proxy: it retrains the ensemble on a pushed-
+forward cutoff into a temp dir, scores both that candidate and the committed
+incumbent ensemble on the same newest-2-years held-forward slice (each as
+its complete artifact, per-seed temperatures included), and promotes only if
+the candidate beats the incumbent by more than 0.002 log-loss. On promotion
+the candidate ensemble is *staged* into `models/torch` (the incumbent is
+backed up on disk first) and nothing else happens — the script performs no
+git writes. A human then runs the suite, reviews the metrics diff, and
+commits by hand; that commit's git sha becomes the new `model_version` and
+starts a fresh `track_record.json` section. Promotion is deliberately a
+manual, stage-only step (`--execute`, run by hand via `workflow_dispatch`)
+and is never wired into CI auto-promotion — the weekly Action only ever runs
+it in `--dry-run` and prints the report.
 
 ## Model vs. the betting market
 
