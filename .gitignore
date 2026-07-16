@@ -6,3 +6,5 @@ venv/
 .ipynb_checkpoints/
 data/raw/*.csv
 .DS_Store
+models/_roll_window_candidate/
+models/_roll_window_torch_backup/
