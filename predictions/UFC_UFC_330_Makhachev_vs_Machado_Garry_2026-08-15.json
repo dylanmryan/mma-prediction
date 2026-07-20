@@ -1,0 +1,279 @@
+{
+  "event_name": "UFC 330: Makhachev vs. Machado Garry",
+  "event_date": "2026-08-15",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_330",
+  "predicted_at_utc": "2026-07-20T14:24:03Z",
+  "model_version": "690024f",
+  "fights": [
+    {
+      "fighter_a_name": "Islam Makhachev",
+      "fighter_b_name": "Ian Machado Garry",
+      "weight_class": "Welterweight",
+      "fighter_a_id": "275aca31f61ba28c",
+      "fighter_b_id": "442c9011034ae1fd",
+      "match_tier": "exact",
+      "title_fight": true,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.7373420745134354,
+      "method_probs": {
+        "ko_tko": 0.3966691493988037,
+        "submission": 0.32276418805122375,
+        "decision": 0.28056663274765015
+      },
+      "round_probs": {
+        "1": 0.09476253390312195,
+        "2": 0.09307271242141724,
+        "3": 0.12318775057792664,
+        "45": 0.6889770030975342
+      },
+      "elo_a": 1937.5386084779768,
+      "elo_b": 1743.9986944023813,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:03Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Mackenzie Dern",
+      "fighter_b_name": "Gillian Robertson",
+      "weight_class": "Women's Strawweight",
+      "fighter_a_id": "7447e9f28508106a",
+      "fighter_b_id": "38c7f72747f4f712",
+      "match_tier": "exact",
+      "title_fight": true,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.4819098711013794,
+      "method_probs": {
+        "ko_tko": 0.45217517018318176,
+        "submission": 0.2388816624879837,
+        "decision": 0.30894315242767334
+      },
+      "round_probs": {
+        "1": 0.06593319773674011,
+        "2": 0.0768970474600792,
+        "3": 0.09783101081848145,
+        "45": 0.7593387365341187
+      },
+      "elo_a": 1635.9911968762203,
+      "elo_b": 1668.141766152723,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:03Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Jeremiah Wells",
+      "fighter_b_name": "Myktybek Orolbai",
+      "weight_class": "Welterweight",
+      "fighter_a_id": "d66a46de8d705353",
+      "fighter_b_id": "bf2c8e01b07d3eb1",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.32373711466789246,
+      "method_probs": {
+        "ko_tko": 0.3559885621070862,
+        "submission": 0.3022156357765198,
+        "decision": 0.34179580211639404
+      },
+      "round_probs": {
+        "1": 0.29883652925491333,
+        "2": 0.3596217632293701,
+        "3": 0.3415416479110718,
+        "45": 0.0
+      },
+      "elo_a": 1580.246987007388,
+      "elo_b": 1597.279427322723,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:03Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Erin Blanchfield",
+      "fighter_b_name": "Jasmine Jasudavicius",
+      "weight_class": "Women's Flyweight",
+      "fighter_a_id": "669970f7feba8ecd",
+      "fighter_b_id": "a9e260472d321361",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.7034764736890793,
+      "method_probs": {
+        "ko_tko": 0.3630766272544861,
+        "submission": 0.26667630672454834,
+        "decision": 0.3702470660209656
+      },
+      "round_probs": {
+        "1": 0.32055386900901794,
+        "2": 0.3488258719444275,
+        "3": 0.3306202292442322,
+        "45": 0.0
+      },
+      "elo_a": 1718.2792497993075,
+      "elo_b": 1669.4778589470322,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:03Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Jalin Turner",
+      "fighter_b_name": "Kau\u00ea Fernandes",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "4d8fa64202cee4c1",
+      "fighter_b_id": "ec13c393d029297d",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5557910799980164,
+      "method_probs": {
+        "ko_tko": 0.31519782543182373,
+        "submission": 0.2896772027015686,
+        "decision": 0.39512497186660767
+      },
+      "round_probs": {
+        "1": 0.29915735125541687,
+        "2": 0.35607582330703735,
+        "3": 0.34476685523986816,
+        "45": 0.0
+      },
+      "elo_a": 1585.0442404477137,
+      "elo_b": 1582.0214299636414,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:03Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Geoff Neal",
+      "fighter_b_name": "Chidi Njokuani",
+      "weight_class": "Welterweight",
+      "fighter_a_id": "b997be68943010fc",
+      "fighter_b_id": "c68c68efaa5ca6ef",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.6558204889297485,
+      "method_probs": {
+        "ko_tko": 0.39236465096473694,
+        "submission": 0.2427726686000824,
+        "decision": 0.36486268043518066
+      },
+      "round_probs": {
+        "1": 0.315380722284317,
+        "2": 0.3471435308456421,
+        "3": 0.3374757468700409,
+        "45": 0.0
+      },
+      "elo_a": 1661.6695108849772,
+      "elo_b": 1533.24339986283,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:03Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Neil Magny",
+      "fighter_b_name": "Ramiz Brahimaj",
+      "weight_class": "Welterweight",
+      "fighter_a_id": "84b3e7d38f2d2ec5",
+      "fighter_b_id": "3d074044a33825e7",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.6106482744216919,
+      "method_probs": {
+        "ko_tko": 0.4716606140136719,
+        "submission": 0.1833447962999344,
+        "decision": 0.34499454498291016
+      },
+      "round_probs": {
+        "1": 0.3272915482521057,
+        "2": 0.3428238034248352,
+        "3": 0.3298845887184143,
+        "45": 0.0
+      },
+      "elo_a": 1672.5506666424478,
+      "elo_b": 1550.2881119922047,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:03Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Mansur Abdul-Malik",
+      "fighter_b_name": "Dustin Stoltzfus",
+      "weight_class": "Middleweight",
+      "fighter_a_id": "841695e02c99a521",
+      "fighter_b_id": "71505842fb6455c3",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.6744655817747116,
+      "method_probs": {
+        "ko_tko": 0.36318162083625793,
+        "submission": 0.310841828584671,
+        "decision": 0.32597655057907104
+      },
+      "round_probs": {
+        "1": 0.34198224544525146,
+        "2": 0.3657096028327942,
+        "3": 0.29230815172195435,
+        "45": 0.0
+      },
+      "elo_a": 1578.9824226836372,
+      "elo_b": 1451.4533642052074,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:03Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Vicente Luque",
+      "fighter_b_name": "Tresean Gore",
+      "weight_class": "Middleweight",
+      "fighter_a_id": "6d4b63c767106d3a",
+      "fighter_b_id": "147e70aa6cc48cfc",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.7291827648878098,
+      "method_probs": {
+        "ko_tko": 0.44921040534973145,
+        "submission": 0.21315504610538483,
+        "decision": 0.3376345634460449
+      },
+      "round_probs": {
+        "1": 0.34287649393081665,
+        "2": 0.34489142894744873,
+        "3": 0.3122320771217346,
+        "45": 0.0
+      },
+      "elo_a": 1694.7475388900864,
+      "elo_b": 1463.6356378064481,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:03Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Edson Barboza",
+      "fighter_b_name": "Esteban Ribovics",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "64a50dad704d1d49",
+      "fighter_b_id": "323d4ca260dfa0ba",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.3299555480480194,
+      "method_probs": {
+        "ko_tko": 0.41745248436927795,
+        "submission": 0.1987611949443817,
+        "decision": 0.38378632068634033
+      },
+      "round_probs": {
+        "1": 0.2861140966415405,
+        "2": 0.3890640139579773,
+        "3": 0.3248218894004822,
+        "45": 0.0
+      },
+      "elo_a": 1619.2533795113939,
+      "elo_b": 1582.6059842348504,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:03Z",
+      "model_version": "690024f"
+    }
+  ]
+}

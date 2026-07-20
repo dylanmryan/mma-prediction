@@ -30,6 +30,87 @@
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:26Z",
       "model_version": "79135ef"
+    },
+    {
+      "fighter_a_name": "Diyar Nurgozhay",
+      "fighter_b_name": "Bruno Lopes",
+      "weight_class": "Light Heavyweight",
+      "fighter_a_id": "709fadb644ee3f51",
+      "fighter_b_id": "0abcf6bc47191219",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.40363194048404694,
+      "method_probs": {
+        "ko_tko": 0.33709824085235596,
+        "submission": 0.3391498923301697,
+        "decision": 0.323751837015152
+      },
+      "round_probs": {
+        "1": 0.33338624238967896,
+        "2": 0.333213210105896,
+        "3": 0.33340054750442505,
+        "45": 0.0
+      },
+      "elo_a": 1408.5202711569266,
+      "elo_b": 1497.2902618094906,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:02Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Carlos Diego Ferreira",
+      "fighter_b_name": "Billy Quarantillo",
+      "weight_class": "Lightweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Carlos Diego Ferreira' (exact or accent-folded)",
+      "predicted_at_utc": "2026-07-20T14:24:02Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Louie Sutherland",
+      "fighter_b_name": "Jos\u00e9 Luiz",
+      "weight_class": "Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Louie Sutherland' (exact or accent-folded); no fighter in fighters.parquet matches name 'Jos\u00e9 Luiz' (exact or accent-folded)",
+      "predicted_at_utc": "2026-07-20T14:24:02Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Steven Asplund",
+      "fighter_b_name": "Guilherme Pat",
+      "weight_class": "Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Steven Asplund' (exact or accent-folded); no fighter in fighters.parquet matches name 'Guilherme Pat' (exact or accent-folded)",
+      "predicted_at_utc": "2026-07-20T14:24:02Z",
+      "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Amanda Lemos",
+      "fighter_b_name": "Alexia Thainara",
+      "weight_class": "Women's Strawweight",
+      "fighter_a_id": "3df5493bb279226f",
+      "fighter_b_id": "545092d13c67aa49",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5417537242174149,
+      "method_probs": {
+        "ko_tko": 0.36805853247642517,
+        "submission": 0.25940561294555664,
+        "decision": 0.3725358545780182
+      },
+      "round_probs": {
+        "1": 0.35478031635284424,
+        "2": 0.31254374980926514,
+        "3": 0.3326759338378906,
+        "45": 0.0
+      },
+      "elo_a": 1655.588466998774,
+      "elo_b": 1544.7081623769561,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-20T14:24:02Z",
+      "model_version": "690024f"
     }
   ]
 }
