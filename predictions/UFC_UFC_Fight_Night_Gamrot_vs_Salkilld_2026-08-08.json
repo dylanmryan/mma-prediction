@@ -111,6 +111,69 @@
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:02Z",
       "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Ty Miller",
+      "fighter_b_name": "Billy Ray Goff",
+      "weight_class": "Welterweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Ty Miller' (exact or accent-folded)",
+      "predicted_at_utc": "2026-07-27T14:52:19Z",
+      "model_version": "fed19ae"
+    },
+    {
+      "fighter_a_name": "Darren Elkins",
+      "fighter_b_name": "Yadier del Valle",
+      "weight_class": "Featherweight",
+      "fighter_a_id": "92a9aa9c93192871",
+      "fighter_b_id": "70380ccdc81915b8",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.334370493888855,
+      "method_probs": {
+        "ko_tko": 0.3727259933948517,
+        "submission": 0.23282286524772644,
+        "decision": 0.39445117115974426
+      },
+      "round_probs": {
+        "1": 0.3504942059516907,
+        "2": 0.34675753116607666,
+        "3": 0.30274832248687744,
+        "45": 0.0
+      },
+      "elo_a": 1595.7130554865644,
+      "elo_b": 1533.2071723408328,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-27T14:52:19Z",
+      "model_version": "fed19ae"
+    },
+    {
+      "fighter_a_name": "Juliana Miller",
+      "fighter_b_name": "Ravena Oliveira",
+      "weight_class": "Women's Flyweight",
+      "fighter_a_id": "aa0c573da7119292",
+      "fighter_b_id": "4948e412fa6ab67d",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.4192019999027252,
+      "method_probs": {
+        "ko_tko": 0.314832866191864,
+        "submission": 0.3193402886390686,
+        "decision": 0.3658268451690674
+      },
+      "round_probs": {
+        "1": 0.32471993565559387,
+        "2": 0.3532426357269287,
+        "3": 0.32203739881515503,
+        "45": 0.0
+      },
+      "elo_a": 1489.9354281799945,
+      "elo_b": 1471.7281149634766,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-27T14:52:19Z",
+      "model_version": "fed19ae"
     }
   ]
 }

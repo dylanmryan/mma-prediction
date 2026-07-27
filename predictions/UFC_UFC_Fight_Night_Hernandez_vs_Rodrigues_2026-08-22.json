@@ -1,0 +1,171 @@
+{
+  "event_name": "UFC Fight Night: Hernandez vs. Rodrigues",
+  "event_date": "2026-08-22",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Hernandez_vs._Rodrigues",
+  "predicted_at_utc": "2026-07-27T14:52:21Z",
+  "model_version": "fed19ae",
+  "fights": [
+    {
+      "fighter_a_name": "Anthony Hernandez",
+      "fighter_b_name": "Gregory Rodrigues",
+      "weight_class": "Middleweight",
+      "fighter_a_id": "093e1f5bb73850be",
+      "fighter_b_id": "d1c65d2cf2925ddd",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.7179024070501328,
+      "method_probs": {
+        "ko_tko": 0.4623944163322449,
+        "submission": 0.24163463711738586,
+        "decision": 0.29597097635269165
+      },
+      "round_probs": {
+        "1": 0.0784783884882927,
+        "2": 0.10192783921957016,
+        "3": 0.1141577810049057,
+        "45": 0.7054359912872314
+      },
+      "elo_a": 1747.778965622299,
+      "elo_b": 1665.2300177659897,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-27T14:52:21Z",
+      "model_version": "fed19ae"
+    },
+    {
+      "fighter_a_name": "Roman Dolidze",
+      "fighter_b_name": "Reinier de Ridder",
+      "weight_class": "Light Heavyweight",
+      "fighter_a_id": "327d5f279895110d",
+      "fighter_b_id": "d549cefc7c54ab78",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.2879316210746765,
+      "method_probs": {
+        "ko_tko": 0.3953878879547119,
+        "submission": 0.2611028254032135,
+        "decision": 0.3435092568397522
+      },
+      "round_probs": {
+        "1": 0.34369954466819763,
+        "2": 0.3585239052772522,
+        "3": 0.29777657985687256,
+        "45": 0.0
+      },
+      "elo_a": 1672.4120135133574,
+      "elo_b": 1701.9300255883506,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-27T14:52:21Z",
+      "model_version": "fed19ae"
+    },
+    {
+      "fighter_a_name": "Serghei Spivac",
+      "fighter_b_name": "Vitor Petrino",
+      "weight_class": "Heavyweight",
+      "fighter_a_id": "e2f6b2769aaedd6c",
+      "fighter_b_id": "71171fc96445bf65",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5233439952135086,
+      "method_probs": {
+        "ko_tko": 0.3956996202468872,
+        "submission": 0.25526249408721924,
+        "decision": 0.3490378260612488
+      },
+      "round_probs": {
+        "1": 0.3110969662666321,
+        "2": 0.3743618428707123,
+        "3": 0.3145412504673004,
+        "45": 0.0
+      },
+      "elo_a": 1612.8748010731572,
+      "elo_b": 1572.3442840951209,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-27T14:52:21Z",
+      "model_version": "fed19ae"
+    },
+    {
+      "fighter_a_name": "Kennedy Nzechukwu",
+      "fighter_b_name": "Shamil Gaziev",
+      "weight_class": "Heavyweight",
+      "fighter_a_id": "8667caa0451d245b",
+      "fighter_b_id": "6747ccd6d1acd266",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.48598402738571167,
+      "method_probs": {
+        "ko_tko": 0.3968818187713623,
+        "submission": 0.26941972970962524,
+        "decision": 0.3336983919143677
+      },
+      "round_probs": {
+        "1": 0.33661413192749023,
+        "2": 0.34486377239227295,
+        "3": 0.31852203607559204,
+        "45": 0.0
+      },
+      "elo_a": 1554.1328970340446,
+      "elo_b": 1593.485475911326,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-27T14:52:21Z",
+      "model_version": "fed19ae"
+    },
+    {
+      "fighter_a_name": "Kody Steele",
+      "fighter_b_name": "Gauge Young",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "aebaa8cec15b083d",
+      "fighter_b_id": "b2a78df161bd67f9",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.28962959349155426,
+      "method_probs": {
+        "ko_tko": 0.3089967370033264,
+        "submission": 0.33742791414260864,
+        "decision": 0.35357534885406494
+      },
+      "round_probs": {
+        "1": 0.2966148853302002,
+        "2": 0.3668197989463806,
+        "3": 0.3365653157234192,
+        "45": 0.0
+      },
+      "elo_a": 1462.0203906031763,
+      "elo_b": 1499.7497477090283,
+      "skipped": false,
+      "predicted_at_utc": "2026-07-27T14:52:21Z",
+      "model_version": "fed19ae"
+    },
+    {
+      "fighter_a_name": "Carli Judice",
+      "fighter_b_name": "Jeisla Chaves",
+      "weight_class": "Women's Flyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Jeisla Chaves' (exact or accent-folded)",
+      "predicted_at_utc": "2026-07-27T14:52:21Z",
+      "model_version": "fed19ae"
+    },
+    {
+      "fighter_a_name": "Wesley Schultz",
+      "fighter_b_name": "Jackson McVey",
+      "weight_class": "Middleweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Wesley Schultz' (exact or accent-folded)",
+      "predicted_at_utc": "2026-07-27T14:52:21Z",
+      "model_version": "fed19ae"
+    },
+    {
+      "fighter_a_name": "Shanelle Dyer",
+      "fighter_b_name": "Elise Reed",
+      "weight_class": "Women's Strawweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Shanelle Dyer' (exact or accent-folded)",
+      "predicted_at_utc": "2026-07-27T14:52:21Z",
+      "model_version": "fed19ae"
+    }
+  ]
+}
