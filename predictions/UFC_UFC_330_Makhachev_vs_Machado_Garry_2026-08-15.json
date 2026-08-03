@@ -274,6 +274,15 @@
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
       "model_version": "690024f"
+    },
+    {
+      "fighter_a_name": "Donte Johnson",
+      "fighter_b_name": "Eric McConico",
+      "weight_class": "Middleweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Donte Johnson' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-03T14:56:10Z",
+      "model_version": "2191bb3"
     }
   ]
 }

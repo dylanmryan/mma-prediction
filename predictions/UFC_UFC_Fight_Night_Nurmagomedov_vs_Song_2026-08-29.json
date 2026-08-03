@@ -1,0 +1,117 @@
+{
+  "event_name": "UFC Fight Night: Nurmagomedov vs. Song",
+  "event_date": "2026-08-29",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Nurmagomedov_vs._Song",
+  "predicted_at_utc": "2026-08-03T14:56:12Z",
+  "model_version": "2191bb3",
+  "fights": [
+    {
+      "fighter_a_name": "Umar Nurmagomedov",
+      "fighter_b_name": "Song Yadong",
+      "weight_class": "Bantamweight",
+      "fighter_a_id": "2b6fc1c02736833d",
+      "fighter_b_id": "efb96bf3e9ada36f",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.5185007899999619,
+      "method_probs": {
+        "ko_tko": 0.3896925449371338,
+        "submission": 0.2798650860786438,
+        "decision": 0.3304423689842224
+      },
+      "round_probs": {
+        "1": 0.06018710881471634,
+        "2": 0.0862559974193573,
+        "3": 0.11675088852643967,
+        "45": 0.7368059754371643
+      },
+      "elo_a": 1698.8970942969727,
+      "elo_b": 1731.5485134411413,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-03T14:56:12Z",
+      "model_version": "2191bb3"
+    },
+    {
+      "fighter_a_name": "Yan Xiaonan",
+      "fighter_b_name": "Denise Gomes",
+      "weight_class": "Women's Strawweight",
+      "fighter_a_id": "c41d426cc7326d1b",
+      "fighter_b_id": "cffb87059e645bd1",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.43340831995010376,
+      "method_probs": {
+        "ko_tko": 0.36073970794677734,
+        "submission": 0.2620752453804016,
+        "decision": 0.37718504667282104
+      },
+      "round_probs": {
+        "1": 0.32245102524757385,
+        "2": 0.34418052434921265,
+        "3": 0.3333684802055359,
+        "45": 0.0
+      },
+      "elo_a": 1633.614941385846,
+      "elo_b": 1607.5070676515536,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-03T14:56:12Z",
+      "model_version": "2191bb3"
+    },
+    {
+      "fighter_a_name": "Aori Qileng",
+      "fighter_b_name": "Kai Asakura",
+      "weight_class": "Bantamweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Aori Qileng' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-03T14:56:12Z",
+      "model_version": "2191bb3"
+    },
+    {
+      "fighter_a_name": "Su Mudaerji",
+      "fighter_b_name": "Alex Perez",
+      "weight_class": "Flyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Su Mudaerji' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-03T14:56:12Z",
+      "model_version": "2191bb3"
+    },
+    {
+      "fighter_a_name": "Rei Tsuruya",
+      "fighter_b_name": "Kevin Borjas",
+      "weight_class": "Flyweight",
+      "fighter_a_id": "2f43a3e82661fa99",
+      "fighter_b_id": "34b96d52db1d26e6",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.7084155082702637,
+      "method_probs": {
+        "ko_tko": 0.31136375665664673,
+        "submission": 0.33188289403915405,
+        "decision": 0.3567533791065216
+      },
+      "round_probs": {
+        "1": 0.3106924295425415,
+        "2": 0.3516619801521301,
+        "3": 0.33764559030532837,
+        "45": 0.0
+      },
+      "elo_a": 1503.5947839819873,
+      "elo_b": 1439.9427360986385,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-03T14:56:12Z",
+      "model_version": "2191bb3"
+    },
+    {
+      "fighter_a_name": "Liu Ce",
+      "fighter_b_name": "Junior Tafa",
+      "weight_class": "Light Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Liu Ce' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-03T14:56:12Z",
+      "model_version": "2191bb3"
+    }
+  ]
+}
