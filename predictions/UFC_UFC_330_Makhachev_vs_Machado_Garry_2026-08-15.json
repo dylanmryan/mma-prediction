@@ -283,6 +283,42 @@
       "reason": "no fighter in fighters.parquet matches name 'Donte Johnson' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-03T14:56:10Z",
       "model_version": "2191bb3"
+    },
+    {
+      "fighter_a_name": "Chidi Njokuani",
+      "fighter_b_name": "Joel \u00c1lvarez",
+      "weight_class": "Welterweight",
+      "fighter_a_id": "c68c68efaa5ca6ef",
+      "fighter_b_id": "58bbef3770bb2dfc",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.33420200645923615,
+      "method_probs": {
+        "ko_tko": 0.3956112265586853,
+        "submission": 0.246474489569664,
+        "decision": 0.3579142987728119
+      },
+      "round_probs": {
+        "1": 0.31452271342277527,
+        "2": 0.3558230400085449,
+        "3": 0.3296542763710022,
+        "45": 0.0
+      },
+      "elo_a": 1533.24339986283,
+      "elo_b": 1699.2703695543105,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-10T13:24:29Z",
+      "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "Rafael Tobias",
+      "fighter_b_name": "Lucas Fernando",
+      "weight_class": "Light Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Rafael Tobias' (exact or accent-folded); no fighter in fighters.parquet matches name 'Lucas Fernando' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-10T13:24:29Z",
+      "model_version": "f55fd4d"
     }
   ]
 }

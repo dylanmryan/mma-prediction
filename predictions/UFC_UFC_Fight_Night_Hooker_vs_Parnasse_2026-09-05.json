@@ -1,0 +1,144 @@
+{
+  "event_name": "UFC Fight Night: Hooker vs. Parnasse",
+  "event_date": "2026-09-05",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Hooker_vs._Parnasse",
+  "predicted_at_utc": "2026-08-10T13:24:32Z",
+  "model_version": "f55fd4d",
+  "fights": [
+    {
+      "fighter_a_name": "Dan Hooker",
+      "fighter_b_name": "Salahdine Parnasse",
+      "weight_class": "Lightweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Salahdine Parnasse' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-10T13:24:32Z",
+      "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "Michael Page",
+      "fighter_b_name": "Nursulton Ruziboev",
+      "weight_class": "Middleweight",
+      "fighter_a_id": "a67d071163962af8",
+      "fighter_b_id": "49d2a08964c5eb11",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5889470428228378,
+      "method_probs": {
+        "ko_tko": 0.38005051016807556,
+        "submission": 0.29350388050079346,
+        "decision": 0.32644563913345337
+      },
+      "round_probs": {
+        "1": 0.3245839476585388,
+        "2": 0.32904118299484253,
+        "3": 0.34637489914894104,
+        "45": 0.0
+      },
+      "elo_a": 1614.7788020398464,
+      "elo_b": 1622.0646727666392,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-10T13:24:32Z",
+      "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "Morgan Charri\u00e8re",
+      "fighter_b_name": "Felipe Lima",
+      "weight_class": "Featherweight",
+      "fighter_a_id": "5b03b61f9d90125e",
+      "fighter_b_id": "9256f591b30c073e",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.42475883662700653,
+      "method_probs": {
+        "ko_tko": 0.2873285710811615,
+        "submission": 0.3005863428115845,
+        "decision": 0.41208505630493164
+      },
+      "round_probs": {
+        "1": 0.297118604183197,
+        "2": 0.3606100380420685,
+        "3": 0.3422713875770569,
+        "45": 0.0
+      },
+      "elo_a": 1579.7173532555323,
+      "elo_b": 1560.9313893959566,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-10T13:24:32Z",
+      "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "M\u00e1rio Pinto",
+      "fighter_b_name": "Ryan Spann",
+      "weight_class": "Heavyweight",
+      "fighter_a_id": "39d309957c5c210d",
+      "fighter_b_id": "a67f5afa8d6a1b80",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5163798928260803,
+      "method_probs": {
+        "ko_tko": 0.4326263666152954,
+        "submission": 0.251011461019516,
+        "decision": 0.3163621425628662
+      },
+      "round_probs": {
+        "1": 0.3619750738143921,
+        "2": 0.3744572401046753,
+        "3": 0.263567715883255,
+        "45": 0.0
+      },
+      "elo_a": 1539.461937639261,
+      "elo_b": 1580.6854117207008,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-10T13:24:32Z",
+      "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "Kurtis Campbell",
+      "fighter_b_name": "Trevor Peek",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Kurtis Campbell' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-10T13:24:32Z",
+      "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "Nathaniel Wood",
+      "fighter_b_name": "Mairon Santos",
+      "weight_class": "Featherweight",
+      "fighter_a_id": "329e403448756217",
+      "fighter_b_id": "480779d7f9a424d3",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.45158031582832336,
+      "method_probs": {
+        "ko_tko": 0.29115182161331177,
+        "submission": 0.2928072214126587,
+        "decision": 0.4160410165786743
+      },
+      "round_probs": {
+        "1": 0.29609614610671997,
+        "2": 0.37243902683258057,
+        "3": 0.33146482706069946,
+        "45": 0.0
+      },
+      "elo_a": 1649.2189355395997,
+      "elo_b": 1606.7469734343383,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-10T13:24:32Z",
+      "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "Matthieu Letho Duclos",
+      "fighter_b_name": "Luis Felipe Dias",
+      "weight_class": "Middleweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Matthieu Letho Duclos' (exact or accent-folded); no fighter in fighters.parquet matches name 'Luis Felipe Dias' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-10T13:24:32Z",
+      "model_version": "f55fd4d"
+    }
+  ]
+}

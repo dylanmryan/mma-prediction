@@ -112,6 +112,51 @@
       "reason": "no fighter in fighters.parquet matches name 'Liu Ce' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-03T14:56:12Z",
       "model_version": "2191bb3"
+    },
+    {
+      "fighter_a_name": "Namsrai Batbayar",
+      "fighter_b_name": "Andr\u00e9 Lima",
+      "weight_class": "Flyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Namsrai Batbayar' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-10T13:24:31Z",
+      "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "Jack Jenkins",
+      "fighter_b_name": "Sean Woodson",
+      "weight_class": "Featherweight",
+      "fighter_a_id": "a9da3158dd2c2b5a",
+      "fighter_b_id": "4682bc59d5f55145",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.3417869955301285,
+      "method_probs": {
+        "ko_tko": 0.32912781834602356,
+        "submission": 0.26894497871398926,
+        "decision": 0.40192723274230957
+      },
+      "round_probs": {
+        "1": 0.31035685539245605,
+        "2": 0.3422280251979828,
+        "3": 0.34741514921188354,
+        "45": 0.0
+      },
+      "elo_a": 1493.948280149898,
+      "elo_b": 1603.4499524061737,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-10T13:24:31Z",
+      "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "Xiong Jingnan",
+      "fighter_b_name": "Julia Polastri",
+      "weight_class": "Women's Strawweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Xiong Jingnan' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-10T13:24:31Z",
+      "model_version": "f55fd4d"
     }
   ]
 }
