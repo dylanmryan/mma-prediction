@@ -166,6 +166,96 @@
       "reason": "no fighter in fighters.parquet matches name 'Shanelle Dyer' (exact or accent-folded)",
       "predicted_at_utc": "2026-07-27T14:52:21Z",
       "model_version": "fed19ae"
+    },
+    {
+      "fighter_a_name": "MarQuel Mederos",
+      "fighter_b_name": "Mason Jones",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "e2be0c1a9b886d92",
+      "fighter_b_id": "f6ad6a1e4d600e0d",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.40672121942043304,
+      "method_probs": {
+        "ko_tko": 0.29406023025512695,
+        "submission": 0.32513368129730225,
+        "decision": 0.3808061182498932
+      },
+      "round_probs": {
+        "1": 0.27498114109039307,
+        "2": 0.36637231707572937,
+        "3": 0.3586465120315552,
+        "45": 0.0
+      },
+      "elo_a": 1581.6903246955792,
+      "elo_b": 1554.5170307116475,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-17T12:56:59Z",
+      "model_version": "dc48663"
+    },
+    {
+      "fighter_a_name": "Terrance Chatman",
+      "fighter_b_name": "Anthony Wint",
+      "weight_class": "Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Terrance Chatman' (exact or accent-folded); no fighter in fighters.parquet matches name 'Anthony Wint' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-17T12:56:59Z",
+      "model_version": "dc48663"
+    },
+    {
+      "fighter_a_name": "Jamall Emmers",
+      "fighter_b_name": "Lerryan Douglas",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Lerryan Douglas' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-17T12:56:59Z",
+      "model_version": "dc48663"
+    },
+    {
+      "fighter_a_name": "Chris Padilla",
+      "fighter_b_name": "Nasrat Haqparast",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "06626b6287e1ae1e",
+      "fighter_b_id": "b7b84ccd221be298",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.4502204358577728,
+      "method_probs": {
+        "ko_tko": 0.31475532054901123,
+        "submission": 0.29651162028312683,
+        "decision": 0.3887330889701843
+      },
+      "round_probs": {
+        "1": 0.3104168772697449,
+        "2": 0.36337804794311523,
+        "3": 0.3262050747871399,
+        "45": 0.0
+      },
+      "elo_a": 1604.8177834625972,
+      "elo_b": 1655.8127896218045,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-17T12:56:59Z",
+      "model_version": "dc48663"
+    },
+    {
+      "fighter_a_name": "M\u00e1rcio Barbosa",
+      "fighter_b_name": "Ryan Kuse",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'M\u00e1rcio Barbosa' (exact or accent-folded); no fighter in fighters.parquet matches name 'Ryan Kuse' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-17T12:56:59Z",
+      "model_version": "dc48663"
+    },
+    {
+      "fighter_a_name": "Gauge Young",
+      "fighter_b_name": "Stanley Dorsainvil",
+      "weight_class": "Lightweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Stanley Dorsainvil' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-17T12:56:59Z",
+      "model_version": "dc48663"
     }
   ]
 }

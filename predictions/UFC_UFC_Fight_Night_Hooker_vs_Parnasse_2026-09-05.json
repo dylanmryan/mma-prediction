@@ -139,6 +139,78 @@
       "reason": "no fighter in fighters.parquet matches name 'Matthieu Letho Duclos' (exact or accent-folded); no fighter in fighters.parquet matches name 'Luis Felipe Dias' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-10T13:24:32Z",
       "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "Far\u00e8s Ziam",
+      "fighter_b_name": "Axel Sola",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "1e4f273069fb9e85",
+      "fighter_b_id": "1d2d98ddd05b38fb",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.6392359435558319,
+      "method_probs": {
+        "ko_tko": 0.32773256301879883,
+        "submission": 0.3160959482192993,
+        "decision": 0.35617148876190186
+      },
+      "round_probs": {
+        "1": 0.3114240765571594,
+        "2": 0.3622872233390808,
+        "3": 0.32628872990608215,
+        "45": 0.0
+      },
+      "elo_a": 1633.126729817662,
+      "elo_b": 1537.5247551489463,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-17T12:57:01Z",
+      "model_version": "dc48663"
+    },
+    {
+      "fighter_a_name": "Losene Keita",
+      "fighter_b_name": "Muhammad Naimov",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Losene Keita' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-17T12:57:01Z",
+      "model_version": "dc48663"
+    },
+    {
+      "fighter_a_name": "Oumar Sy",
+      "fighter_b_name": "Modestas Bukauskas",
+      "weight_class": "Light Heavyweight",
+      "fighter_a_id": "46e2011d92463b7e",
+      "fighter_b_id": "476fe566d2df676e",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.6558910012245178,
+      "method_probs": {
+        "ko_tko": 0.37400758266448975,
+        "submission": 0.27956774830818176,
+        "decision": 0.3464246392250061
+      },
+      "round_probs": {
+        "1": 0.3081347346305847,
+        "2": 0.35916823148727417,
+        "3": 0.3326970338821411,
+        "45": 0.0
+      },
+      "elo_a": 1584.6383333531703,
+      "elo_b": 1592.8116483372305,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-17T12:57:01Z",
+      "model_version": "dc48663"
+    },
+    {
+      "fighter_a_name": "Nora Cornolle",
+      "fighter_b_name": "Klaudia Sygu\u0142a",
+      "weight_class": "Women's Bantamweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Klaudia Sygu\u0142a' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-17T12:57:01Z",
+      "model_version": "dc48663"
     }
   ]
 }
