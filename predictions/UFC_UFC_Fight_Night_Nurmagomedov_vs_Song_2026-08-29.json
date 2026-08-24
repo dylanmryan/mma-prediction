@@ -157,6 +157,42 @@
       "reason": "no fighter in fighters.parquet matches name 'Xiong Jingnan' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-10T13:24:31Z",
       "model_version": "f55fd4d"
+    },
+    {
+      "fighter_a_name": "Bilal Hasan",
+      "fighter_b_name": "Nilson Rojas",
+      "weight_class": "Flyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Bilal Hasan' (exact or accent-folded); no fighter in fighters.parquet matches name 'Nilson Rojas' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-24T13:03:43Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Xiao Long",
+      "fighter_b_name": "Francesco Nuzzi",
+      "weight_class": "Bantamweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Francesco Nuzzi' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-24T13:03:43Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Lawrence Lui",
+      "fighter_b_name": "Hector Santiago",
+      "weight_class": "Bantamweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Lawrence Lui' (exact or accent-folded); no fighter in fighters.parquet matches name 'Hector Santiago' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-24T13:03:43Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Ding Meng",
+      "fighter_b_name": "Cameron Nelson",
+      "weight_class": "Welterweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Ding Meng' (exact or accent-folded); no fighter in fighters.parquet matches name 'Cameron Nelson' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-24T13:03:43Z",
+      "model_version": "0d037cf"
     }
   ]
 }

@@ -1,0 +1,270 @@
+{
+  "event_name": "UFC 331: Van vs. Pantoja 2",
+  "event_date": "2026-09-19",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_331",
+  "predicted_at_utc": "2026-08-24T13:03:46Z",
+  "model_version": "0d037cf",
+  "fights": [
+    {
+      "fighter_a_name": "Joshua Van",
+      "fighter_b_name": "Alexandre Pantoja",
+      "weight_class": "Flyweight",
+      "fighter_a_id": "17e97649403ba428",
+      "fighter_b_id": "a0f0004aadf10b71",
+      "match_tier": "exact",
+      "title_fight": true,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.4689440131187439,
+      "method_probs": {
+        "ko_tko": 0.4418308436870575,
+        "submission": 0.25848811864852905,
+        "decision": 0.29968106746673584
+      },
+      "round_probs": {
+        "1": 0.06960734724998474,
+        "2": 0.07986602932214737,
+        "3": 0.09843246638774872,
+        "45": 0.7520942687988281
+      },
+      "elo_a": 1663.2775597838286,
+      "elo_b": 1783.4625477589293,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Arman Tsarukyan",
+      "fighter_b_name": "Maur\u00edcio Ruffy",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "eae48ff31db420c2",
+      "fighter_b_id": "9c393e836a852f30",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.7804138138890266,
+      "method_probs": {
+        "ko_tko": 0.3401166498661041,
+        "submission": 0.31449440121650696,
+        "decision": 0.3453889489173889
+      },
+      "round_probs": {
+        "1": 0.3201809823513031,
+        "2": 0.3595402240753174,
+        "3": 0.32027870416641235,
+        "45": 0.0
+      },
+      "elo_a": 1761.509189499475,
+      "elo_b": 1577.6130433389599,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Patr\u00edcio Pitbull",
+      "fighter_b_name": "Choi Doo-ho",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Patr\u00edcio Pitbull' (exact or accent-folded); no fighter in fighters.parquet matches name 'Choi Doo-ho' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Renato Moicano",
+      "fighter_b_name": "Brian Ortega",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "b6452706b373eea1",
+      "fighter_b_id": "def8166ff24bd237",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.48692408204078674,
+      "method_probs": {
+        "ko_tko": 0.3835572600364685,
+        "submission": 0.2323790043592453,
+        "decision": 0.3840637505054474
+      },
+      "round_probs": {
+        "1": 0.2874208390712738,
+        "2": 0.3709144592285156,
+        "3": 0.3416646718978882,
+        "45": 0.0
+      },
+      "elo_a": 1687.2993885879016,
+      "elo_b": 1695.7753636396571,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Alonzo Menifield",
+      "fighter_b_name": "Iwo Baraniewski",
+      "weight_class": "Light Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Iwo Baraniewski' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Gable Steveson",
+      "fighter_b_name": "Sean Sharaf",
+      "weight_class": "Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Gable Steveson' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Marlon Vera",
+      "fighter_b_name": "Charles Jourdain",
+      "weight_class": "Bantamweight",
+      "fighter_a_id": "7c7332319c14094c",
+      "fighter_b_id": "f1d64ae34e088832",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.6491536796092987,
+      "method_probs": {
+        "ko_tko": 0.3830200135707855,
+        "submission": 0.23634442687034607,
+        "decision": 0.38063549995422363
+      },
+      "round_probs": {
+        "1": 0.28338491916656494,
+        "2": 0.3812646269798279,
+        "3": 0.3353504538536072,
+        "45": 0.0
+      },
+      "elo_a": 1703.5413300414707,
+      "elo_b": 1560.456405795544,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Tai Tuivasa",
+      "fighter_b_name": "Robelis Despaigne",
+      "weight_class": "Heavyweight",
+      "fighter_a_id": "c62fbc117d57b943",
+      "fighter_b_id": "140567899d98978a",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.6267691105604172,
+      "method_probs": {
+        "ko_tko": 0.41714316606521606,
+        "submission": 0.2522026300430298,
+        "decision": 0.33065420389175415
+      },
+      "round_probs": {
+        "1": 0.357941210269928,
+        "2": 0.3561832308769226,
+        "3": 0.285875529050827,
+        "45": 0.0
+      },
+      "elo_a": 1548.8455712278715,
+      "elo_b": 1468.418904086524,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Edmen Shahbazyan",
+      "fighter_b_name": "Brunno Ferreira",
+      "weight_class": "Middleweight",
+      "fighter_a_id": "4144798612ef96e5",
+      "fighter_b_id": "1e719d4b676dc19a",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.612089067697525,
+      "method_probs": {
+        "ko_tko": 0.36579811573028564,
+        "submission": 0.27136993408203125,
+        "decision": 0.3628319203853607
+      },
+      "round_probs": {
+        "1": 0.30301377177238464,
+        "2": 0.36541807651519775,
+        "3": 0.3315681517124176,
+        "45": 0.0
+      },
+      "elo_a": 1591.1122551181084,
+      "elo_b": 1590.7654169365946,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Giga Chikadze",
+      "fighter_b_name": "Joanderson Brito",
+      "weight_class": "Featherweight",
+      "fighter_a_id": "9560ff14eb3129f7",
+      "fighter_b_id": "791c8437b341fba5",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.48320022225379944,
+      "method_probs": {
+        "ko_tko": 0.3532414138317108,
+        "submission": 0.24422508478164673,
+        "decision": 0.40253347158432007
+      },
+      "round_probs": {
+        "1": 0.294223427772522,
+        "2": 0.35306137800216675,
+        "3": 0.3527151346206665,
+        "45": 0.0
+      },
+      "elo_a": 1651.634543161999,
+      "elo_b": 1628.698675939084,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Casey O'Neill",
+      "fighter_b_name": "Eduarda Moura",
+      "weight_class": "Women's Flyweight",
+      "fighter_a_id": "04835018f90b118c",
+      "fighter_b_id": "de594b35c45c2e9a",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.4882086217403412,
+      "method_probs": {
+        "ko_tko": 0.3160773515701294,
+        "submission": 0.2989463806152344,
+        "decision": 0.384976327419281
+      },
+      "round_probs": {
+        "1": 0.32400238513946533,
+        "2": 0.33918529748916626,
+        "3": 0.3368123173713684,
+        "45": 0.0
+      },
+      "elo_a": 1583.6448290240296,
+      "elo_b": 1574.8405107388787,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Ryan Gandra",
+      "fighter_b_name": "Osman Diaz",
+      "weight_class": "Middleweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Ryan Gandra' (exact or accent-folded); no fighter in fighters.parquet matches name 'Osman Diaz' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Michael Aswell Jr.",
+      "fighter_b_name": "Yoo Joo-sang",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Michael Aswell Jr.' (exact or accent-folded); no fighter in fighters.parquet matches name 'Yoo Joo-sang' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-24T13:03:46Z",
+      "model_version": "0d037cf"
+    }
+  ]
+}
