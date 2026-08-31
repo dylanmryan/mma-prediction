@@ -1,0 +1,243 @@
+{
+  "event_name": "UFC Fight Night: Silva vs. Delgado",
+  "event_date": "2026-09-12",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Silva_vs._Delgado",
+  "predicted_at_utc": "2026-08-31T19:03:41Z",
+  "model_version": "d0bfe66",
+  "fights": [
+    {
+      "fighter_a_name": "Jean Silva",
+      "fighter_b_name": "Jose Delgado",
+      "weight_class": "Featherweight",
+      "fighter_a_id": "52ef95b5860fb28c",
+      "fighter_b_id": "7d6ceff6747f2de2",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.5365239381790161,
+      "method_probs": {
+        "ko_tko": 0.38005319237709045,
+        "submission": 0.2789691686630249,
+        "decision": 0.34097766876220703
+      },
+      "round_probs": {
+        "1": 0.10177632421255112,
+        "2": 0.12985384464263916,
+        "3": 0.14531424641609192,
+        "45": 0.6230555772781372
+      },
+      "elo_a": 1713.0962656076924,
+      "elo_b": 1592.9380700998374,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Brandon Moreno",
+      "fighter_b_name": "Joseph Morales",
+      "weight_class": "Flyweight",
+      "fighter_a_id": "792be9a24df82ed6",
+      "fighter_b_id": "2fe9032955c2e013",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.7315549105405807,
+      "method_probs": {
+        "ko_tko": 0.37065842747688293,
+        "submission": 0.27971726655960083,
+        "decision": 0.34962427616119385
+      },
+      "round_probs": {
+        "1": 0.3518947958946228,
+        "2": 0.3479447662830353,
+        "3": 0.30016040802001953,
+        "45": 0.0
+      },
+      "elo_a": 1716.0075763671632,
+      "elo_b": 1516.5707906786668,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Tommy McMillen",
+      "fighter_b_name": "Marwan Rahiki",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Tommy McMillen' (exact or accent-folded); no fighter in fighters.parquet matches name 'Marwan Rahiki' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Manon Fiorot",
+      "fighter_b_name": "Alexa Grasso",
+      "weight_class": "Women's Flyweight",
+      "fighter_a_id": "34ff304266360297",
+      "fighter_b_id": "e8b731feff72294b",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5807824730873108,
+      "method_probs": {
+        "ko_tko": 0.35238713026046753,
+        "submission": 0.25013467669487,
+        "decision": 0.3974781632423401
+      },
+      "round_probs": {
+        "1": 0.3049303889274597,
+        "2": 0.36786583065986633,
+        "3": 0.32720381021499634,
+        "45": 0.0
+      },
+      "elo_a": 1701.0491094715762,
+      "elo_b": 1623.0929312044439,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Waldo Cortes-Acosta",
+      "fighter_b_name": "Curtis Blaydes",
+      "weight_class": "Heavyweight",
+      "fighter_a_id": "fc08099550072fe4",
+      "fighter_b_id": "fa6796c55d6c5440",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.3682585060596466,
+      "method_probs": {
+        "ko_tko": 0.4402434825897217,
+        "submission": 0.23781150579452515,
+        "decision": 0.3219450116157532
+      },
+      "round_probs": {
+        "1": 0.3406658172607422,
+        "2": 0.36758869886398315,
+        "3": 0.29174548387527466,
+        "45": 0.0
+      },
+      "elo_a": 1639.3311820602205,
+      "elo_b": 1751.617213242449,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "David Mart\u00ednez",
+      "fighter_b_name": "Dan Ige",
+      "weight_class": "Bantamweight",
+      "fighter_a_id": "9a97acbfd5a08bfa",
+      "fighter_b_id": "82a5152216251682",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.4972043037414551,
+      "method_probs": {
+        "ko_tko": 0.382548451423645,
+        "submission": 0.25359588861465454,
+        "decision": 0.36385563015937805
+      },
+      "round_probs": {
+        "1": 0.3044176697731018,
+        "2": 0.37142908573150635,
+        "3": 0.32415324449539185,
+        "45": 0.0
+      },
+      "elo_a": 1535.516006244448,
+      "elo_b": 1616.2805688953017,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Tim Elliott",
+      "fighter_b_name": "\u00c9dgar Ch\u00e1irez",
+      "weight_class": "Flyweight",
+      "fighter_a_id": "c96d9178c9ed9e62",
+      "fighter_b_id": "5ef94841c4bc3f86",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5086910724639893,
+      "method_probs": {
+        "ko_tko": 0.3506043553352356,
+        "submission": 0.29078754782676697,
+        "decision": 0.3586081266403198
+      },
+      "round_probs": {
+        "1": 0.34498947858810425,
+        "2": 0.3508703410625458,
+        "3": 0.3041401505470276,
+        "45": 0.0
+      },
+      "elo_a": 1558.1353636315432,
+      "elo_b": 1520.359929268661,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Ignacio Bahamondes",
+      "fighter_b_name": "Muslim Salikhov",
+      "weight_class": "Welterweight",
+      "fighter_a_id": "e4a47b07044ddd72",
+      "fighter_b_id": "447f9858ae78f921",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.6403022259473801,
+      "method_probs": {
+        "ko_tko": 0.37293726205825806,
+        "submission": 0.26755401492118835,
+        "decision": 0.359508752822876
+      },
+      "round_probs": {
+        "1": 0.31583189964294434,
+        "2": 0.3455066680908203,
+        "3": 0.3386614918708801,
+        "45": 0.0
+      },
+      "elo_a": 1631.3042909280393,
+      "elo_b": 1671.4726735572908,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Yousri Belgaroui",
+      "fighter_b_name": "Djorden Santos",
+      "weight_class": "Middleweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Yousri Belgaroui' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Ramiro Jimenez",
+      "fighter_b_name": "Rodrigo Vera",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Ramiro Jimenez' (exact or accent-folded); no fighter in fighters.parquet matches name 'Rodrigo Vera' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Rafa Garc\u00eda",
+      "fighter_b_name": "Rong Zhu",
+      "weight_class": "Lightweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Rong Zhu' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "JJ Aldrich",
+      "fighter_b_name": "Regina Tarin",
+      "weight_class": "Women's Flyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Regina Tarin' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:41Z",
+      "model_version": "d0bfe66"
+    }
+  ]
+}

@@ -1,0 +1,216 @@
+{
+  "event_name": "UFC Fight Night: Rosas Jr. vs. Barcelos",
+  "event_date": "2026-09-26",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Rosas_Jr._vs._Barcelos",
+  "predicted_at_utc": "2026-08-31T19:03:43Z",
+  "model_version": "d0bfe66",
+  "fights": [
+    {
+      "fighter_a_name": "Raul Rosas Jr.",
+      "fighter_b_name": "Raoni Barcelos",
+      "weight_class": "Bantamweight",
+      "fighter_a_id": "fe2babf95de24fb1",
+      "fighter_b_id": "b9f28e7045fdfce7",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.617712214589119,
+      "method_probs": {
+        "ko_tko": 0.3748815655708313,
+        "submission": 0.3127303719520569,
+        "decision": 0.3123880624771118
+      },
+      "round_probs": {
+        "1": 0.06406548619270325,
+        "2": 0.09540124237537384,
+        "3": 0.13120998442173004,
+        "45": 0.7093232870101929
+      },
+      "elo_a": 1622.1101752616116,
+      "elo_b": 1638.445697894828,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Melissa Amaya",
+      "fighter_b_name": "Valesca Machado",
+      "weight_class": "Women's Strawweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Melissa Amaya' (exact or accent-folded); no fighter in fighters.parquet matches name 'Valesca Machado' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Mehemmedeli Osmanli",
+      "fighter_b_name": "Ilimbek Akylbek Uulu",
+      "weight_class": "Bantamweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Mehemmedeli Osmanli' (exact or accent-folded); no fighter in fighters.parquet matches name 'Ilimbek Akylbek Uulu' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Montel Jackson",
+      "fighter_b_name": "Ricky Sim\u00f3n",
+      "weight_class": "Bantamweight",
+      "fighter_a_id": "cc1a8b4b38b92c6d",
+      "fighter_b_id": "5987b2458f4b5290",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.6519899517297745,
+      "method_probs": {
+        "ko_tko": 0.345792680978775,
+        "submission": 0.2808370590209961,
+        "decision": 0.3733702301979065
+      },
+      "round_probs": {
+        "1": 0.30588439106941223,
+        "2": 0.3506355881690979,
+        "3": 0.3434799909591675,
+        "45": 0.0
+      },
+      "elo_a": 1699.7924632899128,
+      "elo_b": 1644.324152588966,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Rodolfo Bellato",
+      "fighter_b_name": "Christian Edwards",
+      "weight_class": "Light Heavyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Christian Edwards' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Rodolfo Vieira",
+      "fighter_b_name": "Robert Bryczek",
+      "weight_class": "Middleweight",
+      "fighter_a_id": "260e9e0d4954aea6",
+      "fighter_b_id": "f96856f9d69fd7e4",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.6146882027387619,
+      "method_probs": {
+        "ko_tko": 0.3567434549331665,
+        "submission": 0.2996196746826172,
+        "decision": 0.3436368703842163
+      },
+      "round_probs": {
+        "1": 0.32881203293800354,
+        "2": 0.32853302359580994,
+        "3": 0.3426549434661865,
+        "45": 0.0
+      },
+      "elo_a": 1593.3882756311612,
+      "elo_b": 1522.284610507996,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Brady Hiestand",
+      "fighter_b_name": "Rinya Nakamura",
+      "weight_class": "Bantamweight",
+      "fighter_a_id": "7af33fc4435017f1",
+      "fighter_b_id": "d8c811df0386d5e8",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5167224109172821,
+      "method_probs": {
+        "ko_tko": 0.28022271394729614,
+        "submission": 0.35465502738952637,
+        "decision": 0.3651222586631775
+      },
+      "round_probs": {
+        "1": 0.29178524017333984,
+        "2": 0.36120280623435974,
+        "3": 0.347011923789978,
+        "45": 0.0
+      },
+      "elo_a": 1590.1619223565376,
+      "elo_b": 1590.6362455767044,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "John Casta\u00f1eda",
+      "fighter_b_name": "Alateng Heili",
+      "weight_class": "Bantamweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Alateng Heili' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Josiah Harrell",
+      "fighter_b_name": "Elves Brener",
+      "weight_class": "Lightweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Josiah Harrell' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Norma Dumont",
+      "fighter_b_name": "Ail\u00edn P\u00e9rez",
+      "weight_class": "Women's Bantamweight",
+      "fighter_a_id": "d3f5d33d61cd00c9",
+      "fighter_b_id": "06e4245d16fc5315",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.4962500035762787,
+      "method_probs": {
+        "ko_tko": 0.3630900979042053,
+        "submission": 0.24958395957946777,
+        "decision": 0.3873259425163269
+      },
+      "round_probs": {
+        "1": 0.28282856941223145,
+        "2": 0.3515421748161316,
+        "3": 0.36562925577163696,
+        "45": 0.0
+      },
+      "elo_a": 1657.2305377859172,
+      "elo_b": 1613.7723627055925,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Vanessa Demopoulos",
+      "fighter_b_name": "Yazmin Jauregui",
+      "weight_class": "Women's Strawweight",
+      "fighter_a_id": "2c483cf443f38ece",
+      "fighter_b_id": "40cb680ae1cd331f",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.28598377108573914,
+      "method_probs": {
+        "ko_tko": 0.34905046224594116,
+        "submission": 0.27904075384140015,
+        "decision": 0.3719087839126587
+      },
+      "round_probs": {
+        "1": 0.332671582698822,
+        "2": 0.34524857997894287,
+        "3": 0.3220798373222351,
+        "45": 0.0
+      },
+      "elo_a": 1488.3760564970357,
+      "elo_b": 1492.1504854116292,
+      "skipped": false,
+      "predicted_at_utc": "2026-08-31T19:03:43Z",
+      "model_version": "d0bfe66"
+    }
+  ]
+}

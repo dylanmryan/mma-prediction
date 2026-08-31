@@ -220,6 +220,24 @@
       "reason": "no fighter in fighters.parquet matches name 'Delphine Benouaich' (exact or accent-folded); no fighter in fighters.parquet matches name 'Sofia Montenegro' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:44Z",
       "model_version": "0d037cf"
+    },
+    {
+      "fighter_a_name": "Daniil Donchenko",
+      "fighter_b_name": "Punahele Soriano",
+      "weight_class": "Welterweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Daniil Donchenko' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:40Z",
+      "model_version": "d0bfe66"
+    },
+    {
+      "fighter_a_name": "Michael Aljarouj",
+      "fighter_b_name": "Fabi\u00e0 Sintes",
+      "weight_class": "Flyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Michael Aljarouj' (exact or accent-folded); no fighter in fighters.parquet matches name 'Fabi\u00e0 Sintes' (exact or accent-folded)",
+      "predicted_at_utc": "2026-08-31T19:03:40Z",
+      "model_version": "d0bfe66"
     }
   ]
 }
