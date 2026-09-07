@@ -1330,9 +1330,14 @@ git checkout main && git merge --no-ff sp1-walkforward -m "Merge sp1-walkforward
 
 ## Completion notes (filled in during execution)
 
-- Pooled evaluation rows: _n_ (fold years 2018–2025+2026)
-- Baselines (pooled winner LL / acc / joint LL): Elo _…_ ; XGB v1 _…_ ; torch v1 _…_
-- σ_seed: _…_ ; bar: _…_
-- Refit experiment: XGB A _…_ vs B _…_ ; torch A _…_ vs B _…_ ; decision: _…_
-- Deployed model after SP1: hash _…_ ; recipe _…_
+- Pooled evaluation rows: 4804 (fold years 2018–2025+2026)
+- Baselines (pooled winner LL / acc / joint LL): Elo 0.6827 / 0.5535 / — ; XGB v1 0.6537 / 0.6132 / joint 2.1921; torch v1 0.6510 / 0.6099 / joint 2.3129
+- σ_seed: 0.000346 (below the 0.001-0.002 the plan anticipated; n=3, 95% CI roughly [0.00018, 0.00218]) ; bar: 0.003
+- Refit experiment: XGB A 0.6537 vs B 0.6524 ; torch A 0.6510 vs B 0.6512 ; decision: refit_through_latest
+- Deployed model after SP1: hash `55ca11491332` (torch: 14 epochs, T 1.1, n_train 11,238); XGB budgets {82, 80, 76}; recipe refit_through_latest
 - Deferred: `external_missing` slice (SP2); harness-driven promotion gate (SP4)
+- Follow-ups:
+  - Temperature/budget-from-recent-folds experiment (SP2 recency block): per-fold optimal temperature drifts from ~1.3–1.65 (2018–2022) to ~0.9–1.0 (2023–2025); test a budget/temperature taken from the most recent k folds through the same harness against torch_v1.
+  - Display priors are now computed on in-sample rows (SP4 retires them).
+  - README results section rewrite (Task 11).
+  - The harness must be re-run to refresh `metrics_val.json` evidence after a data refresh -- the weekly refresh Action does not run it.

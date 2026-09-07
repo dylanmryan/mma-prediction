@@ -216,7 +216,9 @@ results documented in the plan file as before.
    and exponential recency weights over a small grid (no cut / 2000 / 2005 /
    2010 start; half-life ∞ / 8 / 4 / 2 years), judged by the same bar. The
    sport's meta shifts fast enough that this is expected to matter more than
-   any single feature.
+   any single feature. Also tests the fixed budget and temperature taken
+   from the most recent k folds instead of the all-fold median (motivated
+   by the temperature drift recorded in `models/walkforward/refit_decision.json`).
 6. **Short-notice and weigh-in block**: days of notice for late
    replacements and pounds over the limit, from the snapshot's
    `late_replacements.csv` / `missed_weights.csv` (through 2024-08) extended

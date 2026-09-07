@@ -241,7 +241,7 @@ def test_build_report_casts_numpy_scalars_and_skips_empty_folds(capsys):
     assert "2019" in capsys.readouterr().out
 
 
-from scripts.noise_floor import sigma_from_reports
+from scripts.noise_floor import check_disjoint_seed_sets, sigma_from_reports
 
 
 def test_sigma_from_reports_is_sample_std():
@@ -250,6 +250,16 @@ def test_sigma_from_reports_is_sample_std():
     assert out["sigma_seed"] == pytest.approx(np.std([0.650, 0.652, 0.648], ddof=1))
     assert out["bar"] == pytest.approx(max(0.003, 2 * out["sigma_seed"]))
     assert out["n_reports"] == 3
+
+
+def test_noise_floor_rejects_overlapping_seed_sets():
+    # disjoint sets pass silently
+    check_disjoint_seed_sets(["0,1,2,3,4", "5,6,7,8,9", "10,11,12,13,14"])
+    # a shared seed (4) between two sets raises
+    with pytest.raises(SystemExit, match="4"):
+        check_disjoint_seed_sets(["0,1,2,3,4", "4,5,6,7,8"])
+    # null seed sets (non-torch reports) are skipped, not a failure
+    check_disjoint_seed_sets(["0,1,2,3,4", None, "5,6,7,8,9"])
 
 
 from scripts.run_walkforward import build_candidate, fixed_budget_from
