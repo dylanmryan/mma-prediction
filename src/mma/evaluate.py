@@ -71,7 +71,7 @@ def joint_outcome_log_loss(
     r_index = {label: i for i, label in enumerate(round_classes)}
     losses = []
     for i, (m, r) in enumerate(zip(y_method, y_round)):
-        if m is None or m not in m_index or (isinstance(m, float) and np.isnan(m)):
+        if m is None or m not in m_index:
             continue
         p = p_w[i] if y_w[i] == 1.0 else 1.0 - p_w[i]
         p *= method_probs[i, m_index[m]]

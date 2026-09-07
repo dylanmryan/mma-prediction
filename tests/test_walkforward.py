@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mma.walkforward import FOLD_YEARS, Fold, make_folds, recency_weights
+from mma.walkforward import FOLD_YEARS, make_folds, recency_weights
 
 
 def _dates():

@@ -32,7 +32,11 @@ class Fold:
 def make_folds(
     dates: pd.Series, fold_years=FOLD_YEARS, train_start: str | None = None
 ) -> list[Fold]:
-    """Boolean masks (aligned to `dates`) for every fold year."""
+    """Boolean masks (aligned to `dates`) for every fold year.
+
+    The largest year in `fold_years` is unbounded above (it absorbs every
+    later fight), which is how the default 2025 fold takes in the partial
+    2026."""
     d = pd.to_datetime(dates).reset_index(drop=True)
     start = pd.Timestamp(train_start) if train_start else None
     folds = []
