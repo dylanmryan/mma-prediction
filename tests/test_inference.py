@@ -156,12 +156,10 @@ def test_committed_display_priors_json_structure():
     assert all(v >= 0.0 for group in payload.values() for v in group.values())
 
 
-def test_compute_display_priors_synthetic_frame():
-    from mma.inference import compute_display_priors
-
-    # Two train-split rows (date < 2021-01-01) and one post-cutoff row that
-    # must be excluded from the priors entirely.
-    features = pd.DataFrame(
+def _synthetic_features():
+    # Four pre-2021 rows and one 2022 row: the split protocol trained only
+    # on the former; a refit_through model trained on all five.
+    return pd.DataFrame(
         {
             "date": pd.to_datetime(
                 ["2019-01-01", "2019-06-01", "2020-01-01", "2020-06-01", "2022-01-01"]
@@ -171,7 +169,66 @@ def test_compute_display_priors_synthetic_frame():
             "scheduled_rounds": pd.array([3, 3, 5, 3, 5], dtype="Int64"),
         }
     )
-    priors = compute_display_priors(features)
+
+
+def test_deployed_training_mask_follows_the_metrics_file():
+    from mma.inference import deployed_training_mask
+
+    features = _synthetic_features()
+    # split-mode metrics (no "mode" key): the original date < 2021-01-01 split
+    split = deployed_training_mask(features, {"winner_ensemble": {"log_loss": 0.65}})
+    assert split.tolist() == [True, True, True, True, False]
+    # refit_through: every row dated <= train_through
+    refit = deployed_training_mask(
+        features, {"mode": "refit_through", "train_through": "2022-01-01"}
+    )
+    assert refit.tolist() == [True, True, True, True, True]
+    partial = deployed_training_mask(
+        features, {"mode": "refit_through", "train_through": "2020-01-01"}
+    )
+    assert partial.tolist() == [True, True, True, False, False]
+
+
+def test_deployed_training_mask_reads_committed_metrics():
+    """With no explicit metrics the mask is read from the committed
+    models/torch/metrics_val.json; under the refit recipe that is every row
+    through train_through."""
+    import json
+
+    from mma.inference import TORCH_METRICS, deployed_training_mask
+
+    metrics = json.loads(TORCH_METRICS.read_text())
+    features = _synthetic_features()
+    mask = deployed_training_mask(features)
+    if metrics.get("mode") == "refit_through":
+        expected = (features["date"] <= pd.Timestamp(metrics["train_through"])).tolist()
+    else:
+        expected = [True, True, True, True, False]
+    assert mask.tolist() == expected
+
+
+def test_compute_display_priors_refit_uses_all_training_rows():
+    from mma.inference import compute_display_priors
+
+    priors = compute_display_priors(
+        _synthetic_features(), {"mode": "refit_through", "train_through": "2022-01-01"}
+    )
+    # all five rows count: 3 ko_tko, 1 submission, 1 decision
+    assert priors["method"]["ko_tko"] == pytest.approx(0.6)
+    assert priors["method"]["submission"] == pytest.approx(0.2)
+    assert priors["method"]["decision"] == pytest.approx(0.2)
+    # both 5-round finishes count: one round 1, one rounds 4-5
+    assert priors["round_5"]["1"] == pytest.approx(0.5)
+    assert priors["round_5"]["45"] == pytest.approx(0.5)
+
+
+def test_compute_display_priors_synthetic_frame():
+    from mma.inference import compute_display_priors
+
+    # Split-protocol model: two train-split rows (date < 2021-01-01) and one
+    # post-cutoff row that must be excluded from the priors entirely.
+    features = _synthetic_features()
+    priors = compute_display_priors(features, {"winner_ensemble": {"log_loss": 0.65}})
 
     # Method prior uses all 4 train rows (2019-2020), post-cutoff row excluded.
     assert priors["method"]["ko_tko"] == pytest.approx(0.5)

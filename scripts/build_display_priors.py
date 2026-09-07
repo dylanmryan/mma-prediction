@@ -5,12 +5,22 @@ softmax outputs overstate rare classes. For each class c we compute
 
     factor(c) = empirical_prior(c) / mean_model_predicted(c)
 
-over TRAINING-split rows only (date < TRAIN_END): method factors from rows
-with a known method, round factors from finishes only, computed separately
-for 3-round and 5-round fights. Multiplying a fight's predicted distribution
-by these factors and renormalizing (mma.inference.apply_prior_correction)
-maps the model's aggregate predictions onto the empirical base rates while
-preserving per-fight relative signal.
+over the rows the DEPLOYED ensemble was trained on (mma.inference.
+deployed_training_mask, read from models/torch/metrics_val.json): every
+decisive fight through `train_through` under the refit_through recipe that
+ships since SP1, or date < TRAIN_END for a split-protocol model. Method
+factors come from rows with a known method, round factors from finishes
+only, computed separately for 3-round and 5-round fights. Multiplying a
+fight's predicted distribution by these factors and renormalizing
+(mma.inference.apply_prior_correction) maps the model's aggregate
+predictions onto the empirical base rates while preserving per-fight
+relative signal.
+
+The factors are a property of the committed ensemble on its own training
+rows, so they must be rebuilt whenever the ensemble is retrained (the
+weekly refresh and scripts/roll_window.py both do). They are NOT part of
+`mma.versioning.model_version`: rebuilding them does not open a new
+track-record section.
 
 The output JSON is committed so the Streamlit app never has to load
 features.parquet or run ensemble predictions at startup.
@@ -28,11 +38,12 @@ import numpy as np
 import pandas as pd
 
 from mma.inference import (
-    TRAIN_END,
     Ensemble,
     apply_prior_correction,
     compute_correction_factors,
     compute_display_priors,
+    deployed_training_mask,
+    load_deployed_metrics,
 )
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
 
@@ -74,9 +85,13 @@ def fit_factors(empirical: dict, raw_probs: np.ndarray, classes: list[str],
 def main() -> None:
     features = pd.read_parquet(PROCESSED / "features.parquet")
     ensemble = Ensemble.load()
-    priors = compute_display_priors(features)
+    metrics = load_deployed_metrics()
+    priors = compute_display_priors(features, metrics)
 
-    train = features[features["date"] < TRAIN_END]
+    mask = deployed_training_mask(features, metrics)
+    train = features[mask]
+    print(f"deployed model mode={metrics.get('mode', 'split')}: correction rows = "
+          f"{int(mask.sum())} of {len(features)} (through {train['date'].max().date()})")
 
     # Method: train rows with a known method.
     method_rows = train[train["y_method"].notna()]

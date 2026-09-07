@@ -78,3 +78,74 @@ def test_mc_dropout_produces_spread():
     samples = mc_dropout_winner(net, x[:8], wc[:8], passes=20, seed=0)
     assert samples.shape == (20, 8)
     assert samples.std(axis=0).mean() > 0.0
+
+
+def _synthetic_wf(n=300, seed=0):
+    rng = np.random.default_rng(seed)
+    x = rng.normal(size=(n, 6)).astype(np.float32)
+    wc = rng.integers(0, 3, size=n)
+    y = (x[:, 0] > 0).astype(np.float32)
+    targets = {
+        "y_winner": torch.tensor(y),
+        "y_method": torch.tensor(rng.integers(0, 3, size=n)),
+        "y_round": torch.tensor(rng.integers(0, 4, size=n)),
+        "three_round": torch.tensor(rng.integers(0, 2, size=n).astype(bool)),
+    }
+    return x, wc, targets
+
+
+def _split_wf(x, wc, t, k=200):
+    a = {key: v[:k] for key, v in t.items()}
+    b = {key: v[k:] for key, v in t.items()}
+    return x[:k], wc[:k], a, x[k:], wc[k:], b
+
+
+def test_train_one_config_changes_architecture():
+    x, wc, t = _synthetic_wf()
+    net, info = train_one(0, *_split_wf(x, wc, t), max_epochs=2,
+                          config={"hidden": (16, 8), "dropout": 0.1, "embedding_dim": 2})
+    assert net.weight_class_embedding.embedding_dim == 2
+    assert net.trunk[0].out_features == 16
+
+
+def test_train_one_fixed_epochs_runs_exactly_that_many():
+    x, wc, t = _synthetic_wf()
+    net, info = train_one(0, *_split_wf(x, wc, t), fixed_epochs=3)
+    assert info["epochs_run"] == 3 and info["best_epoch"] == 2
+    assert info["best_val_log_loss"] is None
+
+
+def test_train_one_sample_weight_changes_result():
+    x, wc, t = _synthetic_wf()
+    split = _split_wf(x, wc, t)
+    net_a, _ = train_one(0, *split, max_epochs=3)
+    w = np.where(x[:200, 1] > 0, 5.0, 0.2)
+    net_b, _ = train_one(0, *split, max_epochs=3, sample_weight=w)
+    pa = net_a.state_dict()["winner_head.weight"]
+    pb = net_b.state_dict()["winner_head.weight"]
+    assert not torch.allclose(pa, pb)
+
+
+def test_train_one_reports_epochs_run_in_default_mode():
+    x, wc, t = _synthetic_wf()
+    _, info = train_one(0, *_split_wf(x, wc, t), max_epochs=4, patience=100)
+    assert info["epochs_run"] == 4
+
+
+def test_resolve_config_rejects_unknown_keys():
+    from mma.models.train_loop import resolve_config
+    with pytest.raises(ValueError, match="hiden"):
+        resolve_config({"hiden": (8, 4)})
+
+
+def test_resolve_config_coerces_hidden_to_tuple():
+    from mma.models.train_loop import DEFAULT_CONFIG, resolve_config
+    assert resolve_config({"hidden": [128, 64]}) == DEFAULT_CONFIG
+    assert resolve_config({"hidden": [16, 8]})["hidden"] == (16, 8)
+
+
+def test_train_one_fixed_epochs_accepts_no_validation_set():
+    x, wc, t = _synthetic_wf()
+    x_tr, wc_tr, t_tr, *_ = _split_wf(x, wc, t)
+    net, info = train_one(0, x_tr, wc_tr, t_tr, None, None, None, fixed_epochs=2)
+    assert net is not None and info["epochs_run"] == 2

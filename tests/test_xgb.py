@@ -38,3 +38,47 @@ def test_binary_model_learns_signal():
     model = train_binary(xf[:300], y[:300], xf[300:], y[300:])
     p = model.predict_proba(xf[300:])[:, 1]
     assert ((p >= 0.5).astype(int) == y[300:]).mean() > 0.7
+
+
+def _toy_xgb(n=200, seed=0):
+    rng = np.random.default_rng(seed)
+    x = pd.DataFrame({"a": rng.normal(size=n), "b": rng.normal(size=n)})
+    y = pd.Series((x["a"] + 0.3 * rng.normal(size=n) > 0).astype(int))
+    return x, y
+
+
+def test_train_binary_accepts_params_and_sample_weight():
+    x, y = _toy_xgb()
+    w = np.where(x["a"] > 0, 5.0, 1.0)
+    model = train_binary(x[:150], y[:150], x[150:], y[150:],
+                         params={"max_depth": 2}, sample_weight=w[:150])
+    assert model.get_params()["max_depth"] == 2
+    assert model.predict_proba(x[150:]).shape == (50, 2)
+
+
+def test_train_binary_fixed_rounds_has_no_early_stopping():
+    x, y = _toy_xgb()
+    model = train_binary(x, y, None, None, fixed_rounds=37)
+    assert model.get_booster().num_boosted_rounds() == 37
+
+
+def test_train_multiclass_fixed_rounds_and_weights():
+    from mma.models.xgb import train_multiclass
+    x, y = _toy_xgb()
+    # xgboost's sklearn wrapper requires every class to appear in y_train,
+    # so sprinkle in the third label.
+    labels = pd.Series(np.where(y == 1, "ko_tko", "decision"))
+    labels[x["b"] > 1.0] = "submission"
+    model = train_multiclass(x, labels, None, None, ["ko_tko", "submission", "decision"],
+                             fixed_rounds=10, sample_weight=np.ones(len(x)))
+    assert model.get_booster().num_boosted_rounds() == 10
+    assert model.predict_proba(x).shape == (len(x), 3)
+
+
+def test_reserved_params_rejected():
+    import pytest
+    from mma.models.xgb import _classifier
+    with pytest.raises(ValueError, match="n_estimators"):
+        _classifier("binary:logistic", {"n_estimators": 5}, None)
+    with pytest.raises(ValueError, match="objective"):
+        _classifier("binary:logistic", {"objective": "reg:squarederror", "max_depth": 2}, 10)

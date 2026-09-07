@@ -1330,9 +1330,23 @@ git checkout main && git merge --no-ff sp1-walkforward -m "Merge sp1-walkforward
 
 ## Completion notes (filled in during execution)
 
-- Pooled evaluation rows: _n_ (fold years 2018–2025+2026)
-- Baselines (pooled winner LL / acc / joint LL): Elo _…_ ; XGB v1 _…_ ; torch v1 _…_
-- σ_seed: _…_ ; bar: _…_
-- Refit experiment: XGB A _…_ vs B _…_ ; torch A _…_ vs B _…_ ; decision: _…_
-- Deployed model after SP1: hash _…_ ; recipe _…_
+- Pooled evaluation rows: 4804 (fold years 2018–2025+2026)
+- Baselines (pooled winner LL / acc / joint LL): Elo 0.6827 / 0.5535 / — ; XGB v1 0.6537 / 0.6132 / joint 2.1921; torch v1 0.6510 / 0.6099 / joint 2.3129
+- σ_seed: 0.000346 (below the 0.001-0.002 the plan anticipated; n=3, 95% CI roughly [0.00018, 0.00218]) ; bar: 0.003
+- Refit experiment: XGB A 0.6537 vs B 0.6524 ; torch A 0.6510 vs B 0.6512 ; decision: refit_through_latest
+- Fresh-seed re-score of the shipped torch recipe (seeds 5-9, `models/walkforward/refit_decision.json`'s `fresh_seed_rescore`): A (torch_v1_seeds5) 0.6516 vs B (torch_refit_seeds5) 0.6518, Δ +0.0002 vs σ_seed 0.000346 → gate holds, verdict "confirmed". `scripts/refit_decision.py` now builds `bar_check_B_vs_A` via the shared `mma.walkforward.bar_check` (and the new `paired_delta` helper) instead of re-implementing the arithmetic, and reproduces `refit_decision.json` byte-identically on repeat runs.
+- `tests/test_processed_torch.py` / `tests/test_processed_xgb.py`'s `train_through <= harness_features_max_date` check is a `warnings.warn`, not an assert, by design: after the weekly refresh Action retrains on newer Kaggle data, `train_through` advances while the harness date stays at the last committed report, and that must not fail the suite (and thus the Action's commit/predict steps) every week until a manual harness re-run.
+- Deployed model after SP1: hash `55ca11491332` (torch: 14 epochs, T 1.1, n_train 11,238); XGB budgets {82, 80, 76}; recipe refit_through_latest
 - Deferred: `external_missing` slice (SP2); harness-driven promotion gate (SP4)
+- Follow-ups:
+  - Temperature/budget-from-recent-folds experiment (SP2 recency block): per-fold optimal temperature drifts from ~1.3–1.65 (2018–2022) to ~0.9–1.0 (2023–2025); test a budget/temperature taken from the most recent k folds through the same harness against torch_v1.
+  - Display priors are now computed on in-sample rows (SP4 retires them).
+  - README results section rewrite (Task 11).
+  - The harness must be re-run to refresh `metrics_val.json` evidence after a data refresh -- the weekly refresh Action does not run it.
+- Task 10/11 review follow-ups (done in Task 11 unless marked otherwise):
+  - Display priors are now computed on the deployed model's training rows (`mma.inference.deployed_training_mask`, read from `models/torch/metrics_val.json`: every row through `train_through` under the refit recipe) rather than the old pre-2021 split; `display_priors.json` regenerated, model hash unchanged (`55ca11491332`, priors are outside the hash).
+  - `scripts/roll_window.py --execute` is guarded: it aborts when the incumbent is a refit model whose `train_through` reaches into the newest-2-years slice (in-sample for the incumbent); the docstring and printed protocol now say a split-protocol candidate never ships as-is and that `model_version` is the artifact hash. Re-gating the hook on the walk-forward harness is SP4.
+  - `scripts/final_test_eval.py` is guarded: `SystemExit` whenever the deployed torch metrics say `refit_through` -- `final_test_metrics.json` stays frozen from the July 2026 model.
+  - Metrics provenance: refit metrics files record `harness_features_max_date` and `harness_fold_years`; the train scripts warn when `train_through` is newer than the harness's data; `tests/test_processed_torch.py` / `tests/test_processed_xgb.py` pin the quoted evidence to the committed harness report and refit decision.
+  - Temperature-drift experiment (per-fold optimal temperature ~1.3-1.65 on 2018-2022 vs ~0.9-1.0 on 2023-2025; recipe applies 1.1) is deferred to SP2's recency block.
+  - Re-running the harness after a weekly data refresh stays manual (`run_walkforward.py`, `noise_floor.py`, `refit_decision.py`) until SP4 automates it; README Development notes say so.

@@ -1,6 +1,7 @@
 """Load the committed ensemble and predict hypothetical matchups."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -14,12 +15,38 @@ from mma.tensors import Preprocessor
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Same train/tuning cutoff used by scripts/train_xgb.py and scripts/train_torch.py.
+# The original split-protocol training cutoff (scripts/train_xgb.py and
+# scripts/train_torch.py in split mode): train on date < TRAIN_END.
 TRAIN_END = "2021-01-01"
+# The deployed torch ensemble's metrics file, which records how it was trained.
+TORCH_METRICS = ROOT / "models" / "torch" / "metrics_val.json"
 
 
-def compute_display_priors(features: pd.DataFrame) -> dict:
-    """Empirical class frequencies from the training split (date < TRAIN_END).
+def load_deployed_metrics(path: Path = TORCH_METRICS) -> dict:
+    """models/torch/metrics_val.json as a dict, or {} when it does not exist."""
+    path = Path(path)
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def deployed_training_mask(features: pd.DataFrame, metrics: dict | None = None) -> pd.Series:
+    """Boolean mask of the rows the deployed ensemble was trained on.
+
+    `metrics` is models/torch/metrics_val.json (read from disk when None).
+    Under the refit_through recipe (the default deployment since SP1) the
+    ensemble trained on every decisive fight dated <= `train_through`, so
+    that is the mask -- in practice every row of features.parquet. A
+    split-mode metrics file (no `mode` key) does not record its cutoff, so
+    the original split, date < TRAIN_END, is assumed.
+    """
+    if metrics is None:
+        metrics = load_deployed_metrics()
+    if metrics.get("mode") == "refit_through":
+        return features["date"] <= pd.Timestamp(metrics["train_through"])
+    return features["date"] < TRAIN_END
+
+
+def compute_display_priors(features: pd.DataFrame, metrics: dict | None = None) -> dict:
+    """Empirical class frequencies over the deployed model's training rows.
 
     Phase 5 final review finding: the method/round heads are trained with
     class-weighted loss (`class_weights` in train_loop.py) so the model
@@ -31,11 +58,17 @@ def compute_display_priors(features: pd.DataFrame) -> dict:
 
     These empirical priors are the numerators of the mean-matching
     correction factors built by scripts/build_display_priors.py (see
-    `compute_correction_factors`); they come from the training split only,
-    to avoid leaking validation/test-period class balance into the
-    displayed numbers.
+    `compute_correction_factors`). The row set is `deployed_training_mask`
+    -- the rows the committed ensemble actually trained on, read from
+    models/torch/metrics_val.json (pass `metrics` to override): all rows
+    through `train_through` for a refit_through model, date < TRAIN_END
+    for the original split. Restricting to the model's own training rows
+    keeps the correction a property of the deployed model rather than
+    leaking a held-out period's class balance into the displayed numbers;
+    with the refit recipe there is no held-out period, so the base rates
+    are simply the full history the model saw.
     """
-    train = features[features["date"] < TRAIN_END]
+    train = features[deployed_training_mask(features, metrics)]
 
     method_counts = train["y_method"].value_counts()
     method_total = method_counts.sum()
@@ -75,12 +108,13 @@ def compute_correction_factors(empirical: dict, mean_predicted: dict) -> dict:
     (e.g. mean predicted P(rounds 4-5) on train 5-round finishes is ~0.7 vs an
     empirical 0.18, so even after multiplying by the prior the displayed P(45)
     stayed ~0.68). Dividing by the model's own mean predicted probability on
-    the training split makes the *aggregate* corrected distribution match the
+    its training rows makes the *aggregate* corrected distribution match the
     empirical base rates exactly (before per-row renormalization) while
     preserving each fight's relative signal.
 
     `mean_predicted` is the ensemble's mean predicted distribution over the
-    matching training-split rows (built by scripts/build_display_priors.py).
+    matching deployed-training rows (`deployed_training_mask`; built by
+    scripts/build_display_priors.py).
     Guard: if mean_predicted(c) < 1e-6 (e.g. the "45" class for 3-round
     fights, which the model masks to ~0), the factor is set to 0.0 rather
     than exploding.

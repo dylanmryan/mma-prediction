@@ -10,6 +10,7 @@ from scripts.roll_window import (
     current_data_cutoff,
     decide_promotion,
     graded_fights_since,
+    incumbent_in_sample,
     promotion_protocol_text,
 )
 
@@ -57,6 +58,26 @@ def test_promotion_protocol_text_mentions_threshold_and_margin():
     assert "150" in text
     assert "0.002" in text
     assert "2023-01-01" in text
+    # the protocol names the artifact hash, not a commit sha, and warns that
+    # the split-slice gate is in-sample for a refit incumbent
+    assert "mma.versioning.model_version" in text
+    assert "git sha" not in text
+    assert "IN-SAMPLE" in text and "models/walkforward/" in text
+    assert "scripts/build_display_priors.py" in text
+
+
+def test_incumbent_in_sample_refit_reaching_into_slice():
+    refit = {"mode": "refit_through", "train_through": "2026-08-08"}
+    assert incumbent_in_sample(refit, "2024-08-08") is True
+    assert incumbent_in_sample(refit, "2026-08-08") is True   # boundary: equal
+    assert incumbent_in_sample(refit, "2026-08-09") is False  # slice fully after
+
+
+def test_incumbent_in_sample_split_mode_never():
+    # split-protocol metrics files have no "mode" key: train < train_end,
+    # slice after it -> never in-sample
+    assert incumbent_in_sample({"winner_ensemble": {"log_loss": 0.65}}, "2024-08-08") is False
+    assert incumbent_in_sample({}, "2024-08-08") is False
 
 
 def test_decide_promotion_beats_margin():
@@ -86,12 +107,15 @@ def test_decide_promotion_custom_margin():
 # touch the real committed models/torch -- MODELS_DIR is monkeypatched to a
 # tmp dir holding fake incumbent artifacts with distinctive bytes.
 
+# The incumbent metrics file is a split-protocol one (no "mode" key), so the
+# refit in-sample guard lets _execute proceed; see the guard tests below for
+# the refit case.
 INCUMBENT_FILES = {
     "net_seed0.pt": b"INCUMBENT_NET_0",
     "net_seed1.pt": b"INCUMBENT_NET_1",
     "preprocess.json": b"INCUMBENT_PREP",
     "display_priors.json": b"INCUMBENT_PRIORS",
-    "metrics_val.json": b"INCUMBENT_METRICS",
+    "metrics_val.json": b'{"winner_ensemble": {"log_loss": 0.65}}',
 }
 CANDIDATE_FILES = {
     "net_seed0.pt": b"CANDIDATE_NET_0",
@@ -253,6 +277,35 @@ def test_execute_always_cleans_temp_dir(staged, monkeypatch):
     _drive_execute(models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.650)
     assert not candidate_root.exists()
     assert not (models_dir / roll_window.BACKUP_DIR_NAME).exists()
+
+
+def test_execute_aborts_when_incumbent_is_refit_in_sample(staged, monkeypatch):
+    """A refit_through incumbent trained through the latest date is in-sample
+    on the newest-2-years slice: --execute must refuse before scoring or
+    retraining anything, and leave models/torch untouched."""
+    models_dir, torch_dir = staged
+    (torch_dir / "metrics_val.json").write_text(
+        '{"mode": "refit_through", "train_through": "2026-06-01"}'
+    )
+    called = {"retrain": False, "eval": False}
+
+    def fake_retrain(*a, **k):
+        called["retrain"] = True
+
+    def fake_eval(*a, **k):
+        called["eval"] = True
+        return 0.65
+
+    monkeypatch.setattr(roll_window, "_retrain_candidate", fake_retrain)
+    monkeypatch.setattr(roll_window, "_ensemble_val_log_loss", fake_eval)
+    features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
+    with pytest.raises(SystemExit, match="in-sample"):
+        roll_window._execute(features, cutoff=pd.Timestamp("2024-06-01"))
+
+    assert called == {"retrain": False, "eval": False}
+    assert (torch_dir / "net_seed0.pt").read_bytes() == INCUMBENT_FILES["net_seed0.pt"]
+    assert not (models_dir / roll_window.BACKUP_DIR_NAME).exists()
+    assert not (models_dir / roll_window.CANDIDATE_DIR_NAME).exists()
 
 
 def test_execute_aborts_when_no_incumbent_ensemble(tmp_path, monkeypatch, capsys):
