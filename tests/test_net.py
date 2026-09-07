@@ -64,3 +64,42 @@ def test_dropout_active_only_in_train_mode():
     torch.manual_seed(2)
     d, _, _ = net(x, wc)
     assert not torch.equal(c, d)
+
+
+def test_multitask_loss_sample_weight_reweights_rows():
+    n = 4
+    logits = torch.zeros(n)
+    m = torch.zeros(n, 3)
+    r = torch.zeros(n, 4)
+    y_w = torch.tensor([1.0, 0.0, 1.0, 0.0])
+    y_m = torch.full((n,), -1)
+    y_r = torch.full((n,), -1)
+    three = torch.ones(n, dtype=torch.bool)
+    base = multitask_loss(logits, m, r, y_w, y_m, y_r, three, torch.ones(3), torch.ones(4))
+    weighted = multitask_loss(logits, m, r, y_w, y_m, y_r, three, torch.ones(3), torch.ones(4),
+                              sample_weight=torch.tensor([2.0, 0.0, 2.0, 0.0]))
+    # winner BCE at logit 0 is log 2 for every row, so any weighting gives the same mean
+    assert torch.isclose(base, weighted)
+    skewed = multitask_loss(torch.tensor([3.0, 3.0, 3.0, 3.0]), m, r, y_w, y_m, y_r, three,
+                            torch.ones(3), torch.ones(4),
+                            sample_weight=torch.tensor([1.0, 0.0, 1.0, 0.0]))
+    assert skewed < multitask_loss(torch.tensor([3.0] * 4), m, r, y_w, y_m, y_r, three,
+                                   torch.ones(3), torch.ones(4))
+
+
+def test_multitask_loss_weights_apply_to_method_and_round_terms():
+    n = 4
+    y_w = torch.tensor([1.0, 0.0, 1.0, 0.0])
+    y_m = torch.tensor([0, 1, 2, 0])
+    y_r = torch.tensor([0, 1, 2, 3])
+    three = torch.zeros(n, dtype=torch.bool)
+    good = torch.zeros(n, 3); good[torch.arange(n), y_m] = 5.0   # confident-correct method logits
+    bad = torch.zeros(n, 3); bad[torch.arange(n), (y_m + 1) % 3] = 5.0
+    rounds = torch.zeros(n, 4)
+    winner = torch.zeros(n)
+    # rows 0,2 have correct method logits and weight 1; rows 1,3 wrong with weight 0
+    mixed = torch.stack([good[0], bad[1], good[2], bad[3]])
+    w = torch.tensor([1.0, 0.0, 1.0, 0.0])
+    loss_w = multitask_loss(winner, mixed, rounds, y_w, y_m, y_r, three, torch.ones(3), torch.ones(4), sample_weight=w)
+    loss_all_good = multitask_loss(winner, good, rounds, y_w, y_m, y_r, three, torch.ones(3), torch.ones(4))
+    assert torch.isclose(loss_w, loss_all_good, atol=1e-5)
