@@ -172,14 +172,46 @@
   },
   "fit_info": {
     "best_iteration": [
-      72,
-      86,
-      50,
-      77,
-      72,
-      89,
-      384,
-      174
+      {
+        "winner": 72,
+        "method": 71,
+        "round": 119
+      },
+      {
+        "winner": 86,
+        "method": 113,
+        "round": 72
+      },
+      {
+        "winner": 50,
+        "method": 172,
+        "round": 161
+      },
+      {
+        "winner": 77,
+        "method": 40,
+        "round": 41
+      },
+      {
+        "winner": 72,
+        "method": 21,
+        "round": 70
+      },
+      {
+        "winner": 89,
+        "method": 88,
+        "round": 132
+      },
+      {
+        "winner": 384,
+        "method": 24,
+        "round": 62
+      },
+      {
+        "winner": 174,
+        "method": 193,
+        "round": 79
+      }
     ],
     "n_train": [
       5949,
