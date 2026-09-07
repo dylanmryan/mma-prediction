@@ -90,18 +90,21 @@ def model_card_text() -> str:
         if elo_line:
             rivals.append(f"Elo {elo_line}")
         rival_text = f" — vs {'; '.join(rivals)}" if rivals else ""
+        n_train = torch_m.get("n_train")
+        n_train_text = f"{n_train:,}" if isinstance(n_train, int) else "?"
         return (
             head
             + f"Evaluated by expanding-window walk-forward "
             f"{_fold_span(torch_m.get('harness_fold_years', []))}, {n_text}: "
             f"{torch_line}{rival_text}. The deployed model is refit on every "
             f"decisive fight through {torch_m.get('train_through', '?')} "
-            f"({torch_m.get('n_train', '?'):,} fights), so no historical year is "
+            f"({n_train_text} fights), so no historical year is "
             "held out from it. " + tail
         )
     if torch_line:
         n = torch_m["winner_ensemble"].get("n_val")
-        return (head + f"Held-out validation ({n:,} fights): {torch_line}. " + tail)
+        n_text = f"{n:,}" if isinstance(n, int) else "?"
+        return (head + f"Held-out validation ({n_text} fights): {torch_line}. " + tail)
     return head + "Metrics files not found. " + tail
 
 st.set_page_config(page_title="MMA Fight Predictor", page_icon="🥊", layout="wide")
