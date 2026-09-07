@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -161,6 +163,42 @@ def test_bar_check_uses_min_bar_when_sigma_small():
     out = bar_check(cand, inc, sigma_seed=0.0005)
     assert out["bar"] == pytest.approx(0.003)
     assert out["clears_delta"] is False  # delta -0.0025 does not beat -0.003
+    # exactly on the bar: 0.650 - 0.0030 is not representable exactly, and the
+    # strict comparison must not be decided by float noise
+    cand["pooled"]["winner_log_loss"] = 0.650 - 0.0030
+    out = bar_check(cand, inc, sigma_seed=0.0005)
+    assert out["delta"] == pytest.approx(-0.003)
+    assert out["clears_delta"] is False
+    assert out["ships"] is False
+
+
+def test_bar_check_not_comparable_when_fold_sets_differ():
+    cand = {"pooled": {"winner_log_loss": 0.630, "n": 100},
+            "folds": {"2018": {"winner_log_loss": 0.63}, "2019": {"winner_log_loss": 0.63}}}
+    inc = {"pooled": {"winner_log_loss": 0.650, "n": 100},
+           "folds": {"2018": {"winner_log_loss": 0.65}}}
+    out = bar_check(cand, inc, sigma_seed=0.002)
+    assert out["comparable"] is False
+    assert out["missing_folds"] == ["2019"]
+    assert out["clears_delta"] is True and out["no_fold_regression"] is True
+    assert out["ships"] is False  # would clear on the numbers, but the reports do not line up
+    # same fold years but different pooled n is also not comparable
+    inc["folds"]["2019"] = {"winner_log_loss": 0.65}
+    inc["pooled"]["n"] = 99
+    out = bar_check(cand, inc, sigma_seed=0.002)
+    assert out["comparable"] is False and out["missing_folds"] == [] and out["ships"] is False
+    inc["pooled"]["n"] = 100
+    out = bar_check(cand, inc, sigma_seed=0.002)
+    assert out["comparable"] is True and out["ships"] is True
+
+
+def test_bar_check_rejects_nan_sigma():
+    cand = {"pooled": {"winner_log_loss": 0.630, "n": 10}, "folds": {}}
+    inc = {"pooled": {"winner_log_loss": 0.650, "n": 10}, "folds": {}}
+    with pytest.raises(ValueError, match="sigma_seed"):
+        bar_check(cand, inc, sigma_seed=float("nan"))
+    with pytest.raises(ValueError, match="sigma_seed"):
+        bar_check(cand, inc, sigma_seed=None)
 
 
 def test_build_report_shape():
@@ -179,3 +217,25 @@ def test_build_report_shape():
     assert report["fit_info"]["best_iteration"] == [10, 20]
     assert "debut" in report["slices"] and "womens" in report["slices"]
     assert report["pooled"]["n"] == 8
+
+
+def test_build_report_casts_numpy_scalars_and_skips_empty_folds(capsys):
+    feats, pred = _rows()
+    a = np.array([True] * 4 + [False] * 4)
+    empty = np.zeros(8, dtype=bool)
+    sub = lambda m: {k: (v[m] if v is not None else None) for k, v in pred.items()}  # noqa: E731
+    report = build_report(
+        name="toy", config={"k": 1}, features=feats,
+        fold_results=[(2018, a, sub(a), {"best_iteration": np.int64(10), "temperature": [np.float32(1.5)]}),
+                      (2019, empty, sub(empty), {"best_iteration": np.int64(99), "temperature": [np.float32(2.0)]}),
+                      (2020, ~a, sub(~a), {"best_iteration": np.int64(20), "temperature": [np.float32(1.0)]})],
+        method_classes=METHOD, round_classes=ROUND,
+    )
+    json.dumps(report)  # numpy scalars would raise TypeError here
+    assert set(report["folds"]) == {"2018", "2020"}
+    assert report["fold_years"] == [2018, 2020]
+    assert report["fit_info"]["best_iteration"] == [10, 20]
+    assert all(type(v) is int for v in report["fit_info"]["best_iteration"])
+    assert report["fit_info"]["temperature"] == [[1.5], [1.0]]
+    assert report["pooled"]["n"] == 8
+    assert "2019" in capsys.readouterr().out

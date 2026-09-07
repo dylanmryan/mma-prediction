@@ -134,7 +134,11 @@ def slice_masks(features: pd.DataFrame) -> dict[str, np.ndarray]:
 
 
 def pool(features: pd.DataFrame, fold_preds: list[tuple[np.ndarray, dict]]):
-    """Concatenate (mask, pred) pairs into one row-aligned frame + prediction dict."""
+    """Concatenate (mask, pred) pairs into one row-aligned frame + prediction dict.
+
+    Masks must be pairwise disjoint (a row scored twice would be double-counted
+    in the pooled metrics). Output row order is the concatenation order of
+    `fold_preds`, not the original order of `features`."""
     frames, winner, method, rounds = [], [], [], []
     has_heads = all(p.get("method") is not None and p.get("round") is not None for _, p in fold_preds)
     for mask, pred in fold_preds:
@@ -155,13 +159,36 @@ def _subset(pred: dict, mask: np.ndarray) -> dict:
     return {k: (np.asarray(v)[mask] if v is not None else None) for k, v in pred.items()}
 
 
+def _to_python(value):
+    """Recursively cast numpy scalars/arrays to plain Python so json.dumps works."""
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return [_to_python(v) for v in value.tolist()]
+    if isinstance(value, (list, tuple)):
+        return [_to_python(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _to_python(v) for k, v in value.items()}
+    return value
+
+
 def build_report(name, config, features, fold_results, method_classes, round_classes) -> dict:
-    """Assemble the JSON report. fold_results: list of (year, eval_mask, pred, fit_info)."""
-    folds, fit_info = {}, {}
+    """Assemble the JSON report. fold_results: list of (year, eval_mask, pred, fit_info).
+
+    Folds whose eval mask selects no rows are skipped with a warning (they
+    would otherwise contribute NaN metrics); fit_info values are cast to
+    plain Python types so the report is JSON-serialisable."""
+    folds, fit_info, kept = {}, {}, []
     for year, mask, pred, info in fold_results:
+        mask = np.asarray(mask, dtype=bool)
+        if not mask.any():
+            print(f"build_report: fold {year} has no eval rows; skipping")
+            continue
+        kept.append((year, mask, pred, info))
         folds[str(year)] = score_rows(features.loc[mask], pred, method_classes, round_classes)
         for key, value in (info or {}).items():
-            fit_info.setdefault(key, []).append(value)
+            fit_info.setdefault(key, []).append(_to_python(value))
+    fold_results = kept
     pooled_feats, pooled_pred = pool(features, [(m, p) for _, m, p, _ in fold_results])
     slices = {}
     for slice_name, mask in slice_masks(pooled_feats).items():
@@ -178,9 +205,21 @@ def build_report(name, config, features, fold_results, method_classes, round_cla
 
 def bar_check(candidate: dict, incumbent: dict, sigma_seed: float) -> dict:
     """Pre-registered winner bar (spec §5): pooled Δ log-loss < −max(MIN_BAR, 2σ_seed)
-    and no fold year worse than the incumbent by more than MIN_FOLD_REGRESSION."""
-    bar = max(MIN_BAR, 2.0 * sigma_seed)
-    delta = candidate["pooled"]["winner_log_loss"] - incumbent["pooled"]["winner_log_loss"]
+    and no fold year worse than the incumbent by more than MIN_FOLD_REGRESSION.
+
+    Deltas are candidate − incumbent (negative = better). The pooled delta is
+    rounded to 6 dp before the strict comparison so that a candidate sitting
+    exactly on the bar does not clear it on float noise. The pair is
+    `comparable` only when both reports cover the same fold years and the
+    same pooled `n`; a non-comparable pair never ships."""
+    if sigma_seed is None or not np.isfinite(sigma_seed):
+        raise ValueError("sigma_seed must be a finite number; run scripts/noise_floor.py first")
+    bar = max(MIN_BAR, 2.0 * float(sigma_seed))
+    delta = round(candidate["pooled"]["winner_log_loss"] - incumbent["pooled"]["winner_log_loss"], 6)
+    cand_years, inc_years = set(candidate["folds"]), set(incumbent["folds"])
+    missing_folds = sorted(cand_years ^ inc_years)
+    comparable = (not missing_folds
+                  and candidate["pooled"].get("n") == incumbent["pooled"].get("n"))
     fold_deltas = {
         year: candidate["folds"][year]["winner_log_loss"] - incumbent["folds"][year]["winner_log_loss"]
         for year in candidate["folds"] if year in incumbent["folds"]
@@ -189,9 +228,10 @@ def bar_check(candidate: dict, incumbent: dict, sigma_seed: float) -> dict:
     clears = delta < -bar
     no_regression = worst <= MIN_FOLD_REGRESSION
     return {
-        "bar": bar, "sigma_seed": sigma_seed, "delta": round(delta, 4),
+        "bar": bar, "sigma_seed": float(sigma_seed), "delta": round(delta, 4),
         "fold_deltas": {k: round(v, 4) for k, v in fold_deltas.items()},
         "worst_fold_delta": round(worst, 4),
+        "comparable": bool(comparable), "missing_folds": missing_folds,
         "clears_delta": bool(clears), "no_fold_regression": bool(no_regression),
-        "ships": bool(clears and no_regression),
+        "ships": bool(comparable and clears and no_regression),
     }
