@@ -1334,6 +1334,8 @@ git checkout main && git merge --no-ff sp1-walkforward -m "Merge sp1-walkforward
 - Baselines (pooled winner LL / acc / joint LL): Elo 0.6827 / 0.5535 / — ; XGB v1 0.6537 / 0.6132 / joint 2.1921; torch v1 0.6510 / 0.6099 / joint 2.3129
 - σ_seed: 0.000346 (below the 0.001-0.002 the plan anticipated; n=3, 95% CI roughly [0.00018, 0.00218]) ; bar: 0.003
 - Refit experiment: XGB A 0.6537 vs B 0.6524 ; torch A 0.6510 vs B 0.6512 ; decision: refit_through_latest
+- Fresh-seed re-score of the shipped torch recipe (seeds 5-9, `models/walkforward/refit_decision.json`'s `fresh_seed_rescore`): A (torch_v1_seeds5) 0.6516 vs B (torch_refit_seeds5) 0.6518, Δ +0.0002 vs σ_seed 0.000346 → gate holds, verdict "confirmed". `scripts/refit_decision.py` now builds `bar_check_B_vs_A` via the shared `mma.walkforward.bar_check` (and the new `paired_delta` helper) instead of re-implementing the arithmetic, and reproduces `refit_decision.json` byte-identically on repeat runs.
+- `tests/test_processed_torch.py` / `tests/test_processed_xgb.py`'s `train_through <= harness_features_max_date` check is a `warnings.warn`, not an assert, by design: after the weekly refresh Action retrains on newer Kaggle data, `train_through` advances while the harness date stays at the last committed report, and that must not fail the suite (and thus the Action's commit/predict steps) every week until a manual harness re-run.
 - Deployed model after SP1: hash `55ca11491332` (torch: 14 epochs, T 1.1, n_train 11,238); XGB budgets {82, 80, 76}; recipe refit_through_latest
 - Deferred: `external_missing` slice (SP2); harness-driven promotion gate (SP4)
 - Follow-ups:

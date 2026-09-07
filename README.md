@@ -119,7 +119,11 @@ every available fight, the deployed models are therefore trained on all
 net: 14 epochs, temperature 1.1 on every seed; XGBoost: 82/80/76 trees for
 the winner/method/round heads). `models/torch/metrics_val.json` and
 `models/xgb_metrics_val.json` record the recipe and quote the harness
-numbers as their evidence.
+numbers as their evidence. A fresh-seed re-score of the shipped neural-net
+recipe (seeds 5–9 instead of 0–4) reproduced the same result — pooled
+0.6516 → 0.6518, Δ +0.0002, still inside σ_seed — confirming the recipe
+choice wasn't a seed-lucky fluke (`fresh_seed_rescore` in
+`models/walkforward/refit_decision.json`).
 
 ### Original validation window (2021–2023, for continuity)
 

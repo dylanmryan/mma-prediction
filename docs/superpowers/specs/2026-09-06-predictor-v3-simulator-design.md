@@ -165,7 +165,11 @@ candidate is run.
   earlier folds) and no early stopping. Both score on Y. (B) uses one more
   year of the freshest data; if it is not worse than (A) by more than
   σ_seed it becomes the deployment recipe: select on the harness, refit on
-  everything through the latest event, stamp a new artifact hash.
+  everything through the latest event, stamp a new artifact hash. A
+  fresh-seed re-score of the shipped recipe (`fresh_seed_rescore` in
+  `models/walkforward/refit_decision.json`) confirmed the gate and also
+  surfaced the temperature-drift follow-up recorded there, which is
+  scheduled into SP2's recency block above rather than re-decided here.
 - **Deliverables:** `src/mma/walkforward.py` (fold construction, scoring,
   slices, bar check), `src/mma/candidates.py` (one fit/predict protocol
   wrapping Elo, XGBoost, and the torch ensemble, with config, window, and
