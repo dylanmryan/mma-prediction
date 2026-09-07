@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 from mma.dataset import build_bonuses, build_round_stats
+from scripts.reconcile_sources import reconcile
 
 _TARGETS = ("head", "body", "leg", "distance", "clinch", "ground")
 
@@ -80,3 +81,23 @@ def test_bonuses():
     assert len(bonuses) == 2  # exact duplicate row dropped
     assert list(bonuses["fight_id"]) == ["f1", "f2"]
     assert bonuses["fight_id"].dtype == "string" and bonuses["bonus_type"].dtype == "string"
+
+
+def test_reconcile_counts_and_agreement():
+    old = pd.DataFrame({
+        "fight_id": ["f1", "f2"], "winner": ["a", "b"], "method": ["ko_tko", "decision"],
+        "finish_round": [1, None], "scheduled_rounds": [3, 3], "weight_class": ["Lightweight"] * 2,
+        "fighter_a_id": ["x", "y"], "fighter_b_id": ["p", "q"],
+        "date": pd.to_datetime(["2020-01-01", "2020-02-01"]),
+    })
+    new = pd.concat([old, pd.DataFrame({
+        "fight_id": ["f3"], "winner": ["a"], "method": ["submission"], "finish_round": [2],
+        "scheduled_rounds": [3], "weight_class": ["Lightweight"], "fighter_a_id": ["z"],
+        "fighter_b_id": ["r"], "date": pd.to_datetime(["2021-03-01"]),
+    })], ignore_index=True)
+    new.loc[1, "winner"] = "a"  # one disagreement
+    report = reconcile(old, new)
+    assert report["n_overlap"] == 2 and report["n_added_by_new"] == 1 and report["n_dropped_by_new"] == 0
+    assert report["agreement"]["winner"] == 0.5
+    assert report["agreement"]["finish_round"] == 1.0  # NaN == NaN counts as agreement
+    assert report["added_by_year"] == {2021: 1}

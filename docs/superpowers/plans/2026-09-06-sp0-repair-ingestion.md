@@ -1693,7 +1693,23 @@ Pushing to the public repo is a separate, user-confirmed step.
 
 - Baseline suite: _n passed / n skipped_
 - Model v1 artifact hash: _…_
-- Reconciliation report: _…_
+- Reconciliation report:
+
+  ```
+  old fights: 8337   new fights: 11441
+  overlap: 8337   dropped by new: 0   added by new: 3104
+  agreement on overlap:
+    winner             0.9999
+    method             1.0000
+    finish_round       1.0000
+    scheduled_rounds   1.0000
+    weight_class       1.0000
+    fighter_a_id       1.0000
+    fighter_b_id       1.0000
+    date               1.0000
+  added by year: {1993: 8, 1997: 8, 1998: 21, 1999: 29, 2000: 57, 2001: 65, 2002: 87, 2003: 77, 2004: 117, 2005: 126, 2006: 225, 2007: 179, 2008: 258, 2009: 264, 2010: 254, 2011: 196, 2012: 59, 2013: 13, 2017: 40, 2018: 55, 2019: 49, 2020: 48, 2021: 50, 2022: 76, 2023: 78, 2024: 80, 2025: 239, 2026: 346}
+  ```
+  The one `winner` disagreement is fight `08c04f18b0f58d71` (Abdul-Malik vs Brundage, 2025-06-14): the old source labeled it `nc`, the new `master.csv` has `result_status=draw`, `method=Overturned`, `winner_id=NaN` (mapped to `draw`; method NA in both). Source-label difference, not a builder bug.
 - Model v2 artifact hash: _…_ ; XGB val metrics: _…_ ; torch val metrics: _…_
 - Graded prospective fights: _n graded, accuracy, log-loss, Brier_
 - Deferred to SP2: the truncation-invariance test only gains round-derived columns once such features exist (none in SP0).
