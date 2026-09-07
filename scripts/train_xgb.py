@@ -33,9 +33,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import pandas as pd
+import xgboost as xgb
 
 from mma.evaluate import accuracy, brier_score, log_loss, macro_f1
 from mma.models.xgb import feature_frame, train_binary, train_multiclass
@@ -78,11 +80,15 @@ def parse_budget(spec) -> dict:
     return budget
 
 
-def refit_metrics(train_through: str, n_train: int, budget: dict, report_path: str, pooled: dict) -> dict:
+def refit_metrics(train_through: str, n_train: int, budget: dict, report_path: str, pooled: dict,
+                  harness_features_max_date: str, harness_fold_years: list) -> dict:
     """xgb_metrics_val.json for the refit mode: the README's winner/method/
     finish_round blocks are filled from the harness report's pooled
     walk-forward metrics (no held-out slice exists), null where the
-    walk-forward has no equivalent."""
+    walk-forward has no equivalent. `harness_features_max_date` (the
+    report's config.features_max_date) and `harness_fold_years` record
+    which data the evidence was computed on, so a metrics file whose
+    train_through has moved past the harness is detectably stale."""
     source = f"walk-forward pooled ({report_path})"
     no_equivalent = "; accuracy and majority_baseline_accuracy have no walk-forward equivalent (null)"
     return {
@@ -91,6 +97,8 @@ def refit_metrics(train_through: str, n_train: int, budget: dict, report_path: s
         "n_train": int(n_train),
         "budget": dict(budget),
         "harness_report": report_path,
+        "harness_features_max_date": harness_features_max_date,
+        "harness_fold_years": [int(year) for year in harness_fold_years],
         "walkforward_pooled": pooled,
         "winner": {
             "n_val": pooled["n"],
@@ -117,6 +125,16 @@ def refit_metrics(train_through: str, n_train: int, budget: dict, report_path: s
     }
 
 
+def stale_harness_warning(train_through: str, harness_features_max_date: str) -> str | None:
+    """Warning text when the refit trains on fights newer than the harness
+    report ever saw, else None."""
+    if pd.Timestamp(train_through) <= pd.Timestamp(harness_features_max_date):
+        return None
+    return (f"WARNING: harness evidence predates this training data (harness "
+            f"features_max_date {harness_features_max_date} < train_through {train_through}); "
+            "re-run scripts/run_walkforward.py to refresh")
+
+
 def resolve_mode(args) -> str:
     split_given = any(v is not None for v in (args.train_end, args.val_start, args.val_end))
     if args.refit_through is not None and split_given:
@@ -138,7 +156,7 @@ def display_path(path: Path) -> str:
     return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
 
 
-def run_split(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -> dict:
+def run_split(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -> tuple[dict, xgb.XGBClassifier]:
     train = features["date"] < args.train_end
     val = (features["date"] >= args.val_start) & (features["date"] <= args.val_end)
     metrics = {}
@@ -194,12 +212,17 @@ def run_split(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -
     return metrics, winner
 
 
-def run_refit(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -> dict:
+def run_refit(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -> tuple[dict, xgb.XGBClassifier]:
     cutoff = refit_cutoff(features, args.refit_through)
     budget = parse_budget(args.budget)
-    pooled = json.loads(Path(args.report).read_text())["pooled"]
+    report = json.loads(Path(args.report).read_text())
+    pooled = report["pooled"]
+    harness_max_date = report["config"]["features_max_date"]
     train = features["date"] <= cutoff
     print(f"refit through {cutoff.date()}: n_train={int(train.sum())} budget={budget}")
+    warning = stale_harness_warning(str(cutoff.date()), harness_max_date)
+    if warning:
+        print(warning, file=sys.stderr)
 
     y = features["y_winner"]
     winner = train_binary(x[train], y[train], None, None, fixed_rounds=budget["winner"])
@@ -218,7 +241,8 @@ def run_refit(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -
     rounds.save_model(models_dir / "xgb_round.json")
 
     metrics = refit_metrics(str(cutoff.date()), int(train.sum()), budget,
-                            display_path(args.report), pooled)
+                            display_path(args.report), pooled,
+                            harness_max_date, report["fold_years"])
     return metrics, winner
 
 

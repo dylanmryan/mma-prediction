@@ -3,7 +3,9 @@ from pathlib import Path
 
 import pytest
 
-OUT = Path(__file__).resolve().parents[1] / "models" / "torch"
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "models" / "torch"
+REFIT_DECISION = ROOT / "models" / "walkforward" / "refit_decision.json"
 
 pytestmark = pytest.mark.skipif(
     not (OUT / "metrics_val.json").exists(),
@@ -35,3 +37,23 @@ def test_metrics_sane_and_honest():
         assert all(seed["best_val_log_loss"] is None for seed in metrics["per_seed"])
     else:
         assert 0 < winner["mean_seed_spread"] < 0.5
+
+
+def test_refit_metrics_provenance_matches_harness_and_decision():
+    """The evidence a refit metrics file quotes must be the committed harness
+    report, and its budget/temperature must be the committed refit decision's
+    -- otherwise the deployed model and its stated evidence have drifted."""
+    metrics = json.loads((OUT / "metrics_val.json").read_text())
+    if metrics.get("mode") != "refit_through":
+        pytest.skip("split-mode metrics carry their own held-out numbers")
+    report = json.loads((ROOT / metrics["harness_report"]).read_text())
+    assert metrics["walkforward_pooled"] == report["pooled"]
+    assert metrics["harness_features_max_date"] == report["config"]["features_max_date"]
+    assert metrics["harness_fold_years"] == report["fold_years"]
+    # the harness saw at least the data the deployed model trained on
+    assert metrics["train_through"] <= metrics["harness_features_max_date"]
+
+    decision = json.loads(REFIT_DECISION.read_text())["torch"]["budget"]
+    assert metrics["budget"] == decision["fixed_epochs"]
+    assert metrics["temperature"] == decision["temperature"]
+    assert all(seed["temperature"] == decision["temperature"] for seed in metrics["per_seed"])

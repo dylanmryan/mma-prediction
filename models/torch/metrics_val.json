@@ -5,6 +5,17 @@
   "budget": 14,
   "temperature": 1.1,
   "harness_report": "models/walkforward/torch_refit.json",
+  "harness_features_max_date": "2026-08-08",
+  "harness_fold_years": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
   "walkforward_pooled": {
     "n": 4804,
     "winner_log_loss": 0.6512,

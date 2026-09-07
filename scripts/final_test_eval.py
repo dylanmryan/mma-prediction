@@ -1,11 +1,21 @@
-"""ONE-TIME held-out test evaluation on 2024+ fights.
+"""ONE-TIME held-out test evaluation on 2024+ fights -- FROZEN.
 
-The test years (2024+) were never read by any training, tuning, or
-calibration code anywhere in this project. This script evaluates the
-locked, committed artifacts on them exactly once and reports whatever
-comes out. Nothing is refit here: the XGBoost models, the 5-seed torch
-checkpoints, their per-seed temperatures (fit on 2021-2023 validation),
-and the preprocessor are all loaded as committed.
+This ran exactly once, on 2026-07-13, against the pre-refit July 2026
+models (trained on pre-2021 fights, temperatures fit on 2021-2023
+validation) and wrote models/final_test_metrics.json. At that time the
+test years (2024+) had never been read by any training, tuning, or
+calibration code, which is what made the number a genuine holdout.
+
+That is no longer true: the deployed models now follow the refit_through
+recipe (models/walkforward/refit_decision.json) and train on every
+decisive fight through the latest event, so 2024+ is training data, and
+the walk-forward harness (scripts/run_walkforward.py) scores those years
+as expanding-window folds instead. Re-running this script would report
+in-sample numbers under a "held-out" label, so main() refuses to run
+whenever models/torch/metrics_val.json says the incumbent is a refit
+model. The committed artifact is kept as the historical record; the
+prospective track record (predictions/track_record.json) is the only
+true holdout now.
 
 Do NOT change any model, feature, threshold, or calibration in response
 to these numbers.
@@ -78,7 +88,25 @@ def multiclass_block(truth: list, pred: list, majority: str) -> dict:
     }
 
 
+def refuse_if_refit_incumbent(torch_metrics_path: Path) -> None:
+    """SystemExit when the deployed torch ensemble was trained with the
+    refit_through recipe: the 2024+ years are then training data and the
+    held-out evaluation cannot be repeated."""
+    if not torch_metrics_path.exists():
+        return
+    metrics = json.loads(torch_metrics_path.read_text())
+    if metrics.get("mode") == "refit_through":
+        raise SystemExit(
+            "final_test_metrics.json is frozen from the pre-refit (July 2026) "
+            "model; the 2024+ years are now training data (the deployed "
+            f"ensemble is refit through {metrics.get('train_through')}) -- do "
+            "not re-run. The walk-forward harness (scripts/run_walkforward.py, "
+            "models/walkforward/) is the evaluation of record for those years."
+        )
+
+
 def main() -> None:
+    refuse_if_refit_incumbent(MODELS / "torch" / "metrics_val.json")
     features = pd.read_parquet(PROCESSED / "features.parquet")
     test = (features["date"] >= TEST_START).to_numpy()
     train = (features["date"] < TRAIN_END).to_numpy()

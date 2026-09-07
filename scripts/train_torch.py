@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -80,10 +81,15 @@ def parse_budget(spec) -> int:
 
 
 def refit_metrics(train_through: str, n_train: int, budget: int, temperature: float,
-                  report_path: str, pooled: dict, per_seed: list[dict]) -> dict:
+                  report_path: str, pooled: dict, per_seed: list[dict],
+                  harness_features_max_date: str, harness_fold_years: list) -> dict:
     """metrics_val.json for the refit mode: the ensemble blocks are filled
     from the harness report's pooled walk-forward metrics (no held-out slice
-    exists), null where the walk-forward has no equivalent."""
+    exists), null where the walk-forward has no equivalent.
+    `harness_features_max_date` (the report's config.features_max_date) and
+    `harness_fold_years` record which data the evidence was computed on, so
+    a metrics file whose train_through has moved past the harness is
+    detectably stale."""
     source = f"walk-forward pooled ({report_path})"
     return {
         "mode": MODE_REFIT,
@@ -92,6 +98,8 @@ def refit_metrics(train_through: str, n_train: int, budget: int, temperature: fl
         "budget": int(budget),
         "temperature": float(temperature),
         "harness_report": report_path,
+        "harness_features_max_date": harness_features_max_date,
+        "harness_fold_years": [int(year) for year in harness_fold_years],
         "walkforward_pooled": pooled,
         "winner_ensemble": {
             "n_val": pooled["n"],
@@ -118,6 +126,16 @@ def refit_metrics(train_through: str, n_train: int, budget: int, temperature: fl
             "source": source + "; accuracy has no walk-forward equivalent (null)",
         },
     }
+
+
+def stale_harness_warning(train_through: str, harness_features_max_date: str) -> str | None:
+    """Warning text when the refit trains on fights newer than the harness
+    report ever saw, else None."""
+    if pd.Timestamp(train_through) <= pd.Timestamp(harness_features_max_date):
+        return None
+    return (f"WARNING: harness evidence predates this training data (harness "
+            f"features_max_date {harness_features_max_date} < train_through {train_through}); "
+            "re-run scripts/run_walkforward.py to refresh")
 
 
 def resolve_mode(args) -> str:
@@ -230,10 +248,15 @@ def run_refit(features: pd.DataFrame, args, out_dir: Path) -> dict:
     cutoff = refit_cutoff(features, args.refit_through)
     budget = parse_budget(args.budget)
     temperature = float(args.temperature)
-    pooled = json.loads(Path(args.report).read_text())["pooled"]
+    report = json.loads(Path(args.report).read_text())
+    pooled = report["pooled"]
+    harness_max_date = report["config"]["features_max_date"]
     train = (features["date"] <= cutoff).to_numpy()
     print(f"refit through {cutoff.date()}: n_train={int(train.sum())} "
           f"epochs={budget} temperature={temperature}")
+    warning = stale_harness_warning(str(cutoff.date()), harness_max_date)
+    if warning:
+        print(warning, file=sys.stderr)
 
     prep = Preprocessor.fit(features, train_mask=train)
     x, wc = prep.transform(features)
@@ -252,7 +275,8 @@ def run_refit(features: pd.DataFrame, args, out_dir: Path) -> dict:
                         out_dir / f"net_seed{seed}.pt")
 
     return refit_metrics(str(cutoff.date()), int(train.sum()), budget, temperature,
-                         display_path(args.report), pooled, per_seed)
+                         display_path(args.report), pooled, per_seed,
+                         harness_max_date, report["fold_years"])
 
 
 def main() -> None:

@@ -16,6 +16,8 @@ POOLED = {
     "ece": 0.0121, "joint_log_loss": 2.314, "method_macro_f1": 0.4036,
     "round_macro_f1": 0.3146, "n_method": 4792, "n_round": 2446,
 }
+HARNESS_MAX_DATE = "2026-08-08"
+FOLD_YEARS = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
 
 
 def _args(**overrides):
@@ -50,11 +52,14 @@ def test_xgb_parse_budget_rejects_bad_shapes():
 
 def test_xgb_refit_metrics_shape():
     budget = {"winner": 81, "method": 79, "round": 75}
-    out = train_xgb.refit_metrics("2026-08-08", 11238, budget, "models/walkforward/xgb_refit.json", POOLED)
+    out = train_xgb.refit_metrics("2026-08-08", 11238, budget, "models/walkforward/xgb_refit.json", POOLED,
+                                  HARNESS_MAX_DATE, FOLD_YEARS)
     assert out["mode"] == "refit_through"
     assert out["train_through"] == "2026-08-08" and out["n_train"] == 11238
     assert out["budget"] == budget and out["walkforward_pooled"] == POOLED
     assert out["harness_report"] == "models/walkforward/xgb_refit.json"
+    assert out["harness_features_max_date"] == HARNESS_MAX_DATE
+    assert out["harness_fold_years"] == FOLD_YEARS
     # README-facing blocks keep their key names
     assert out["winner"] == {
         "n_val": 4804, "accuracy": 0.6184, "log_loss": 0.6512, "brier": 0.23,
@@ -87,11 +92,14 @@ def test_torch_refit_metrics_shape():
         for s in range(5)
     ]
     out = train_torch.refit_metrics("2026-08-08", 11238, 14, 1.1,
-                                    "models/walkforward/torch_refit.json", POOLED, per_seed)
+                                    "models/walkforward/torch_refit.json", POOLED, per_seed,
+                                    HARNESS_MAX_DATE, FOLD_YEARS)
     assert out["mode"] == "refit_through"
     assert out["train_through"] == "2026-08-08" and out["n_train"] == 11238
     assert out["budget"] == 14 and out["temperature"] == 1.1
     assert out["walkforward_pooled"] == POOLED
+    assert out["harness_features_max_date"] == HARNESS_MAX_DATE
+    assert out["harness_fold_years"] == FOLD_YEARS
     winner = out["winner_ensemble"]
     assert winner["n_val"] == 4804 and winner["accuracy"] == 0.6184
     assert winner["log_loss"] == 0.6512 and winner["brier"] == 0.23
@@ -119,6 +127,18 @@ def test_resolve_mode(module):
                                      val_end="2026-08-08")) == module.MODE_SPLIT
     with pytest.raises(SystemExit, match="cannot be combined"):
         module.resolve_mode(_args(refit_through="latest", train_end="2021-01-01"))
+
+
+@pytest.mark.parametrize("module", [train_xgb, train_torch])
+def test_stale_harness_warning(module):
+    # training data no newer than the harness saw -> no warning
+    assert module.stale_harness_warning("2026-08-08", "2026-08-08") is None
+    assert module.stale_harness_warning("2026-08-01", "2026-08-08") is None
+    # a weekly refresh moved train_through past the harness's data
+    warning = module.stale_harness_warning("2026-08-15", "2026-08-08")
+    assert warning is not None
+    assert "harness evidence predates this training data" in warning
+    assert "scripts/run_walkforward.py" in warning
 
 
 @pytest.mark.parametrize("module", [train_xgb, train_torch])

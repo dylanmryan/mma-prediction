@@ -5,30 +5,50 @@ accumulated since the current model's data cutoff and, if >= PROMOTION_
 THRESHOLD, prints the pre-registered promotion protocol. Never touches any
 file. This is what the weekly refresh-data.yml Action runs and only prints.
 
-`--execute`: actually runs the protocol once the threshold is met. It gates
-on the TORCH ENSEMBLE -- the exact model the app serves -- not a proxy:
+`--execute`: runs the split-protocol comparison once the threshold is met.
+It gates on the TORCH ENSEMBLE -- the exact model the app serves -- not a
+proxy:
 
   1. Windows: NEW_CUTOFF = latest data date - VAL_WINDOW_YEARS; the held-
      forward validation slice is [NEW_CUTOFF, latest]. Both incumbent and
-     candidate are scored on this same slice. It is out-of-time for the
-     incumbent (its training cutoff is earlier), so there is no leakage.
+     candidate are scored on this same slice.
   2. Incumbent: load the committed models/torch ensemble (per-seed
      temperatures included), predict on the new val slice, winner log-loss.
   3. Candidate: retrain the full 5-seed ensemble via scripts/train_torch.py
-     into a TEMP dir (train < NEW_CUTOFF, val = the slice), load it, predict
-     on the SAME slice, winner log-loss. The candidate fits its own per-seed
-     temperatures on its own val slice -- each model is scored as its
-     complete, self-contained artifact.
+     into a TEMP dir (split protocol: train < NEW_CUTOFF, early-stop and
+     fit temperatures on the slice), load it, predict on the SAME slice,
+     winner log-loss.
   4. Promote iff candidate_log_loss < incumbent_log_loss - PROMOTION_MARGIN.
 
-If promoted, the candidate ensemble artifacts are STAGED into models/torch
-(the incumbent is backed up on disk first) but NOTHING is committed: this
-command performs NO git writes. A human then runs the full test suite,
-reviews the metrics diff, and commits by hand -- that commit's git sha
-becomes the new model_version, which starts a fresh track_record.json
-section automatically (prospective predictions already key every fight by
-the model_version active when it was made). If rejected, models/torch is
-left untouched and the negative result is printed.
+CAVEAT -- the comparison is only valid when the slice is OUT-OF-TIME for the
+incumbent. Under the default deployment recipe (refit_through_latest, see
+models/walkforward/refit_decision.json and the train scripts) the incumbent
+is trained on EVERY fight through the latest data date, so its training
+cutoff equals the latest date and the two-year "held-forward" slice is
+IN-SAMPLE for it: the incumbent would be scored on fights it trained on,
+which biases the gate against any candidate. `--execute` therefore reads
+models/torch/metrics_val.json and ABORTS when the incumbent's `mode` is
+"refit_through" and its `train_through` reaches into the slice. Until SP4
+moves this gate onto the walk-forward harness (scripts/run_walkforward.py,
+reports under models/walkforward/), the harness -- not this two-year slice
+-- is the primary comparison between model recipes.
+
+A candidate produced here must never ship as-is: it is a split-protocol
+model (early-stopped, per-seed temperatures fit on the slice, two years
+less training data than the refit recipe). Its job is only to answer "does
+a fresh fit beat the incumbent on held-forward data?". If promoted, the
+candidate ensemble artifacts are STAGED into models/torch (the incumbent is
+backed up on disk first) but NOTHING is committed: this command performs NO
+git writes. After any promotion decision the human re-runs the refit recipe
+-- bare `scripts/train_xgb.py`, `scripts/train_torch.py`, then
+`scripts/build_display_priors.py` -- so the deployed model includes the
+newest fights, runs the full test suite, reviews the metrics diff, and
+commits by hand. The `model_version` that starts a fresh track_record.json
+section is the artifact hash from `mma.versioning.model_version` (over the
+torch weights and preprocessing stats), NOT a commit sha; prospective
+predictions already key every fight by the model_version active when it was
+made. If rejected, models/torch is left untouched and the negative result
+is printed.
 
 This is a manual, stage-only mechanism: it is deliberately NOT wired into
 CI auto-promotion. The weekly Action only ever runs it in `--dry-run`.
@@ -95,20 +115,48 @@ def promotion_protocol_text(n_accumulated: int, cutoff: pd.Timestamp) -> str:
         "slice (not its original historic validation number).\n"
         f"  4. Promote only if new_log_loss < incumbent_log_loss - {PROMOTION_MARGIN} "
         "on that slice.\n"
-        "  5. If promoted, the new model_version (next commit's git sha) starts a "
-        "fresh track_record.json section automatically -- prospective predictions "
+        "  5. If promoted, the new model_version (the artifact hash from "
+        "mma.versioning.model_version, not a commit sha) starts a fresh "
+        "track_record.json section automatically -- prospective predictions "
         "already key every fight by the model_version active when it was made.\n\n"
         "Run `python scripts/roll_window.py --execute` to run this end to end. "
         "The promotion gate retrains and scores the full 5-seed TORCH ENSEMBLE "
         "(the model the app serves) directly. On promotion the candidate ensemble "
         "is STAGED into models/torch -- this command makes NO git commit; a human "
-        "runs the suite, reviews the diff, and commits by hand."
+        "runs the suite, reviews the diff, and commits by hand.\n\n"
+        "CAVEAT: under the default refit_through_latest recipe the incumbent is "
+        "trained through the latest data date, so the newest-2-years slice is "
+        "IN-SAMPLE for it and --execute aborts (steps 2-4 are not a valid gate). "
+        "The walk-forward harness (models/walkforward/, scripts/run_walkforward.py) "
+        "is the primary comparison until SP4 moves this gate onto it. A "
+        "split-protocol candidate never ships as-is: after any promotion decision, "
+        "re-run bare scripts/train_xgb.py, scripts/train_torch.py and "
+        "scripts/build_display_priors.py (the refit recipe) before committing."
     )
 
 
 def decide_promotion(new_log_loss: float, incumbent_log_loss: float,
                       margin: float = PROMOTION_MARGIN) -> bool:
     return new_log_loss < incumbent_log_loss - margin
+
+
+def incumbent_in_sample(metrics: dict, new_val_start) -> bool:
+    """True when the incumbent's training data reaches into the held-forward
+    slice starting at `new_val_start`, i.e. the split-protocol comparison
+    would score the incumbent on fights it trained on.
+
+    `metrics` is models/torch/metrics_val.json. Only the refit_through mode
+    records `train_through`; a split-mode file (no `mode` key) trained on
+    `date < train_end` with the slice after it, so it is never in-sample
+    here."""
+    if metrics.get("mode") != "refit_through":
+        return False
+    return pd.Timestamp(metrics["train_through"]) >= pd.Timestamp(new_val_start)
+
+
+def _load_incumbent_metrics(torch_dir: Path) -> dict:
+    path = torch_dir / "metrics_val.json"
+    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def _load_event_records(predictions_dir: Path) -> list[dict]:
@@ -204,6 +252,19 @@ def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
               "against. Aborting.")
         return
 
+    incumbent_metrics = _load_incumbent_metrics(torch_dir)
+    if incumbent_in_sample(incumbent_metrics, new_val_start):
+        raise SystemExit(
+            f"--execute aborted: the incumbent in {torch_dir} was trained with the "
+            f"refit_through recipe through {incumbent_metrics['train_through']}, "
+            f"which is inside the held-forward slice [{new_val_start}, "
+            f"{new_val_end}]. Scoring it there would be in-sample, so the "
+            "split-protocol comparison is not a valid promotion gate. Compare "
+            "recipes with the walk-forward harness instead (scripts/"
+            "run_walkforward.py, reports under models/walkforward/); moving this "
+            "gate onto the harness is SP4 work."
+        )
+
     incumbent_ll = _ensemble_val_log_loss(
         torch_dir, features, new_val_start, new_val_end
     )
@@ -256,9 +317,13 @@ def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
                 "committed -- this command makes no git writes. Next steps "
                 "(manual, by design -- a human reviews before this ships):\n"
                 f"{priors_line}\n"
-                "  2. Run the full test suite.\n"
-                "  3. Review the metrics diff (models/torch/metrics_val.json), then "
-                "commit -- the new commit's git sha becomes the model_version for "
+                "  2. Do NOT ship this split-protocol candidate as-is: re-run the "
+                "refit recipe (bare scripts/train_xgb.py, scripts/train_torch.py, "
+                "scripts/build_display_priors.py) so the deployed model includes "
+                "the newest fights.\n"
+                "  3. Run the full test suite, review the metrics diff "
+                "(models/torch/metrics_val.json), then commit -- the artifact hash "
+                "(mma.versioning.model_version) becomes the model_version for "
                 "future predictions and starts a fresh track_record.json section.\n"
                 f"  (To abandon: restore from {backup_dir}. Both {backup_dir} and "
                 f"{candidate_dir} are gitignored.)"
