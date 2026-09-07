@@ -1,6 +1,14 @@
-"""Build processed parquet tables from raw CSVs. Reproducible end to end."""
+"""Build processed parquet tables from raw CSVs. Reproducible end to end.
+
+Inputs (data/raw/): master.csv (one row per fight incl. fight-total stats),
+fighter.csv (one row per fighter), round.csv (per-round stats),
+fighter_bonus.csv (post-fight bonus awards).
+Outputs (data/processed/): fighters.parquet, fights.parquet,
+fight_stats.parquet, round_stats.parquet, bonuses.parquet.
+"""
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -8,6 +16,9 @@ import pandas as pd
 from mma.dataset import (
     build_bonuses, build_fight_stats, build_fighters, build_fights, build_round_stats,
 )
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from reconcile_sources import reconcile  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "raw"
@@ -46,11 +57,71 @@ def main() -> None:
     check(weight_rate > 0.95, f"weight class for only {weight_rate:.1%} of fights")
     round_fights = set(rounds["fight_id"])
     check(round_fights <= set(fights["fight_id"]), "round_stats has unknown fight ids")
-    per_fight = rounds.groupby("fight_id").size()
-    check((per_fight % 2 == 0).all(), "round_stats must have both corners per round")
     round_cover = len(round_fights) / len(fights)
     check(round_cover > 0.90, f"round stats cover only {round_cover:.1%} of fights")
     check(set(bonuses["fight_id"]) <= set(fights["fight_id"]), "bonuses has unknown fight ids")
+
+    corner_check = rounds[["fight_id", "corner", "fighter_id"]].merge(
+        fights[["fight_id", "fighter_a_id", "fighter_b_id"]], on="fight_id"
+    )
+    corner_a = corner_check[corner_check["corner"] == "a"]
+    corner_b = corner_check[corner_check["corner"] == "b"]
+    check(
+        (corner_a["fighter_id"] == corner_a["fighter_a_id"]).all(),
+        "round_stats corner 'a' fighter id disagrees with fights.fighter_a_id",
+    )
+    check(
+        (corner_b["fighter_id"] == corner_b["fighter_b_id"]).all(),
+        "round_stats corner 'b' fighter id disagrees with fights.fighter_b_id",
+    )
+
+    round_span = rounds.groupby("fight_id")["round_no"].agg(["min", "max", "nunique"])
+    check((round_span["min"] == 1).all(), "some fight's rounds do not start at round 1")
+    check(
+        (round_span["nunique"] == round_span["max"]).all(),
+        "some fight's rounds are not contiguous from 1",
+    )
+
+    modern_cutoff = pd.Timestamp("2014-01-01")
+    modern_fights = set(fights.loc[fights["date"] >= modern_cutoff, "fight_id"])
+    check(
+        modern_fights <= round_fights,
+        "some fight dated on/after 2014-01-01 has no round rows",
+    )
+
+    today = pd.Timestamp.today().normalize()
+    check((fights["date"] <= today).all(), "fight dated in the future")
+    check(
+        (fights["fighter_a_id"] != fights["fighter_b_id"]).all(),
+        "a fight has the same fighter in both corners",
+    )
+    check(
+        set(raw_master["result_status"].dropna()) <= {"win", "draw", "no_contest"},
+        "raw master.csv result_status has an unrecognized value",
+    )
+
+    # Regression guard: a partial/corrupted upstream re-scrape must not get
+    # auto-committed by the weekly refresh Action. Compare against whatever
+    # fights.parquet is already committed (if any) before overwriting it. A
+    # legitimate relabelling that pushes agreement below the threshold needs
+    # a human to delete the old parquet (or otherwise review) rather than
+    # loosening this bar.
+    old_fights_path = PROCESSED / "fights.parquet"
+    if old_fights_path.exists():
+        previous = pd.read_parquet(old_fights_path)
+        report = reconcile(previous, fights)
+        print("\nreconcile vs committed fights.parquet:")
+        print(f"  n_dropped_by_new: {report['n_dropped_by_new']}")
+        print(f"  winner agreement: {report['agreement']['winner']:.4f}")
+        check(
+            report["n_dropped_by_new"] == 0,
+            f"new fights table drops {report['n_dropped_by_new']} fights present in the "
+            "committed table",
+        )
+        check(
+            report["agreement"]["winner"] >= 0.999,
+            f"winner agreement with committed table only {report['agreement']['winner']:.4f}",
+        )
 
     PROCESSED.mkdir(parents=True, exist_ok=True)
     fighters.to_parquet(PROCESSED / "fighters.parquet", index=False)
