@@ -229,8 +229,11 @@ def _rebuild_display_priors() -> None:
     (Ensemble.load() -> models/torch) and writes models/torch/
     display_priors.json, so running it AFTER the candidate is staged into
     models/torch makes the priors match the new ensemble. The display priors
-    are train-split base-rate correction factors -- a new train window
-    changes them, so a promotion leaves them stale unless rebuilt.
+    are base-rate correction factors computed on the deployed ensemble's own
+    training rows (mma.inference.deployed_training_mask, read from the
+    staged metrics_val.json) against that ensemble's predictions there -- a
+    new ensemble and a new training window both change them, so a promotion
+    leaves them stale unless rebuilt.
     """
     subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "build_display_priors.py")],
@@ -292,8 +295,9 @@ def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
                     shutil.copy2(src, torch_dir / src.name)
 
             # Keep the staged artifact set internally consistent: the display
-            # priors are train-split base rates, now stale for the new
-            # ensemble. Regenerate them from the just-staged ensemble. A
+            # priors are base-rate corrections for the OLD ensemble on its own
+            # training rows, now stale. Regenerate them from the just-staged
+            # ensemble. A
             # rebuild failure must NOT unstage the model -- warn and continue.
             try:
                 _rebuild_display_priors()
