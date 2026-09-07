@@ -53,7 +53,7 @@ MODE_SPLIT, MODE_REFIT = "split", "refit_through"
 DEFAULT_MODE = MODE_REFIT
 # Refit-mode defaults: models/walkforward/refit_decision.json -> xgb.budget.
 REFIT_THROUGH = "latest"
-BUDGET = {"winner": 81, "method": 79, "round": 75}
+BUDGET = {"winner": 82, "method": 80, "round": 76}
 REPORT = ROOT / "models" / "walkforward" / "xgb_refit.json"
 
 

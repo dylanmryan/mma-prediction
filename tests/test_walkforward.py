@@ -261,7 +261,8 @@ def test_fixed_budget_from_per_head_xgb_medians():
         {"winner": 81, "method": 79, "round": 75},
         {"winner": 100, "method": 85, "round": 60},
     ]}}
-    assert fixed_budget_from(report) == {"fixed_rounds": {"winner": 81, "method": 79, "round": 75}}
+    # medians 81, 79, 75 -- best_iteration is 0-based, so +1 tree count
+    assert fixed_budget_from(report) == {"fixed_rounds": {"winner": 82, "method": 80, "round": 76}}
 
 
 def test_fixed_budget_from_torch_per_fold_seed_lists():
@@ -279,7 +280,8 @@ def test_fixed_budget_from_torch_per_fold_seed_lists():
 
 def test_fixed_budget_from_legacy_flat_best_iteration():
     report = {"fit_info": {"best_iteration": [50, 70, 90]}}
-    assert fixed_budget_from(report) == {"fixed_rounds": 70}
+    # median 70 -- best_iteration is 0-based, so +1 tree count
+    assert fixed_budget_from(report) == {"fixed_rounds": 71}
 
 
 def test_build_candidate_rejects_mismatched_budget():
