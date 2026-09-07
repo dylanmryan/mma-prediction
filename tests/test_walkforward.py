@@ -239,3 +239,14 @@ def test_build_report_casts_numpy_scalars_and_skips_empty_folds(capsys):
     assert report["fit_info"]["temperature"] == [[1.5], [1.0]]
     assert report["pooled"]["n"] == 8
     assert "2019" in capsys.readouterr().out
+
+
+from scripts.noise_floor import sigma_from_reports
+
+
+def test_sigma_from_reports_is_sample_std():
+    reports = [{"pooled": {"winner_log_loss": v}} for v in (0.650, 0.652, 0.648)]
+    out = sigma_from_reports(reports)
+    assert out["sigma_seed"] == pytest.approx(np.std([0.650, 0.652, 0.648], ddof=1))
+    assert out["bar"] == pytest.approx(max(0.003, 2 * out["sigma_seed"]))
+    assert out["n_reports"] == 3
