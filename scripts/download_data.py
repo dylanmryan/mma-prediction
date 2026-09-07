@@ -21,8 +21,14 @@ REQUIRED_FILES = ("master.csv", "fighter.csv", "round.csv", "fighter_bonus.csv")
 
 
 def verify_raw_files(raw_dir: Path) -> None:
-    """Fail loudly if the snapshot lacks any file the pipeline reads."""
-    missing = [name for name in REQUIRED_FILES if not (Path(raw_dir) / name).exists()]
+    """Fail loudly if the snapshot lacks any file the pipeline reads.
+
+    `raw_dir` may nest its CSVs in subfolders (as a freshly downloaded
+    kagglehub snapshot does), so a required file counts as present if it
+    exists anywhere under `raw_dir`, not only at its top level.
+    """
+    raw_dir = Path(raw_dir)
+    missing = [name for name in REQUIRED_FILES if not any(raw_dir.rglob(name))]
     if missing:
         raise FileNotFoundError(
             f"Kaggle snapshot layout changed: missing {missing} under {raw_dir}"
@@ -30,14 +36,23 @@ def verify_raw_files(raw_dir: Path) -> None:
 
 
 def download(raw_dir: Path) -> None:
-    """Download the Kaggle dataset snapshot and copy its CSVs into raw_dir."""
+    """Download the Kaggle dataset snapshot and copy its CSVs into raw_dir.
+
+    Verifies the freshly downloaded snapshot itself (before touching
+    raw_dir) so a layout change is caught even when raw_dir already holds
+    a complete set of CSVs from a previous download. Any pre-existing CSVs
+    in raw_dir are removed first so stale files from an older layout
+    cannot linger alongside the new snapshot.
+    """
     cache_path = Path(kagglehub.dataset_download(DATASET))
+    verify_raw_files(cache_path)
     raw_dir.mkdir(parents=True, exist_ok=True)
+    for stale in raw_dir.glob("*.csv"):
+        stale.unlink()
     for src in cache_path.rglob("*.csv"):
         dest = raw_dir / src.name
         shutil.copy2(src, dest)
         print(f"copied {src.name}")
-    verify_raw_files(raw_dir)
 
 
 def main() -> None:
