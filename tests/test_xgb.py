@@ -73,3 +73,12 @@ def test_train_multiclass_fixed_rounds_and_weights():
                              fixed_rounds=10, sample_weight=np.ones(len(x)))
     assert model.get_booster().num_boosted_rounds() == 10
     assert model.predict_proba(x).shape == (len(x), 3)
+
+
+def test_reserved_params_rejected():
+    import pytest
+    from mma.models.xgb import _classifier
+    with pytest.raises(ValueError, match="n_estimators"):
+        _classifier("binary:logistic", {"n_estimators": 5}, None)
+    with pytest.raises(ValueError, match="objective"):
+        _classifier("binary:logistic", {"objective": "reg:squarederror", "max_depth": 2}, 10)

@@ -54,7 +54,10 @@ DEFAULT_CONFIG = {
 
 
 def resolve_config(config: dict | None) -> dict:
-    """DEFAULT_CONFIG overlaid with ``config``; unknown keys raise ValueError."""
+    """DEFAULT_CONFIG overlaid with ``config``; unknown keys raise ValueError.
+
+    ``hidden`` is coerced to a tuple so a config read back from JSON (a list)
+    compares equal to DEFAULT_CONFIG."""
     config = dict(config or {})
     unknown = sorted(set(config) - set(DEFAULT_CONFIG))
     if unknown:
@@ -62,7 +65,9 @@ def resolve_config(config: dict | None) -> dict:
             f"unknown train_one config keys: {unknown}; "
             f"allowed: {sorted(DEFAULT_CONFIG)}"
         )
-    return {**DEFAULT_CONFIG, **config}
+    resolved = {**DEFAULT_CONFIG, **config}
+    resolved["hidden"] = tuple(resolved["hidden"])
+    return resolved
 
 
 def train_one(seed, x_train, wc_train, targets_train, x_val, wc_val, targets_val,

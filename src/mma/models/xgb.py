@@ -37,7 +37,19 @@ def feature_frame(features: pd.DataFrame) -> pd.DataFrame:
     return x
 
 
+RESERVED_PARAMS = frozenset({
+    "n_estimators", "objective", "early_stopping_rounds", "eval_metric",
+    "num_class", "enable_categorical",
+})
+
+
 def _classifier(objective: str, params: dict | None, fixed_rounds: int | None, **extra):
+    reserved = sorted(RESERVED_PARAMS & set(params or {}))
+    if reserved:
+        raise ValueError(
+            f"params may not set reserved xgboost keys {reserved}; the trainer "
+            "owns them (use fixed_rounds for the round budget)"
+        )
     merged = {**BASE_PARAMS, **(params or {})}
     if fixed_rounds is not None:
         return xgb.XGBClassifier(

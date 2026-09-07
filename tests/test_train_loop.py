@@ -130,3 +130,22 @@ def test_train_one_reports_epochs_run_in_default_mode():
     x, wc, t = _synthetic_wf()
     _, info = train_one(0, *_split_wf(x, wc, t), max_epochs=4, patience=100)
     assert info["epochs_run"] == 4
+
+
+def test_resolve_config_rejects_unknown_keys():
+    from mma.models.train_loop import resolve_config
+    with pytest.raises(ValueError, match="hiden"):
+        resolve_config({"hiden": (8, 4)})
+
+
+def test_resolve_config_coerces_hidden_to_tuple():
+    from mma.models.train_loop import DEFAULT_CONFIG, resolve_config
+    assert resolve_config({"hidden": [128, 64]}) == DEFAULT_CONFIG
+    assert resolve_config({"hidden": [16, 8]})["hidden"] == (16, 8)
+
+
+def test_train_one_fixed_epochs_accepts_no_validation_set():
+    x, wc, t = _synthetic_wf()
+    x_tr, wc_tr, t_tr, *_ = _split_wf(x, wc, t)
+    net, info = train_one(0, x_tr, wc_tr, t_tr, None, None, None, fixed_epochs=2)
+    assert net is not None and info["epochs_run"] == 2
