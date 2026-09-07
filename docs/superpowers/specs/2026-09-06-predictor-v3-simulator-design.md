@@ -1,7 +1,7 @@
 # Predictor v3: Simulated Fights, Expanded Data, Walk-Forward Evaluation — Design
 
 **Date:** 2026-09-06
-**Status:** Draft, awaiting user review
+**Status:** Approved 2026-09-06; amended the same day after SP0 (recency, data leads)
 **Scope:** Predictions only. The value-betting / odds-analysis layer is a
 later, separate spec (see "Out of scope").
 
@@ -48,6 +48,9 @@ extended, not replaced.
 | Kaggle dataset `neelagiriaditya/ufc-datasets-1994-2025` was rebuilt 2026-08-11: new files `fighter.csv`, `event.csv`, `fight.csv` (11,441 rows, +referee, +bonuses), `round.csv` (25,131 per-round rows); same ufcstats hex ids. | Our download/refresh scripts are pinned to the old `UFC.csv` layout, so the weekly Action has found "no new data" for a year. Re-ingestion is the first task. The 11,441 vs 8,337 fight-row discrepancy must be reconciled before trusting the new file. |
 | Origin holds 78 prospective predictions, 0 graded, because grading waits on refreshed data. | Once ingestion works, grading catches up automatically and the track record becomes real. |
 | `scripts/predict_upcoming.py` stamps `model_version` with the HEAD commit sha at run time; weekly "predictions and grading" commits change HEAD, so the track record fragments into a new "version" every week with an unchanged model. | Version must derive from the model artifacts (hash of `models/torch/*` + `models/*.json`), not from HEAD. Existing records get re-keyed by a one-time migration. |
+| Every deployed model trains only on fights before 2021-01-01: 2021–2023 was reserved for validation and 2024+ for the (spent) test. The model predicting today's cards has never seen the ~2,900 most recent fights. | Deployment must refit the selected configuration on all data through the latest event (SP1 decides the refit recipe on the harness; SP4 ships it). |
+| The Kaggle mirror refreshes irregularly (ends 2026-08-08 today) while a daily-refreshed ufcstats scrape on GitHub carries the same fighter ids. | A secondary daily source can fill the gap between Kaggle versions so grading, retraining, and fighter form stay at most a day stale (SP2). |
+| Verified 2026-09-06: the open `ehan03/jds-mma-data` snapshot (MIT, through 2024-08) includes `Bet MMA/late_replacements.csv` (fighter, bout, notice days; ~1,000 rows) and `missed_weights.csv` (~260 rows), plus Tapology weigh-in and rehydration weights, all joinable to ufcstats ids via its mapping tables. Wikipedia event pages carry the same facts in templated prose from ~2009 (withdrawals/replacements) and ~2013 (missed weight), so they can extend the snapshot forward. Official rankings history 2013→now exists as a weekly CC0 Kaggle dataset (names only); the UFC switched to an Elo-based ranking on 2026-06-20. | Short-notice and missed-weight features come from the snapshot first and a Wikipedia parser second; rankings need name matching and a regime flag after June 2026. |
 | The raw `r_weight`/`b_weight` columns are per-fighter profile values (0 fighters have more than one distinct value across their fights), not weigh-in weights. | Not usable; as-of-scrape leak. |
 | Head/body/leg, distance/clinch/ground, and referee are populated for 99.7% of fights in the current raw file; the new `round.csv` adds them per round. | Rich in-fight signal is available without any external source. |
 | Tapology ToS forbids scraping; Sherdog ToS forbids aggregating content elsewhere; Fight Matrix data is now sold through an enterprise API. | Use the static open snapshot (`ehan03/jds-mma-data`, MIT) for external data; no scraping of those sites. |
@@ -145,13 +148,31 @@ candidate is run.
   - Because several blocks and configs are tried on the same fights, the
     final shipped configuration is re-scored once with fresh seeds; the
     fresh-seed number is the one reported.
-- **Compute.** The harness caches per-fold feature matrices and runs from a
-  local-disk scratch venv; a full walk-forward of the XGBoost winner model
-  must complete in minutes, the torch ensemble in under an hour on this
-  machine, so experiments stay cheap enough to run many.
+- **Compute.** Measured after SP0: the full suite runs in ~5 s and a 5-seed
+  torch retrain in ~8 s from the local-disk venv, so a full walk-forward of
+  the torch ensemble takes about a minute. No feature caching is needed.
+- **Recency support (harness capability; the experiments run in SP2).**
+  Every candidate accepts an optional training-window start (`train_start`,
+  e.g. drop pre-2005 fights from model training while Elo and career stats
+  still use them) and an optional exponential recency sample weight
+  (`half_life_years`, weight = 0.5^(age / half-life), age measured from the
+  fold's evaluation start). XGBoost takes weights natively; the torch loss
+  becomes a per-sample weighted mean.
+- **Refit-strategy experiment (in SP1; decides the deployment recipe).** For
+  each fold Y compare (A) the incumbent protocol — train on fights before
+  Y−1, early-stop on year Y−1 — with (B) train on everything before Y with
+  a fixed training budget (the median best iteration / best epoch from the
+  earlier folds) and no early stopping. Both score on Y. (B) uses one more
+  year of the freshest data; if it is not worse than (A) by more than
+  σ_seed it becomes the deployment recipe: select on the harness, refit on
+  everything through the latest event, stamp a new artifact hash.
 - **Deliverables:** `src/mma/walkforward.py` (fold construction, scoring,
-  slices, bar check), `scripts/run_walkforward.py` (candidate spec in → JSON
-  report out under `models/walkforward/`), noise-floor artifact, README
+  slices, bar check), `src/mma/candidates.py` (one fit/predict protocol
+  wrapping Elo, XGBoost, and the torch ensemble, with config, window, and
+  weight options), `scripts/run_walkforward.py` (candidate spec in → JSON
+  report out under `models/walkforward/`), the noise-floor artifact, the
+  refit-strategy decision, `--refit-through` support in the train scripts so
+  the deployed model uses all data through the latest event, and a README
   section replacing the spent-test story with the walk-forward story.
 - **Acceptance:** incumbent XGBoost and torch models re-scored through the
   harness with numbers that reproduce the committed 2021–2023 validation
@@ -162,6 +183,9 @@ candidate is run.
 ### SP2 — Data expansion and features v3
 
 Goal: add signal in evaluated blocks; keep only blocks that clear the SP1 bar.
+Also: add the daily-refreshed ufcstats scrape (same fighter ids) as a secondary
+source adapter that fills the gap between Kaggle versions, reconciled through
+the same `reconcile_sources.py` guard, so processed data is at most a day stale.
 
 All features stay point-in-time by construction (built inside the
 chronological accumulators in `history.py`, or joined on dated rows with a
@@ -188,7 +212,26 @@ results documented in the plan file as before.
    (point-in-time), event location country vs fighter nationality (home
    advantage; nationality from the external snapshot), bonus history
    (performance-bonus count as a "fan-friendly finisher" proxy).
-5. **External snapshot block** (`ehan03/jds-mma-data`, vendored as a
+5. **Recency block** (harness capability from SP1): training-window start
+   and exponential recency weights over a small grid (no cut / 2000 / 2005 /
+   2010 start; half-life ∞ / 8 / 4 / 2 years), judged by the same bar. The
+   sport's meta shifts fast enough that this is expected to matter more than
+   any single feature.
+6. **Short-notice and weigh-in block**: days of notice for late
+   replacements and pounds over the limit, from the snapshot's
+   `late_replacements.csv` / `missed_weights.csv` (through 2024-08) extended
+   forward by a parser over Wikipedia event pages, which the prospective
+   pipeline already fetches (templated "withdrew ... was replaced by" and
+   "weighed in at N pounds, M over" prose; withdrawals reliable from ~2009,
+   missed weight from ~2013). Point-in-time by construction. Notice days
+   are often stated only qualitatively on Wikipedia, so the feature is
+   binned (≤ 7 / ≤ 30 / full camp / unknown).
+7. **Rankings block**: official UFC rank at fight time from the weekly
+   rankings-history dataset (2013→now, names only, so matched through the
+   fighters table with the same never-guess policy as the prospective
+   matcher), with a missingness flag, an unranked-vs-ranked matchup flag,
+   and a regime flag for the June 2026 switch to Elo-based rankings.
+8. **External snapshot block** (`ehan03/jds-mma-data`, vendored as a
    *derived* compact per-fighter parquet of a few MB, regenerated by a
    script from the downloaded snapshot, never the raw 80 MB): pre-UFC record
    at UFC debut (wins, losses, finishes, finish-loss count), days since pro
@@ -269,6 +312,8 @@ re-weighting simulated runs. This is a defined branch, not an ad-hoc patch.
 Goal: the winning predictor is what the app shows, the weekly Action runs,
 and the track record grades.
 
+- The deployed model is refit on all data through the latest event with the
+  recipe SP1 selected; the weekly Action does the same on every refresh.
 - `inference.py` exposes the outcome distribution; `display_priors.json`
   logic is retired if the simulator's marginals are already base-rate
   consistent (verified on the harness), otherwise retained for the marginals.
