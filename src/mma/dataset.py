@@ -157,27 +157,35 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-_STAT_COLUMNS = {
-    # output name -> raw column suffix (dataset spells "attempted" as "atmpted")
+# output name -> raw column suffix. master.csv fight totals are
+# `{r|b}_total_{suffix}` (control is `{r|b}_total_ctrl_seconds`, numeric);
+# round.csv per-round values are `{r|b}_{suffix}` (control is `{r|b}_ctrl`,
+# "m:ss" text).
+_CORE_STAT_SUFFIXES = {
     "kd": "kd",
-    "sig_landed": "sig_str_landed",
-    "sig_attempted": "sig_str_atmpted",
+    "sig_landed": "sig_landed",
+    "sig_attempted": "sig_atmp",
     "total_landed": "total_str_landed",
-    "total_attempted": "total_str_atmpted",
-    "td_landed": "td_landed",
-    "td_attempted": "td_atmpted",
+    "total_attempted": "total_str_atmp",
+    "td_landed": "td_success",
+    "td_attempted": "td_atmp",
     "sub_att": "sub_att",
-    "ctrl_sec": "ctrl",
+}
+_TARGETS = ("head", "body", "leg", "distance", "clinch", "ground")
+_TARGET_STAT_SUFFIXES = {
+    f"{target}_{kind}": f"sig_str_{raw_kind}_{target}"
+    for target in _TARGETS
+    for kind, raw_kind in (("landed", "landed"), ("attempted", "atmp"))
 }
 
 
 def build_fight_stats(raw: pd.DataFrame) -> pd.DataFrame:
-    """Two rows per fight (one per fighter) with in-fight performance stats."""
-    fight_ids = raw["fight_id"].astype("string").str.strip()
-    if fight_ids.isna().any() or not fight_ids.is_unique:
-        raise ValueError("fight_id must be present and unique")
+    """Two rows per fight (one per fighter) with fight-total performance stats."""
+    fight_ids = _require_unique_fight_ids(raw)
     frames = []
-    for corner, prefix, id_column in (("a", "r_", "r_id"), ("b", "b_", "b_id")):
+    for corner, prefix, id_column in (
+        ("a", "r_total_", "r_fighter_id"), ("b", "b_total_", "b_fighter_id"),
+    ):
         frame = pd.DataFrame(
             {
                 "fight_id": fight_ids,
@@ -185,8 +193,56 @@ def build_fight_stats(raw: pd.DataFrame) -> pd.DataFrame:
                 "corner": pd.Series(corner, index=raw.index, dtype="string"),
             }
         )
-        for out_name, suffix in _STAT_COLUMNS.items():
+        for out_name, suffix in _CORE_STAT_SUFFIXES.items():
+            frame[out_name] = pd.to_numeric(raw[prefix + suffix], errors="coerce")
+        frame["ctrl_sec"] = pd.to_numeric(raw[prefix + "ctrl_seconds"], errors="coerce")
+        frame["rev"] = pd.to_numeric(raw[prefix + "rev"], errors="coerce")
+        for out_name, suffix in _TARGET_STAT_SUFFIXES.items():
             frame[out_name] = pd.to_numeric(raw[prefix + suffix], errors="coerce")
         frames.append(frame)
     stats = pd.concat(frames, ignore_index=True)
     return stats.sort_values(["fight_id", "corner"]).reset_index(drop=True)
+
+
+def build_round_stats(raw: pd.DataFrame) -> pd.DataFrame:
+    """Two rows per fight per round with that round's performance stats."""
+    fight_ids = raw["fight_id"].astype("string").str.strip()
+    round_no = pd.to_numeric(raw["round_no"], errors="coerce").astype("int64")
+    if fight_ids.isna().any() or pd.DataFrame({"f": fight_ids, "r": round_no}).duplicated().any():
+        raise ValueError("(fight_id, round_no) must be present and unique")
+    frames = []
+    for corner, prefix, id_column in (("a", "r_", "r_id"), ("b", "b_", "b_id")):
+        frame = pd.DataFrame(
+            {
+                "fight_id": fight_ids,
+                "round_no": round_no,
+                "corner": pd.Series(corner, index=raw.index, dtype="string"),
+                "fighter_id": raw[id_column].astype("string").str.strip(),
+            }
+        )
+        for out_name, suffix in _CORE_STAT_SUFFIXES.items():
+            frame[out_name] = pd.to_numeric(raw[prefix + suffix], errors="coerce")
+        frame["ctrl_sec"] = pd.to_numeric(
+            raw[prefix + "ctrl"].map(parse_mmss_seconds), errors="coerce"
+        )
+        frame["rev"] = pd.to_numeric(raw[prefix + "rev"], errors="coerce")
+        for out_name, suffix in _TARGET_STAT_SUFFIXES.items():
+            frame[out_name] = pd.to_numeric(raw[prefix + suffix], errors="coerce")
+        frames.append(frame)
+    rounds = pd.concat(frames, ignore_index=True)
+    return rounds.sort_values(["fight_id", "round_no", "corner"]).reset_index(drop=True)
+
+
+def build_bonuses(raw: pd.DataFrame) -> pd.DataFrame:
+    """Post-fight bonus awards, one row per (fight, bonus type)."""
+    bonuses = pd.DataFrame(
+        {
+            "fight_id": raw["fight_id"].astype("string").str.strip(),
+            "bonus_type": raw["bonus_type"].astype("string").str.strip(),
+        }
+    )
+    return (
+        bonuses.drop_duplicates()
+        .sort_values(["fight_id", "bonus_type"])
+        .reset_index(drop=True)
+    )
