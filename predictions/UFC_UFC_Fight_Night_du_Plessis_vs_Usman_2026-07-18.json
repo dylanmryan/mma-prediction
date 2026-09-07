@@ -3,7 +3,7 @@
   "event_date": "2026-07-18",
   "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_du_Plessis_vs._Usman",
   "predicted_at_utc": "2026-07-15T16:48:23Z",
-  "model_version": "79135ef",
+  "model_version": "40df77ec43c7",
   "fights": [
     {
       "fighter_a_name": "Dricus du Plessis",
@@ -29,7 +29,15 @@
       "elo_b": 1822.1731825347372,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "0d7b51c9d2649a6e",
+      "correct": true,
+      "log_loss_contribution": 0.5642751773958318,
+      "brier_contribution": 0.18595736687246145,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Jared Cannonier",
@@ -55,7 +63,15 @@
       "elo_b": 1607.7798348055715,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "a93f94c923c3a9cb",
+      "correct": true,
+      "log_loss_contribution": 0.4648346498644148,
+      "brier_contribution": 0.13820625896423522,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Chase Hooper",
@@ -81,7 +97,15 @@
       "elo_b": 1434.3087956363447,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "971246648e162f0d",
+      "correct": true,
+      "log_loss_contribution": 0.21243960555196886,
+      "brier_contribution": 0.036630457329712984,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Tabatha Ricci",
@@ -107,7 +131,15 @@
       "elo_b": 1565.1291394776679,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "745fa7b605f8e2da",
+      "correct": true,
+      "log_loss_contribution": 0.6239800084937553,
+      "brier_contribution": 0.21547452000811873,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Tommy McMillen",
@@ -116,7 +148,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Tommy McMillen'; no fighter in fighters.parquet matches name 'Alberto Montes'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Austin Bashi",
@@ -125,7 +157,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Jose Miguel Delgado'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Jean-Paul Lebosnoyani",
@@ -134,7 +166,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Jean-Paul Lebosnoyani'; no fighter in fighters.parquet matches name 'Ko Seok-hyeon'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Levi Rodrigues Jr.",
@@ -143,7 +175,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Levi Rodrigues Jr.'; no fighter in fighters.parquet matches name 'Felipe Franco'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Alden Coria",
@@ -152,7 +184,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Alden Coria'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "RJ Harris",
@@ -161,7 +193,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'RJ Harris'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Anna Melisano",
@@ -170,7 +202,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Anna Melisano'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     }
   ]
 }

@@ -16,8 +16,8 @@ plus an interactive Streamlit matchup explorer.
 - **Point-in-time discipline, machine-verified**: every feature is built only
   from data available before each fight; a truncation-invariance test proves
   no feature can see the future.
-- **Baseline ladder**: coin flip → Elo (0.576 acc) → XGBoost (0.595) →
-  5-seed calibrated neural ensemble (0.606, best log-loss) on 1,507
+- **Baseline ladder**: coin flip → Elo (0.559 acc) → XGBoost (0.606) →
+  5-seed calibrated neural ensemble (0.608, best log-loss) on 1,709
   never-tuned-on validation fights.
 - **Uncertainty done properly**: deep-ensemble spread + MC dropout, per-seed
   temperature scaling, display probabilities recalibrated to historical base rates.
@@ -47,37 +47,58 @@ probability with uncertainty, method and finish-round tendencies, and a
 
 Data bootstraps from the [Kaggle UFC dataset](https://www.kaggle.com/datasets/neelagiriaditya/ufc-datasets-1994-2025)
 via `kagglehub` and auto-refreshes weekly from the same maintained mirror
-(`scripts/refresh_data.py`). A direct ufcstats.com scraper was planned but
-dropped — the site gates automated clients behind an anti-bot challenge;
-`src/mma/parsing.py` is retained in case a future raw-string data source
-needs its parsing helpers. The `.github/workflows/refresh-data.yml` Action
-runs this refresh weekly and commits any rebuilt artifacts automatically.
+(`scripts/refresh_data.py`). The upstream dataset was rebuilt in August 2026
+with a new file layout — `master.csv` (one row per fight, including fight
+totals), `fighter.csv`, `round.csv` (per-round stats, including head/body/leg
+and distance/clinch/ground strike splits), and `fighter_bonus.csv`, plus
+referees. Ingestion switched to this layout in September 2026;
+`scripts/reconcile_sources.py` audits the swap and confirmed the new source
+is a strict superset of the old one — all 8,337 previously ingested fights
+are present with identical labels (one 2025 result was relabelled draw vs.
+no-contest by the source itself), and the new source adds 3,104 fights,
+concentrated in 1997–2011 (hundreds per year in 2004–2011, mostly fights the
+earlier scrape had dropped) plus 40–80 per year from 2017 onward and the
+September 2025 – August 2026 refresh. Every artifact in this repo was
+retrained on the resulting 11,441 fights. A direct ufcstats.com scraper was
+planned but dropped — the site gates automated clients behind an anti-bot
+challenge; `src/mma/parsing.py` now supplies the string parsers the new
+layout needs. The `.github/workflows/refresh-data.yml` Action runs this
+refresh weekly and commits any rebuilt artifacts automatically.
 
 ## Results so far
 
 All models are evaluated on a strict time split: trained on pre-2021 fights,
 reported on 2021–2023 validation fights. **Test years (2024+) are held out
-until the final model comparison.**
+until the final model comparison.** Numbers below are from the September
+2026 retrain on the fuller dataset; the
+[Final held-out test results](#final-held-out-test-results-2024) and the
+market benchmark are one-time artifacts from July 2026 and are left as
+recorded.
 
-**Winner prediction** (1,507 validation fights):
+**Winner prediction** (1,709 validation fights):
 
 | Model | Accuracy | Log-loss | Brier |
 |---|---|---|---|
 | Coin flip | 0.500 | 0.693 | 0.250 |
-| Higher-Elo-wins dummy | 0.573 | — | — |
-| Elo baseline | 0.576 | 0.678 | 0.242 |
-| XGBoost (46 features) | 0.595 | 0.658 | 0.233 |
-| **Neural net** (5-seed ensemble, calibrated) | **0.606** | **0.654** | **0.231** |
+| Higher-Elo-wins dummy | 0.559 | — | — |
+| Elo baseline | 0.559 | 0.680 | 0.243 |
+| XGBoost (46 features) | 0.606 | 0.660 | 0.234 |
+| **Neural net** (5-seed ensemble, calibrated) | **0.608** | **0.651** | **0.230** |
 
-**Method of victory** (3 classes): XGBoost 0.489 accuracy vs 0.485 majority-class
-baseline, macro-F1 0.281. The neural net's class-weighted method head makes a
-different trade: 0.407 accuracy but **macro-F1 0.364** — it actually identifies
+**Method of victory** (3 classes): XGBoost 0.489 accuracy vs 0.477 majority-class
+baseline, macro-F1 0.303. The neural net's class-weighted method head makes a
+different trade: 0.437 accuracy but **macro-F1 0.390** — it actually identifies
 submissions and KOs instead of defaulting to "decision". **Finish round**
-(R1/R2/R3/R4-5, finishes only): XGBoost 0.477 accuracy vs 0.474 majority
-baseline, macro-F1 0.167. Predicting *how* fights end is genuinely hard; these
-numbers are reported honestly rather than hidden.
+(R1/R2/R3/R4-5, finishes only, 891 validation fights): XGBoost 0.495 accuracy
+vs 0.495 majority baseline, macro-F1 0.169. Predicting *how* fights end is
+genuinely hard; these numbers are reported honestly rather than hidden.
 
 ## Final held-out test results (2024+)
+
+*Computed once on 2026-07-13 against the models and 8,337-fight dataset of
+that date; not recomputed after the September 2026 data expansion. The 2024+
+holdout is retired: it is spent as a one-time test and will be folded into the
+walk-forward evaluation planned for the next phase.*
 
 These numbers were computed exactly once, by `scripts/final_test_eval.py`,
 after all development was frozen — the 2024+ fights were never read by any
@@ -196,21 +217,21 @@ dummy (using the Elo ratings recorded at prediction time, so the dummy
 stays gradeable even as ratings keep moving). Aggregate stats land in
 [`predictions/track_record.json`](predictions/track_record.json).
 
-**Current status** (honest — this just started):
+**Current status**:
 
 | Model version | Fights predicted | Fights graded | Accuracy | Log-loss |
 |---|---|---|---|---|
-| `79135ef` | 13 | 0 | — | — |
-| `e47f720` | 5 | 0 | — | — |
+| `40df77ec43c7` | 78 | 21 | 0.667 | 0.616 |
 
-All 18 predictions are pending: they cover 4 events between 2026-07-18 and
-2026-08-08, none of which have happened yet. (The second version row is
-the accent-folding matcher fix converting 5 previously-skipped fights,
-committed the same day.) Grading itself can lag a
-finished event by days to weeks, because it depends on the Kaggle mirror
-picking up the result — the same lag documented for the weekly data
-refresh above. Nothing here is cherry-picked: every prediction this
-pipeline ever makes gets a row, win or lose.
+21 of the 78 predicted fights have been graded so far (events through
+2026-08-08): 0.667 accuracy, 0.616 log-loss, 0.213 Brier — against a
+coin-flip baseline of 0.476 accuracy on the same fights. 29 further
+predictions are awaiting results, and the rest cover events that haven't
+happened yet. Grading itself can lag a finished event by days to weeks,
+because it depends on the Kaggle mirror picking up the result — the same
+lag documented for the weekly data refresh above — but continues
+automatically as results land. Nothing here is cherry-picked: every
+prediction this pipeline ever makes gets a row, win or lose.
 
 A walk-forward retraining hook (`scripts/roll_window.py`) watches this
 track record: once 150 graded prospective fights have accumulated since
@@ -224,8 +245,10 @@ the candidate beats the incumbent by more than 0.002 log-loss. On promotion
 the candidate ensemble is *staged* into `models/torch` (the incumbent is
 backed up on disk first) and nothing else happens — the script performs no
 git writes. A human then runs the suite, reviews the metrics diff, and
-commits by hand; that commit's git sha becomes the new `model_version` and
-starts a fresh `track_record.json` section. Promotion is deliberately a
+commits by hand; the new model's artifact hash (`mma.versioning.model_version`,
+computed over the torch weights and preprocessing stats) becomes the new
+`model_version` and starts a fresh `track_record.json` section automatically.
+Promotion is deliberately a
 manual, stage-only step (`--execute`, run by hand via `workflow_dispatch`)
 and is never wired into CI auto-promotion — the weekly Action only ever runs
 it in `--dry-run` and prints the report.
@@ -304,6 +327,21 @@ for the log-loss comparison above.
 Full numbers (n_fights, per-metric breakdowns, 10-bin calibration tables,
 and the full ROI sweep at 0%/5%/10% thresholds) are in the committed
 [`models/market_benchmark.json`](models/market_benchmark.json).
+
+## Development notes
+
+- **Local-disk virtualenv.** If the repo lives in an iCloud-synced folder,
+  create the venv elsewhere (`python3 -m venv ~/.venvs/mma && ~/.venvs/mma/bin/pip install -e ".[dev,app]"`)
+  — torch's shared libraries stall for minutes when paged in from iCloud.
+  Better still, keep the repo itself outside iCloud (or exclude `.git` from
+  sync): sync has corrupted `.git` metadata here more than once.
+- `OMP_NUM_THREADS=1` for any script that imports both torch and xgboost.
+- **Model identity.** Prospective predictions are stamped with
+  `mma.versioning.model_version()`, a hash of the deployed torch weights and
+  preprocessing statistics, so the track record splits by model, not by
+  commit. Retraining (weekly refresh or walk-forward promotion) starts a new
+  section automatically; retraining is deterministic, so an unchanged
+  dataset yields an unchanged version.
 
 ## Interactive app
 

@@ -13,9 +13,9 @@ pytestmark = pytest.mark.skipif(
 
 def test_fights_volume_and_range():
     fights = pd.read_parquet(PROCESSED / "fights.parquet")
-    assert len(fights) > 6000
+    assert len(fights) > 11000
     assert fights["date"].min().year <= 1995
-    assert fights["date"].max().year >= 2024
+    assert fights["date"].max().year >= 2026
 
 
 def test_method_distribution_plausible():

@@ -3,66 +3,101 @@ import pytest
 
 from mma.dataset import build_fight_stats
 
+_SUFFIXES = {
+    "kd": "kd", "sig_landed": "sig_landed", "sig_atmp": "sig_atmp",
+    "total_str_landed": "total_str_landed", "total_str_atmp": "total_str_atmp",
+    "td_success": "td_success", "td_atmp": "td_atmp", "sub_att": "sub_att",
+    "rev": "rev", "ctrl_seconds": "ctrl_seconds",
+}
+_TARGETS = ("head", "body", "leg", "distance", "clinch", "ground")
 
-def _raw_fights():
-    return pd.DataFrame(
-        {
-            "fight_id": ["f1"],
-            "r_id": ["jj"],
-            "b_id": ["dc"],
-            "r_kd": [1.0], "b_kd": [0.0],
-            "r_sig_str_landed": [58.0], "b_sig_str_landed": [44.0],
-            "r_sig_str_atmpted": [92.0], "b_sig_str_atmpted": [96.0],
-            "r_total_str_landed": [70.0], "b_total_str_landed": [61.0],
-            "r_total_str_atmpted": [105.0], "b_total_str_atmpted": [115.0],
-            "r_td_landed": [1.0], "b_td_landed": [0.0],
-            "r_td_atmpted": [2.0], "b_td_atmpted": [1.0],
-            "r_sub_att": [0.0], "b_sub_att": [1.0],
-            "r_ctrl": [130.0], "b_ctrl": [None],
-        }
-    )
+
+def _raw_master():
+    rows = {
+        "fight_id": ["f2", "f1"],
+        "r_fighter_id": ["jj", "cm"],
+        "b_fighter_id": ["dc", "ed"],
+        "rounds_fought": [3, 2],
+    }
+    base = {"r": 10, "b": 20}
+    for corner in ("r", "b"):
+        for i, suffix in enumerate(_SUFFIXES.values()):
+            rows[f"{corner}_total_{suffix}"] = [base[corner] + i, base[corner] + i + 100]
+        for j, target in enumerate(_TARGETS):
+            rows[f"{corner}_total_sig_str_landed_{target}"] = [base[corner] * 10 + j, None]
+            rows[f"{corner}_total_sig_str_atmp_{target}"] = [base[corner] * 10 + j + 1, None]
+    return pd.DataFrame(rows)
 
 
 def test_two_rows_per_fight_schema_and_order():
-    stats = build_fight_stats(_raw_fights())
-    assert list(stats.columns) == [
+    stats = build_fight_stats(_raw_master())
+    assert list(stats.columns[:12]) == [
         "fight_id", "fighter_id", "corner", "kd", "sig_landed", "sig_attempted",
         "total_landed", "total_attempted", "td_landed", "td_attempted",
         "sub_att", "ctrl_sec",
     ]
-    assert len(stats) == 2
-    assert list(stats["corner"]) == ["a", "b"]
+    assert list(stats.columns[12:]) == ["rev"] + [
+        f"{target}_{kind}" for target in _TARGETS for kind in ("landed", "attempted")
+    ]
+    assert list(zip(stats["fight_id"], stats["corner"])) == [
+        ("f1", "a"), ("f1", "b"), ("f2", "a"), ("f2", "b"),
+    ]
 
 
 def test_values_unpivoted_to_correct_corner():
-    stats = build_fight_stats(_raw_fights())
-    a = stats[stats["corner"] == "a"].iloc[0]
-    b = stats[stats["corner"] == "b"].iloc[0]
+    stats = build_fight_stats(_raw_master()).set_index(["fight_id", "corner"])
+    a = stats.loc[("f2", "a")]
+    b = stats.loc[("f2", "b")]
     assert a["fighter_id"] == "jj" and b["fighter_id"] == "dc"
-    assert a["kd"] == 1 and b["kd"] == 0
-    assert a["sig_landed"] == 58 and a["sig_attempted"] == 92
-    assert b["sig_landed"] == 44 and b["sig_attempted"] == 96
-    assert a["td_landed"] == 1 and a["td_attempted"] == 2
-    assert b["sub_att"] == 1
-    assert a["ctrl_sec"] == 130
+    assert a["kd"] == 10 and b["kd"] == 20
+    assert a["td_landed"] == 15 and a["td_attempted"] == 16  # td_success, td_atmp
+    assert a["ctrl_sec"] == 19 and b["ctrl_sec"] == 29
+    assert a["rev"] == 18
+    assert a["head_landed"] == 100 and a["head_attempted"] == 101
+    assert b["ground_landed"] == 205
 
 
 def test_missing_stat_stays_missing():
-    stats = build_fight_stats(_raw_fights())
-    b = stats[stats["corner"] == "b"].iloc[0]
-    assert pd.isna(b["ctrl_sec"])
-
-
-def test_multiple_fights_sorted():
-    raw = pd.concat(
-        [_raw_fights(), _raw_fights().assign(fight_id="f0")], ignore_index=True
-    )
-    stats = build_fight_stats(raw)
-    assert list(stats["fight_id"]) == ["f0", "f0", "f1", "f1"]
-    assert list(stats["corner"]) == ["a", "b", "a", "b"]
+    raw = _raw_master()
+    raw.loc[0, "r_total_kd"] = None
+    stats = build_fight_stats(raw).set_index(["fight_id", "corner"])
+    assert pd.isna(stats.loc[("f2", "a"), "kd"])
+    assert pd.isna(stats.loc[("f1", "a"), "head_landed"])
 
 
 def test_duplicate_fight_ids_rejected():
-    raw = pd.concat([_raw_fights(), _raw_fights()], ignore_index=True)
-    with pytest.raises(ValueError):
+    raw = _raw_master()
+    raw.loc[1, "fight_id"] = "f2"
+    with pytest.raises(ValueError, match="fight_id"):
+        build_fight_stats(raw)
+
+
+def test_no_round_record_nulls_stats():
+    # f2 (row 0) has real target-column values in the fixture, unlike f1
+    # (row 1), whose target columns are already None regardless of
+    # rounds_fought -- so null it out here to make the target-column
+    # assertions below non-vacuous.
+    raw = _raw_master()
+    raw.loc[0, "rounds_fought"] = 0
+    stats = build_fight_stats(raw).set_index(["fight_id", "corner"])
+    for corner in ("a", "b"):
+        row = stats.loc[("f2", corner)]
+        assert pd.isna(row["kd"])
+        assert pd.isna(row["sig_landed"])
+        assert pd.isna(row["ctrl_sec"])
+        assert pd.isna(row["rev"])
+        assert pd.isna(row["head_landed"])
+        assert pd.isna(row["ground_attempted"])
+        assert pd.notna(row["fighter_id"])
+    assert stats.loc[("f2", "a"), "fighter_id"] == "jj"
+    assert stats.loc[("f2", "b"), "fighter_id"] == "dc"
+    f1 = stats.loc[("f1", "a")]
+    assert pd.notna(f1["kd"]) and pd.notna(f1["sig_landed"])
+    assert pd.notna(f1["ctrl_sec"])
+
+
+def test_missing_corner_id_rejected():
+    raw = _raw_master()
+    raw.loc[0, "r_fighter_id"] = None
+    with pytest.raises(ValueError, match="missing corner"):
         build_fight_stats(raw)

@@ -3,7 +3,7 @@
   "event_date": "2026-09-26",
   "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Rosas_Jr._vs._Barcelos",
   "predicted_at_utc": "2026-08-31T19:03:43Z",
-  "model_version": "d0bfe66",
+  "model_version": "40df77ec43c7",
   "fights": [
     {
       "fighter_a_name": "Raul Rosas Jr.",
@@ -30,7 +30,7 @@
       "elo_b": 1638.445697894828,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Melissa Amaya",
@@ -39,7 +39,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Melissa Amaya' (exact or accent-folded); no fighter in fighters.parquet matches name 'Valesca Machado' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Mehemmedeli Osmanli",
@@ -48,7 +48,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Mehemmedeli Osmanli' (exact or accent-folded); no fighter in fighters.parquet matches name 'Ilimbek Akylbek Uulu' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Montel Jackson",
@@ -75,7 +75,7 @@
       "elo_b": 1644.324152588966,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Rodolfo Bellato",
@@ -84,7 +84,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Christian Edwards' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Rodolfo Vieira",
@@ -111,7 +111,7 @@
       "elo_b": 1522.284610507996,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Brady Hiestand",
@@ -138,7 +138,7 @@
       "elo_b": 1590.6362455767044,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "John Casta\u00f1eda",
@@ -147,7 +147,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Alateng Heili' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Josiah Harrell",
@@ -156,7 +156,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Josiah Harrell' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Norma Dumont",
@@ -183,7 +183,7 @@
       "elo_b": 1613.7723627055925,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Vanessa Demopoulos",
@@ -210,7 +210,7 @@
       "elo_b": 1492.1504854116292,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     }
   ]
 }

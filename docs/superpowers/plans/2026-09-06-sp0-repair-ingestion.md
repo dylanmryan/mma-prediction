@@ -1691,9 +1691,30 @@ Pushing to the public repo is a separate, user-confirmed step.
 
 ## Completion notes (filled in during execution)
 
-- Baseline suite: _n passed / n skipped_
-- Model v1 artifact hash: _…_
-- Reconciliation report: _…_
-- Model v2 artifact hash: _…_ ; XGB val metrics: _…_ ; torch val metrics: _…_
-- Graded prospective fights: _n graded, accuracy, log-loss, Brier_
+- Baseline suite: 250 passed, 1 skipped (before SP0); 280 passed, 1 skipped (after the rebuild).
+- Model v1 artifact hash: `40df77ec43c7` (scorer-only hash: torch `net_seed*.pt` + `preprocess.json`; the glob set was narrowed after code review from the plan's original six-file set, and records were re-keyed twice — first to `f4aa6f8d9d6f`, then to `40df77ec43c7`).
+- Reconciliation report:
+
+  ```
+  old fights: 8337   new fights: 11441
+  overlap: 8337   dropped by new: 0   added by new: 3104
+  agreement on overlap:
+    winner             0.9999
+    method             1.0000
+    finish_round       1.0000
+    scheduled_rounds   1.0000
+    weight_class       1.0000
+    fighter_a_id       1.0000
+    fighter_b_id       1.0000
+    date               1.0000
+  added by year: {1993: 8, 1997: 8, 1998: 21, 1999: 29, 2000: 57, 2001: 65, 2002: 87, 2003: 77, 2004: 117, 2005: 126, 2006: 225, 2007: 179, 2008: 258, 2009: 264, 2010: 254, 2011: 196, 2012: 59, 2013: 13, 2017: 40, 2018: 55, 2019: 49, 2020: 48, 2021: 50, 2022: 76, 2023: 78, 2024: 80, 2025: 239, 2026: 346}
+  ```
+  The one `winner` disagreement is fight `08c04f18b0f58d71` (Abdul-Malik vs Brundage, 2025-06-14): the old source labeled it `nc`, the new `master.csv` has `result_status=draw`, `method=Overturned`, `winner_id=NaN` (mapped to `draw`; method NA in both). Source-label difference, not a builder bug.
+- Model v2 artifact hash: `fc3c50b7c5ad`; retrain determinism verified (two consecutive `train_torch.py` runs → identical hash). XGB val: n 1709, acc 0.6056, LL 0.6595, Brier 0.2336; torch ensemble val: acc 0.608, LL 0.6508, Brier 0.2299, method macro-F1 0.3904.
+- Graded prospective fights: 21 graded of 78 (events through 2026-08-08): accuracy 0.6667, log-loss 0.6161, Brier 0.2131; coin flip 0.4762 acc; higher-Elo dummy 0.4286 acc.
+- Review-driven additions beyond the plan: `build_fight_stats` nulls stats for fights with `rounds_fought == 0` (330 pre-2014 fights, 660 stat rows); download guard verifies the snapshot and clears stale CSVs; `migrate_model_versions.py` gained `--from`.
+- Final polish pass (review-driven): `reconcile` counts one-sided nulls as disagreements; `make_dataset.py` gained real round/corner integrity checks and a regression guard that refuses to overwrite the committed fights table if the new snapshot drops fights or flips >0.1% of winners; `ctrl_sec`/corner-b/bonus tests tightened; `set -o pipefail` in the refresh step. Suite: 281 passed, 1 skipped.
+- Deferred follow-up: treat `method == "Overturned"` as `nc` regardless of `result_status` (one 2025 fight is labelled `draw` by the source; every other Overturned row is `no_contest`). Deferred because it forces a full artifact rebuild and a new model hash for a one-fight change; do it with the SP2 rebuild. Also for SP2: `"1 Rnd + OT"` formats parse as 1 scheduled round (33 fights), understating `duration_sec`; `time_format` carries per-round lengths.
+- Final-review fixes: README rationale for the retired 2024+ test corrected; modern round coverage and post-2020 control-time checks are rate thresholds (99.5%) rather than zero-tolerance so one upstream scrape error cannot stall weekly grading; `make_dataset.py --allow-regression` is the reviewed escape hatch for the regression guard; README recommends keeping the repo outside iCloud.
+- Workflow follow-up (pre-existing, not changed here): if a retrain step fails after `make_dataset.py` succeeds, the `if: always()` grading step grades against a rebuilt-but-uncommitted fights table; consider gating grading on `steps.refresh.outputs.refresh != 'true' || success()`.
 - Deferred to SP2: the truncation-invariance test only gains round-derived columns once such features exist (none in SP0).

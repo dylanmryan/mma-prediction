@@ -3,7 +3,7 @@
   "event_date": "2026-08-01",
   "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Medi%C4%87_vs._Rodriguez",
   "predicted_at_utc": "2026-07-15T16:48:25Z",
-  "model_version": "79135ef",
+  "model_version": "40df77ec43c7",
   "fights": [
     {
       "fighter_a_name": "Uro\u0161 Medi\u0107",
@@ -30,7 +30,15 @@
       "elo_b": 1681.3866598204118,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T17:05:59Z",
-      "model_version": "e47f720"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "681399317dbf4701",
+      "correct": false,
+      "log_loss_contribution": 0.9155011182450186,
+      "brier_contribution": 0.3596209356182536,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Aleksandar Raki\u0107",
@@ -57,7 +65,15 @@
       "elo_b": 1629.0703660815373,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T17:05:59Z",
-      "model_version": "e47f720"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "333b9e5c723ac873",
+      "correct": true,
+      "log_loss_contribution": 0.3738116462526377,
+      "brier_contribution": 0.09727755093649737,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Du\u0161ko Todorovi\u0107",
@@ -84,7 +100,15 @@
       "elo_b": 1396.628276852812,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T17:05:59Z",
-      "model_version": "e47f720"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "0cd0456d6029cec2",
+      "correct": true,
+      "log_loss_contribution": 0.5810147849676152,
+      "brier_contribution": 0.19418962734597778,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Vlasto \u010cepo",
@@ -93,7 +117,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Vlasto \u010cepo'",
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "\u013dudov\u00edt Klein",
@@ -120,7 +144,15 @@
       "elo_b": 1462.8807272857966,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T17:05:59Z",
-      "model_version": "e47f720"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "ae81a3ac7b260411",
+      "correct": false,
+      "log_loss_contribution": 1.424034449537944,
+      "brier_contribution": 0.5764745351933845,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Oban Elliott",
@@ -129,7 +161,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Michael Oliveira'",
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Mark Vologdin",
@@ -138,7 +170,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Mark Vologdin'",
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Dennis Buzukja",
@@ -164,7 +196,15 @@
       "elo_b": 1509.6802490054256,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "fb37795db81f93f3",
+      "correct": true,
+      "log_loss_contribution": 0.4060451624455977,
+      "brier_contribution": 0.11136898773616566,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Mateusz R\u0119becki",
@@ -191,7 +231,15 @@
       "elo_b": 1418.1600753740624,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T17:05:59Z",
-      "model_version": "e47f720"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "849c5d9979df5357",
+      "correct": true,
+      "log_loss_contribution": 0.29766107633170336,
+      "brier_contribution": 0.06627897537747263,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Nina Nikolija Milo\u0161evi\u0107",
@@ -200,7 +248,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Nina Nikolija Milo\u0161evi\u0107'",
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Jovan Leka",
@@ -209,7 +257,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Jovan Leka'; no fighter in fighters.parquet matches name 'Max Gimenis'",
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "79135ef"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Jan B\u0142achowicz",
@@ -218,7 +266,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Jan B\u0142achowicz' (exact or accent-folded)",
       "predicted_at_utc": "2026-07-20T14:24:01Z",
-      "model_version": "690024f"
+      "model_version": "40df77ec43c7"
     }
   ]
 }

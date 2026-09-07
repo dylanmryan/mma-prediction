@@ -3,7 +3,7 @@
   "event_date": "2026-09-12",
   "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Silva_vs._Delgado",
   "predicted_at_utc": "2026-08-31T19:03:41Z",
-  "model_version": "d0bfe66",
+  "model_version": "40df77ec43c7",
   "fights": [
     {
       "fighter_a_name": "Jean Silva",
@@ -30,7 +30,7 @@
       "elo_b": 1592.9380700998374,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Brandon Moreno",
@@ -57,7 +57,7 @@
       "elo_b": 1516.5707906786668,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Tommy McMillen",
@@ -66,7 +66,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Tommy McMillen' (exact or accent-folded); no fighter in fighters.parquet matches name 'Marwan Rahiki' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Manon Fiorot",
@@ -93,7 +93,7 @@
       "elo_b": 1623.0929312044439,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Waldo Cortes-Acosta",
@@ -120,7 +120,7 @@
       "elo_b": 1751.617213242449,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "David Mart\u00ednez",
@@ -147,7 +147,7 @@
       "elo_b": 1616.2805688953017,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Tim Elliott",
@@ -174,7 +174,7 @@
       "elo_b": 1520.359929268661,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Ignacio Bahamondes",
@@ -201,7 +201,7 @@
       "elo_b": 1671.4726735572908,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Yousri Belgaroui",
@@ -210,7 +210,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Yousri Belgaroui' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Ramiro Jimenez",
@@ -219,7 +219,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Ramiro Jimenez' (exact or accent-folded); no fighter in fighters.parquet matches name 'Rodrigo Vera' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Rafa Garc\u00eda",
@@ -228,7 +228,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Rong Zhu' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "JJ Aldrich",
@@ -237,7 +237,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Regina Tarin' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     }
   ]
 }

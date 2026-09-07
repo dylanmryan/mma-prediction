@@ -4,77 +4,79 @@ import pytest
 from mma.dataset import build_fighters
 
 
-def _raw_fighters():
+def _raw():
     return pd.DataFrame(
         {
-            "id": ["07f72a2a7591b409", "8f382b3baa954d2a"],
-            "name": ["Jon Jones", "Amanda Nunes"],
-            "nick_name": ["Bones", "The Lioness"],
-            "wins": [27, 23],
-            "losses": [1, 5],
-            "draws": [0, 0],
-            "height": [193.04, 172.72],
-            "weight": [113.4, 61.23],
-            "reach": [215.9, 175.26],
-            "stance": ["Orthodox", None],
-            "dob": ["Jul 19, 1987", None],
-            "splm": [4.29, 4.9],
-            "str_acc": [57.0, 52.0],
-            "sapm": [2.22, 2.77],
-            "str_def": [64.0, 61.0],
-            "td_avg": [1.93, 2.05],
-            "td_avg_acc": [45.0, 51.0],
-            "td_def": [95.0, 80.0],
-            "sub_avg": [0.5, 0.3],
+            "fighter_id": ["jj", "cm", "xx"],
+            "fighter_name": ["Jon Jones", " Conor McGregor ", "No Data"],
+            "fighter_nick_name": ["Bones", "Notorious", None],
+            "height": ["6' 4\"", "5' 9\"", None],
+            "weight_lbs": [205.0, 155.0, None],
+            "reach_inches": [84.5, 74.0, None],
+            "stance": ["Orthodox", "Southpaw", None],
+            "dob": ["1987-07-19", "1988-07-14", None],
+            "slpm": [4.3, 5.3, 0.0],
+            "str_acc": [57, 49, 0],
+            "sapm": [2.2, 4.0, 0.0],
+            "str_def": [64, 54, 0],
+            "td_avg": [1.9, 0.7, 0.0],
+            "td_acc": [45, 55, 0],
+            "td_def": [95, 67, 0],
+            "sub_avg": [0.5, 0.2, 0.0],
         }
     )
 
 
 def test_schema_and_values():
-    fighters = build_fighters(_raw_fighters())
+    fighters = build_fighters(_raw())
     assert list(fighters.columns) == [
         "fighter_id", "name", "height_cm", "reach_cm", "stance", "dob",
     ]
-    jones = fighters[fighters["name"] == "Jon Jones"].iloc[0]
-    assert jones["fighter_id"] == "07f72a2a7591b409"
-    assert jones["height_cm"] == 193.04
-    assert jones["reach_cm"] == 215.9
-    assert jones["stance"] == "Orthodox"
-    assert pd.Timestamp(jones["dob"]) == pd.Timestamp("1987-07-19")
+    jj = fighters[fighters["fighter_id"] == "jj"].iloc[0]
+    assert jj["name"] == "Jon Jones"
+    assert jj["height_cm"] == pytest.approx(76 * 2.54)
+    assert jj["reach_cm"] == pytest.approx(84.5 * 2.54)
+    assert jj["stance"] == "Orthodox"
+    assert jj["dob"] == pd.Timestamp("1987-07-19")
+    cm = fighters[fighters["fighter_id"] == "cm"].iloc[0]
+    assert cm["name"] == "Conor McGregor"  # stripped
 
 
-def test_missing_stance_and_dob_stay_missing():
-    fighters = build_fighters(_raw_fighters())
-    nunes = fighters[fighters["name"] == "Amanda Nunes"].iloc[0]
-    assert pd.isna(nunes["stance"])
-    assert pd.isna(nunes["dob"])
+def test_missing_stance_dob_height_stay_missing():
+    fighters = build_fighters(_raw())
+    xx = fighters[fighters["fighter_id"] == "xx"].iloc[0]
+    assert pd.isna(xx["stance"]) and pd.isna(xx["dob"])
+    assert pd.isna(xx["height_cm"]) and pd.isna(xx["reach_cm"])
+
+
+def test_unparseable_height_is_missing():
+    raw = _raw()
+    raw.loc[0, "height"] = "--"
+    fighters = build_fighters(raw)
+    assert pd.isna(fighters[fighters["fighter_id"] == "jj"].iloc[0]["height_cm"])
 
 
 def test_duplicate_ids_rejected():
-    raw = pd.concat([_raw_fighters(), _raw_fighters().iloc[[0]]])
-    try:
+    raw = _raw()
+    raw.loc[1, "fighter_id"] = "jj"
+    with pytest.raises(ValueError, match="duplicate fighter ids"):
         build_fighters(raw)
-        raised = False
-    except ValueError:
-        raised = True
-    assert raised
 
 
 def test_missing_id_rejected():
-    raw = _raw_fighters()
-    raw.loc[0, "id"] = None
-    with pytest.raises(ValueError):
+    raw = _raw()
+    raw.loc[1, "fighter_id"] = None
+    with pytest.raises(ValueError, match="missing ids"):
         build_fighters(raw)
 
 
-def test_missing_name_stays_missing():
-    raw = _raw_fighters()
-    raw.loc[0, "name"] = None
-    fighters = build_fighters(raw)
-    assert fighters["name"].isna().sum() == 1
-
-
 def test_leaky_career_columns_dropped():
-    fighters = build_fighters(_raw_fighters())
-    for leaky in ("wins", "losses", "splm", "td_avg"):
+    fighters = build_fighters(_raw())
+    for leaky in ("slpm", "str_acc", "sapm", "str_def", "td_avg", "td_acc",
+                  "td_def", "sub_avg", "weight_lbs", "fighter_nick_name"):
         assert leaky not in fighters.columns
+
+
+def test_sorted_by_id():
+    fighters = build_fighters(_raw())
+    assert list(fighters["fighter_id"]) == ["cm", "jj", "xx"]

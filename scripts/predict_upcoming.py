@@ -5,6 +5,9 @@ horizon, fetches each event's own page, parses its fight card, matches
 fighter names against fighters.parquet, and predicts each matched fight
 with the committed ensemble. Writes one JSON record per event under
 predictions/ (idempotent -- see mma.prospective.write_event_prediction).
+Each record is stamped with `model_version`, a hash of the deployed
+artifacts (see `mma.versioning`), so the track record splits by model,
+not by commit.
 
 `select_upcoming_events`, `ensure_scheduled_events_parsed`, and
 `warn_if_empty_fight_card` are pure/printing functions (unit-tested); the
@@ -14,7 +17,6 @@ rather than pytest.
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -75,19 +77,13 @@ def warn_if_empty_fight_card(event_name: str, wiki_fights: list[dict]) -> bool:
     return False
 
 
-def _git_short_sha() -> str:
-    return subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"],
-        cwd=ROOT, capture_output=True, text=True, check=True,
-    ).stdout.strip()
-
-
 def main() -> None:
     from mma.inference import Ensemble
     from mma.prospective import (
         build_name_index, predict_event, write_event_prediction,
     )
     from mma.snapshots import build_snapshots
+    from mma.versioning import model_version as artifact_model_version
     from mma.wiki_cards import fetch_page_html, parse_fight_card, parse_scheduled_events
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -103,7 +99,7 @@ def main() -> None:
     fighters_indexed = fighters_df.set_index("fighter_id")
     name_index = build_name_index(fighters_df)
     ensemble = Ensemble.load()
-    model_version = _git_short_sha()
+    model_version = artifact_model_version(ROOT)
 
     print(f"Fetching scheduled events list (model_version={model_version})...")
     events_html = fetch_page_html(SCHEDULED_EVENTS_PAGE)

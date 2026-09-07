@@ -3,7 +3,7 @@
   "event_date": "2026-09-05",
   "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Hooker_vs._Parnasse",
   "predicted_at_utc": "2026-08-10T13:24:32Z",
-  "model_version": "f55fd4d",
+  "model_version": "40df77ec43c7",
   "fights": [
     {
       "fighter_a_name": "Dan Hooker",
@@ -12,7 +12,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Salahdine Parnasse' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-10T13:24:32Z",
-      "model_version": "f55fd4d"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Michael Page",
@@ -39,7 +39,7 @@
       "elo_b": 1622.0646727666392,
       "skipped": false,
       "predicted_at_utc": "2026-08-10T13:24:32Z",
-      "model_version": "f55fd4d"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Morgan Charri\u00e8re",
@@ -66,7 +66,7 @@
       "elo_b": 1560.9313893959566,
       "skipped": false,
       "predicted_at_utc": "2026-08-10T13:24:32Z",
-      "model_version": "f55fd4d"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "M\u00e1rio Pinto",
@@ -93,7 +93,7 @@
       "elo_b": 1580.6854117207008,
       "skipped": false,
       "predicted_at_utc": "2026-08-10T13:24:32Z",
-      "model_version": "f55fd4d"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Kurtis Campbell",
@@ -102,7 +102,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Kurtis Campbell' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-10T13:24:32Z",
-      "model_version": "f55fd4d"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Nathaniel Wood",
@@ -129,7 +129,7 @@
       "elo_b": 1606.7469734343383,
       "skipped": false,
       "predicted_at_utc": "2026-08-10T13:24:32Z",
-      "model_version": "f55fd4d"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Matthieu Letho Duclos",
@@ -138,7 +138,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Matthieu Letho Duclos' (exact or accent-folded); no fighter in fighters.parquet matches name 'Luis Felipe Dias' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-10T13:24:32Z",
-      "model_version": "f55fd4d"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Far\u00e8s Ziam",
@@ -165,7 +165,7 @@
       "elo_b": 1537.5247551489463,
       "skipped": false,
       "predicted_at_utc": "2026-08-17T12:57:01Z",
-      "model_version": "dc48663"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Losene Keita",
@@ -174,7 +174,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Losene Keita' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-17T12:57:01Z",
-      "model_version": "dc48663"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Oumar Sy",
@@ -201,7 +201,7 @@
       "elo_b": 1592.8116483372305,
       "skipped": false,
       "predicted_at_utc": "2026-08-17T12:57:01Z",
-      "model_version": "dc48663"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Nora Cornolle",
@@ -210,7 +210,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Klaudia Sygu\u0142a' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-17T12:57:01Z",
-      "model_version": "dc48663"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Delphine Benouaich",
@@ -219,7 +219,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Delphine Benouaich' (exact or accent-folded); no fighter in fighters.parquet matches name 'Sofia Montenegro' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:44Z",
-      "model_version": "0d037cf"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Daniil Donchenko",
@@ -228,7 +228,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Daniil Donchenko' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:40Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Michael Aljarouj",
@@ -237,7 +237,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Michael Aljarouj' (exact or accent-folded); no fighter in fighters.parquet matches name 'Fabi\u00e0 Sintes' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:40Z",
-      "model_version": "d0bfe66"
+      "model_version": "40df77ec43c7"
     }
   ]
 }
