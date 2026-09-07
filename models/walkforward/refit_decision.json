@@ -1,0 +1,135 @@
+{
+  "rule": "B ships as the deployment recipe iff torch B pooled winner log-loss <= torch A + sigma_seed (spec v3 \u00a74 SP1)",
+  "xgb": {
+    "A_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6537,
+      "accuracy": 0.6132,
+      "brier": 0.2311,
+      "ece": 0.0138,
+      "joint_log_loss": 2.1921,
+      "method_macro_f1": 0.33,
+      "round_macro_f1": 0.183,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "B_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6525,
+      "accuracy": 0.6151,
+      "brier": 0.2305,
+      "ece": 0.0178,
+      "joint_log_loss": 2.1836,
+      "method_macro_f1": 0.3325,
+      "round_macro_f1": 0.1753,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "delta_B_minus_A": -0.0012,
+    "sigma_seed": 0.0003464101615137373,
+    "B_not_worse_than_A_by_sigma": true,
+    "bar_check_B_vs_A": {
+      "bar": 0.003,
+      "sigma_seed": 0.0003464101615137373,
+      "delta": -0.0012,
+      "fold_deltas": {
+        "2018": -0.0054,
+        "2019": -0.0017,
+        "2020": -0.007,
+        "2021": 0.0052,
+        "2022": -0.0015,
+        "2023": -0.0006,
+        "2024": -0.0014,
+        "2025": 0.0007
+      },
+      "worst_fold_delta": 0.0052,
+      "comparable": true,
+      "missing_folds": [],
+      "clears_delta": false,
+      "no_fold_regression": true,
+      "ships": false
+    },
+    "per_fold_B_minus_A": {
+      "2018": -0.0054,
+      "2019": -0.0017,
+      "2020": -0.007,
+      "2021": 0.0052,
+      "2022": -0.0015,
+      "2023": -0.0006,
+      "2024": -0.0014,
+      "2025": 0.0007
+    },
+    "budget": {
+      "fixed_rounds": {
+        "winner": 81,
+        "method": 79,
+        "round": 75
+      }
+    }
+  },
+  "torch": {
+    "A_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.651,
+      "accuracy": 0.6099,
+      "brier": 0.2299,
+      "ece": 0.0139,
+      "joint_log_loss": 2.3129,
+      "method_macro_f1": 0.3908,
+      "round_macro_f1": 0.3051,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "B_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6512,
+      "accuracy": 0.6184,
+      "brier": 0.23,
+      "ece": 0.0121,
+      "joint_log_loss": 2.314,
+      "method_macro_f1": 0.4036,
+      "round_macro_f1": 0.3146,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "delta_B_minus_A": 0.0002,
+    "sigma_seed": 0.0003464101615137373,
+    "B_not_worse_than_A_by_sigma": true,
+    "bar_check_B_vs_A": {
+      "bar": 0.003,
+      "sigma_seed": 0.0003464101615137373,
+      "delta": 0.0002,
+      "fold_deltas": {
+        "2018": 0.0,
+        "2019": 0.0008,
+        "2020": -0.0033,
+        "2021": -0.0033,
+        "2022": -0.0016,
+        "2023": 0.0023,
+        "2024": 0.0023,
+        "2025": 0.0024
+      },
+      "worst_fold_delta": 0.0024,
+      "comparable": true,
+      "missing_folds": [],
+      "clears_delta": false,
+      "no_fold_regression": true,
+      "ships": false
+    },
+    "per_fold_B_minus_A": {
+      "2018": 0.0,
+      "2019": 0.0008,
+      "2020": -0.0033,
+      "2021": -0.0033,
+      "2022": -0.0016,
+      "2023": 0.0023,
+      "2024": 0.0023,
+      "2025": 0.0024
+    },
+    "budget": {
+      "fixed_epochs": 14,
+      "temperature": 1.1
+    }
+  },
+  "deployment_recipe": "refit_through_latest"
+}
