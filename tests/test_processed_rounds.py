@@ -25,7 +25,9 @@ def test_round_stats_join_to_fights():
     assert set(rounds["fight_id"]) <= set(fights["fight_id"])
     joined = rounds.merge(fights[["fight_id", "fighter_a_id", "fighter_b_id"]], on="fight_id")
     a = joined[joined["corner"] == "a"]
+    b = joined[joined["corner"] == "b"]
     assert (a["fighter_id"] == a["fighter_a_id"]).all()
+    assert (b["fighter_id"] == b["fighter_b_id"]).all()
 
 
 def test_round_totals_match_fight_totals_for_recent_fights():
@@ -45,7 +47,12 @@ def test_round_totals_match_fight_totals_for_recent_fights():
 
 def test_control_seconds_plausible():
     rounds = pd.read_parquet(PROCESSED / "round_stats.parquet")
+    fights = pd.read_parquet(PROCESSED / "fights.parquet")
     assert rounds["ctrl_sec"].dropna().between(0, 720).all()  # 10-min rounds in early eras
+    recent = rounds.merge(fights[["fight_id", "date"]], on="fight_id").query(
+        "date >= '2020-01-01'"
+    )
+    assert recent["ctrl_sec"].notna().all()  # 0% NaN from 2020 on
 
 
 def test_bonuses_table():
@@ -53,7 +60,9 @@ def test_bonuses_table():
     fights = pd.read_parquet(PROCESSED / "fights.parquet")
     assert len(bonuses) > 2000
     assert set(bonuses["fight_id"]) <= set(fights["fight_id"])
-    assert set(bonuses["bonus_type"]) == {
+    # >= rather than == so a new upstream bonus label doesn't turn the
+    # weekly refresh red.
+    assert set(bonuses["bonus_type"]) >= {
         "Performance of the Night", "Fight of the Night",
         "Knockout of the Night", "Submission of the Night",
     }

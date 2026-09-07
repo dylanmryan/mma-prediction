@@ -34,6 +34,7 @@ jobs:
         #   KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         #   KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
+          set -o pipefail
           python scripts/refresh_data.py | tee "$RUNNER_TEMP/refresh_output.txt"
           grep '^REFRESH_NEEDED=' "$RUNNER_TEMP/refresh_output.txt" | sed 's/REFRESH_NEEDED=/refresh=/' >> "$GITHUB_OUTPUT"
 

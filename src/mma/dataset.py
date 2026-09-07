@@ -191,18 +191,17 @@ def build_fight_stats(raw: pd.DataFrame) -> pd.DataFrame:
     ids_b = raw["b_fighter_id"].astype("string").str.strip()
     if ids_a.isna().any() or ids_b.isna().any():
         raise ValueError("fights with missing corner fighter ids")
+    corner_ids = {"a": ids_a, "b": ids_b}
     no_record = pd.to_numeric(raw["rounds_fought"], errors="coerce").fillna(0) == 0
     stat_columns = (
         list(_CORE_STAT_SUFFIXES) + ["ctrl_sec", "rev"] + list(_TARGET_STAT_SUFFIXES)
     )
     frames = []
-    for corner, prefix, id_column in (
-        ("a", "r_total_", "r_fighter_id"), ("b", "b_total_", "b_fighter_id"),
-    ):
+    for corner, prefix in (("a", "r_total_"), ("b", "b_total_")):
         frame = pd.DataFrame(
             {
                 "fight_id": fight_ids,
-                "fighter_id": raw[id_column].astype("string").str.strip(),
+                "fighter_id": corner_ids[corner],
                 "corner": pd.Series(corner, index=raw.index, dtype="string"),
             }
         )
@@ -233,14 +232,15 @@ def build_round_stats(raw: pd.DataFrame) -> pd.DataFrame:
     ids_b = raw["b_id"].astype("string").str.strip()
     if ids_a.isna().any() or ids_b.isna().any():
         raise ValueError("fights with missing corner fighter ids")
+    corner_ids = {"a": ids_a, "b": ids_b}
     frames = []
-    for corner, prefix, id_column in (("a", "r_", "r_id"), ("b", "b_", "b_id")):
+    for corner, prefix in (("a", "r_"), ("b", "b_")):
         frame = pd.DataFrame(
             {
                 "fight_id": fight_ids,
                 "round_no": round_no,
                 "corner": pd.Series(corner, index=raw.index, dtype="string"),
-                "fighter_id": raw[id_column].astype("string").str.strip(),
+                "fighter_id": corner_ids[corner],
             }
         )
         for out_name, suffix in _CORE_STAT_SUFFIXES.items():

@@ -73,22 +73,27 @@ def test_duplicate_fight_ids_rejected():
 
 
 def test_no_round_record_nulls_stats():
+    # f2 (row 0) has real target-column values in the fixture, unlike f1
+    # (row 1), whose target columns are already None regardless of
+    # rounds_fought -- so null it out here to make the target-column
+    # assertions below non-vacuous.
     raw = _raw_master()
-    raw.loc[1, "rounds_fought"] = 0
+    raw.loc[0, "rounds_fought"] = 0
     stats = build_fight_stats(raw).set_index(["fight_id", "corner"])
     for corner in ("a", "b"):
-        row = stats.loc[("f1", corner)]
+        row = stats.loc[("f2", corner)]
         assert pd.isna(row["kd"])
         assert pd.isna(row["sig_landed"])
         assert pd.isna(row["ctrl_sec"])
         assert pd.isna(row["rev"])
         assert pd.isna(row["head_landed"])
+        assert pd.isna(row["ground_attempted"])
         assert pd.notna(row["fighter_id"])
-    assert stats.loc[("f1", "a"), "fighter_id"] == "cm"
-    assert stats.loc[("f1", "b"), "fighter_id"] == "ed"
-    f2 = stats.loc[("f2", "a")]
-    assert pd.notna(f2["kd"]) and pd.notna(f2["sig_landed"])
-    assert pd.notna(f2["ctrl_sec"]) and pd.notna(f2["head_landed"])
+    assert stats.loc[("f2", "a"), "fighter_id"] == "jj"
+    assert stats.loc[("f2", "b"), "fighter_id"] == "dc"
+    f1 = stats.loc[("f1", "a")]
+    assert pd.notna(f1["kd"]) and pd.notna(f1["sig_landed"])
+    assert pd.notna(f1["ctrl_sec"])
 
 
 def test_missing_corner_id_rejected():

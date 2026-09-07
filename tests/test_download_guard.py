@@ -64,8 +64,12 @@ def test_download_rejects_incomplete_snapshot(tmp_path, monkeypatch):
 
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
+    stale = raw_dir / "UFC.csv"
+    stale.write_text("stale")
 
     with pytest.raises(FileNotFoundError, match="round.csv"):
         download(raw_dir)
 
-    assert list(raw_dir.iterdir()) == []
+    # verify-before-touching-raw_dir: an incomplete snapshot must not clear
+    # out whatever raw_dir already held.
+    assert stale.exists()
