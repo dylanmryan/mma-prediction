@@ -80,7 +80,9 @@ def main() -> None:
 
     download(RAW_DIR)
 
-    raw_fights = pd.read_csv(RAW_DIR / "UFC.csv")
+    raw_fights = pd.read_csv(
+        RAW_DIR / "master.csv", usecols=["fight_id", "event_date"]
+    ).rename(columns={"event_date": "date"})
     if PROCESSED_FIGHTS.exists():
         processed_fights = pd.read_parquet(PROCESSED_FIGHTS)
     else:
