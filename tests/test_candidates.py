@@ -48,7 +48,9 @@ def test_xgb_candidate_shapes_and_signal(table, fold):
     pred, info = XGBCandidate(params={"max_depth": 2}).fit_predict(table, fold, None)
     n = int(fold.eval.sum())
     assert pred["winner"].shape == (n,) and pred["method"].shape == (n, 3) and pred["round"].shape == (n, 4)
-    assert "best_iteration" in info and info["n_train"] == int(fold.train.sum())
+    assert set(info["best_iteration"]) == {"winner", "method", "round"}
+    assert all(isinstance(v, int) for v in info["best_iteration"].values())
+    assert info["n_train"] == int(fold.train.sum())
     y = table.loc[fold.eval, "y_winner"].to_numpy()
     assert np.mean((pred["winner"] > 0.5) == (y == 1)) > 0.6
 
@@ -56,7 +58,18 @@ def test_xgb_candidate_shapes_and_signal(table, fold):
 def test_xgb_candidate_fixed_budget_uses_inner_val_for_training(table, fold):
     cand = XGBCandidate(params={"max_depth": 2}, fixed_rounds=20)
     pred, info = cand.fit_predict(table, fold, None)
-    assert info["best_iteration"] == 20 and info["n_train"] == int((fold.train | fold.inner_val).sum())
+    assert info["best_iteration"] == {"winner": 20, "method": 20, "round": 20}
+    assert info["n_train"] == int((fold.train | fold.inner_val).sum())
+
+
+def test_xgb_candidate_per_head_fixed_rounds(table, fold):
+    cand = XGBCandidate(params={"max_depth": 2},
+                        fixed_rounds={"winner": 15, "method": 12, "round": 8})
+    pred, info = cand.fit_predict(table, fold, None)
+    n = int(fold.eval.sum())
+    assert pred["winner"].shape == (n,) and pred["method"].shape == (n, 3) and pred["round"].shape == (n, 4)
+    assert info["best_iteration"] == {"winner": 15, "method": 12, "round": 8}
+    assert info["n_train"] == int((fold.train | fold.inner_val).sum())
 
 
 def test_xgb_candidate_rejects_fold_missing_a_class(table, fold):
@@ -81,6 +94,17 @@ def test_torch_candidate_masks_round_45_for_three_round_fights(table, fold):
     three = (table.loc[fold.eval, "scheduled_rounds"].fillna(3) <= 3).to_numpy()
     assert np.all(pred["round"][three, 3] < 1e-6)
     assert np.allclose(pred["round"].sum(axis=1), 1.0)
+
+
+def test_torch_candidate_pins_threads(table, fold):
+    import torch
+
+    cand = TorchCandidate(seeds=(0,), config={"hidden": (16, 8)}, max_epochs=3)
+    pred_a, info_a = cand.fit_predict(table, fold, None)
+    torch.set_num_threads(4)
+    pred_b, info_b = cand.fit_predict(table, fold, None)
+    assert np.array_equal(pred_a["winner"], pred_b["winner"])
+    assert info_a["torch_threads"] == 1 and info_b["torch_threads"] == 1
 
 
 def test_torch_candidate_fixed_epochs(table, fold):

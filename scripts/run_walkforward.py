@@ -34,11 +34,23 @@ OUT_DIR = ROOT / "models" / "walkforward"
 
 
 def fixed_budget_from(report: dict) -> dict:
-    """Median fit budget (and temperature) across the folds of a reference report."""
+    """Median fit budget (and temperature) across the folds of a reference report.
+
+    ``best_iteration`` is either a per-fold int (old single-budget XGB reports)
+    or a per-fold dict of per-head best_iteration (winner/method/round); the
+    latter yields a per-head median dict in ``fixed_rounds``.
+    """
     info = report["fit_info"]
     budget = {}
     if "best_iteration" in info:
-        budget["fixed_rounds"] = int(np.median(info["best_iteration"]))
+        entries = info["best_iteration"]
+        if entries and isinstance(entries[0], dict):
+            budget["fixed_rounds"] = {
+                head: int(np.median([entry[head] for entry in entries]))
+                for head in ("winner", "method", "round")
+            }
+        else:
+            budget["fixed_rounds"] = int(np.median(entries))
     if "best_epoch" in info:
         per_fold = [float(np.median(e)) if isinstance(e, list) else float(e) for e in info["best_epoch"]]
         budget["fixed_epochs"] = int(np.median(per_fold)) + 1

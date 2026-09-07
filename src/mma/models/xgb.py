@@ -21,6 +21,7 @@ BASE_PARAMS = {
     "subsample": 0.8,
     "colsample_bytree": 0.8,
     "tree_method": "hist",
+    "random_state": 0,
 }
 MAX_ROUNDS = 2000
 EARLY_STOP = 50
