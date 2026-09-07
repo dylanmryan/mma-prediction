@@ -29,6 +29,80 @@ from mma.snapshots import build_snapshots
 ROOT = Path(__file__).resolve().parent
 PROCESSED = ROOT / "data" / "processed"
 DISPLAY_PRIORS = ROOT / "models" / "torch" / "display_priors.json"
+TORCH_METRICS = ROOT / "models" / "torch" / "metrics_val.json"
+XGB_METRICS = ROOT / "models" / "xgb_metrics_val.json"
+ELO_WALKFORWARD = ROOT / "models" / "walkforward" / "elo.json"
+
+
+def _read_json(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _fold_span(fold_years: list) -> str:
+    """'2018-2025 (+2026)' from the harness fold years; the last fold absorbs
+    every fight after its year, so the newest partial year rides along."""
+    if not fold_years:
+        return "2018-2025 (+2026)"
+    return f"{min(fold_years)}-{max(fold_years)} (+{max(fold_years) + 1})"
+
+
+def model_card_text() -> str:
+    """Model-card caption built from the committed metrics files.
+
+    Under the refit_through recipe the metrics files quote the walk-forward
+    harness's pooled numbers (the evidence behind the deployed budget); the
+    text says so and names the training cutoff. Falls back to a numberless
+    card if any file is missing or unreadable.
+    """
+    torch_m = _read_json(TORCH_METRICS)
+    xgb_m = _read_json(XGB_METRICS)
+    elo_m = _read_json(ELO_WALKFORWARD).get("pooled", {})
+    head = ("Model card: multi-task net (winner/method/finish-round), 5-seed "
+            "ensemble, temperature-calibrated. ")
+    tail = ("The prospective track record (predictions/track_record.json) is the "
+            "only true holdout. Method and round probabilities assume independence "
+            "from the winner, and predictions are symmetrized across both fighter "
+            "orderings (see code comments). "
+            "[Source](https://github.com/dylanmryan/mma-prediction)")
+
+    def _triple(block: dict) -> str | None:
+        # metrics files say "log_loss"; the harness's pooled blocks say
+        # "winner_log_loss"
+        log_loss = block.get("log_loss", block.get("winner_log_loss"))
+        try:
+            return (f"{block['accuracy']:.3f} accuracy, {log_loss:.3f} "
+                    f"log-loss, {block['brier']:.3f} Brier")
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    torch_line = _triple(torch_m.get("winner_ensemble", {}))
+    if torch_m.get("mode") == "refit_through" and torch_line:
+        n = torch_m["winner_ensemble"].get("n_val")
+        n_text = f"n={n:,} pooled fights" if isinstance(n, int) else "pooled"
+        rivals = []
+        xgb_line = _triple(xgb_m.get("winner", {}))
+        if xgb_m.get("mode") == "refit_through" and xgb_line:
+            rivals.append(f"XGBoost {xgb_line}")
+        elo_line = _triple(elo_m)
+        if elo_line:
+            rivals.append(f"Elo {elo_line}")
+        rival_text = f" — vs {'; '.join(rivals)}" if rivals else ""
+        return (
+            head
+            + f"Evaluated by expanding-window walk-forward "
+            f"{_fold_span(torch_m.get('harness_fold_years', []))}, {n_text}: "
+            f"{torch_line}{rival_text}. The deployed model is refit on every "
+            f"decisive fight through {torch_m.get('train_through', '?')} "
+            f"({torch_m.get('n_train', '?'):,} fights), so no historical year is "
+            "held out from it. " + tail
+        )
+    if torch_line:
+        n = torch_m["winner_ensemble"].get("n_val")
+        return (head + f"Held-out validation ({n:,} fights): {torch_line}. " + tail)
+    return head + "Metrics files not found. " + tail
 
 st.set_page_config(page_title="MMA Fight Predictor", page_icon="🥊", layout="wide")
 
@@ -49,7 +123,9 @@ def load_everything():
     as_of = fights["date"].max()
     weight_classes = sorted(fights["weight_class"].dropna().unique().tolist())
     # Mean-matching correction factors precomputed by
-    # scripts/build_display_priors.py from the training split + ensemble.
+    # scripts/build_display_priors.py: empirical base rates over the rows the
+    # deployed ensemble trained on (every fight through its train_through
+    # under the refit recipe) divided by the ensemble's mean prediction there.
     display_factors = json.loads(DISPLAY_PRIORS.read_text())
     return (
         fights, fighters.set_index("fighter_id"), ratings, snapshots, ensemble,
@@ -267,10 +343,13 @@ if MARKET_BENCHMARK.exists():
     st.divider()
     st.subheader("Model vs. the betting market")
     st.caption(
-        f"On {head['n_fights']:,} out-of-sample fights (2021+, never seen in "
-        "training), the model's win probabilities vs. devigged sportsbook "
-        "closing lines. Betting odds are an evaluation yardstick here, never a "
-        "model input."
+        f"On {head['n_fights']:,} fights from 2021 onward, the model's win "
+        "probabilities vs. devigged sportsbook closing lines — computed once "
+        f"({benchmark.get('computed_once_on', 'July 2026')}) against the "
+        "pre-refit model, for which those years were out of sample; the "
+        "currently deployed model trains through the latest event, so this "
+        "comparison is not recomputed. Betting odds are an evaluation "
+        "yardstick here, never a model input."
     )
     compare = pd.DataFrame(
         {
@@ -325,12 +404,4 @@ if MARKET_BENCHMARK.exists():
     )
 
 st.divider()
-st.caption(
-    "Model card: multi-task net (winner/method/finish-round), 5-seed ensemble, "
-    "temperature-calibrated. Validation (2021-2023): accuracy 0.606, log-loss 0.654, "
-    "Brier 0.231 — vs XGBoost 0.595/0.658/0.233 and Elo 0.576/0.678/0.242. "
-    "Test years (2024+) held out. Method and round probabilities assume "
-    "independence from the winner, and predictions are symmetrized across "
-    "both fighter orderings (see code comments). "
-    "[Source](https://github.com/dylanmryan/mma-prediction)"
-)
+st.caption(model_card_text())

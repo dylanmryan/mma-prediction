@@ -1341,3 +1341,10 @@ git checkout main && git merge --no-ff sp1-walkforward -m "Merge sp1-walkforward
   - Display priors are now computed on in-sample rows (SP4 retires them).
   - README results section rewrite (Task 11).
   - The harness must be re-run to refresh `metrics_val.json` evidence after a data refresh -- the weekly refresh Action does not run it.
+- Task 10/11 review follow-ups (done in Task 11 unless marked otherwise):
+  - Display priors are now computed on the deployed model's training rows (`mma.inference.deployed_training_mask`, read from `models/torch/metrics_val.json`: every row through `train_through` under the refit recipe) rather than the old pre-2021 split; `display_priors.json` regenerated, model hash unchanged (`55ca11491332`, priors are outside the hash).
+  - `scripts/roll_window.py --execute` is guarded: it aborts when the incumbent is a refit model whose `train_through` reaches into the newest-2-years slice (in-sample for the incumbent); the docstring and printed protocol now say a split-protocol candidate never ships as-is and that `model_version` is the artifact hash. Re-gating the hook on the walk-forward harness is SP4.
+  - `scripts/final_test_eval.py` is guarded: `SystemExit` whenever the deployed torch metrics say `refit_through` -- `final_test_metrics.json` stays frozen from the July 2026 model.
+  - Metrics provenance: refit metrics files record `harness_features_max_date` and `harness_fold_years`; the train scripts warn when `train_through` is newer than the harness's data; `tests/test_processed_torch.py` / `tests/test_processed_xgb.py` pin the quoted evidence to the committed harness report and refit decision.
+  - Temperature-drift experiment (per-fold optimal temperature ~1.3-1.65 on 2018-2022 vs ~0.9-1.0 on 2023-2025; recipe applies 1.1) is deferred to SP2's recency block.
+  - Re-running the harness after a weekly data refresh stays manual (`run_walkforward.py`, `noise_floor.py`, `refit_decision.py`) until SP4 automates it; README Development notes say so.

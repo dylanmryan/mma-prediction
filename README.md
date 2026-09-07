@@ -8,17 +8,18 @@
 
 Predicting UFC fight winners, method of victory, and finish round —
 an Elo rating system, gradient boosting, and a calibrated multi-task
-neural-network ensemble, each evaluated honestly on strict time splits,
-plus an interactive Streamlit matchup explorer.
+neural-network ensemble, each evaluated honestly by expanding-window
+walk-forward over 2018–2026, plus an interactive Streamlit matchup explorer.
 
 **Highlights**
 
 - **Point-in-time discipline, machine-verified**: every feature is built only
   from data available before each fight; a truncation-invariance test proves
   no feature can see the future.
-- **Baseline ladder**: coin flip → Elo (0.559 acc) → XGBoost (0.606) →
-  5-seed calibrated neural ensemble (0.608, best log-loss) on 1,709
-  never-tuned-on validation fights.
+- **Baseline ladder**: coin flip → Elo (0.553 acc, 0.683 log-loss) →
+  XGBoost (0.613, 0.654) → 5-seed calibrated neural ensemble (0.610, 0.651)
+  on 4,804 walk-forward fights, each scored by a model that had never seen
+  its year.
 - **Uncertainty done properly**: deep-ensemble spread + MC dropout, per-seed
   temperature scaling, display probabilities recalibrated to historical base rates.
 - **Self-updating**: a weekly GitHub Action refreshes the dataset and rebuilds
@@ -67,15 +68,67 @@ refresh weekly and commits any rebuilt artifacts automatically.
 
 ## Results so far
 
-All models are evaluated on a strict time split: trained on pre-2021 fights,
-reported on 2021–2023 validation fights. **Test years (2024+) are held out
-until the final model comparison.** Numbers below are from the September
-2026 retrain on the fuller dataset; the
-[Final held-out test results](#final-held-out-test-results-2024) and the
-market benchmark are one-time artifacts from July 2026 and are left as
-recorded.
+Every model is evaluated by **expanding-window walk-forward** over
+2018–2026 (`scripts/run_walkforward.py`, reports in `models/walkforward/`),
+and the deployed models are then **refit on every decisive fight through the
+latest event** — there is no longer a historical year held out from the model
+the app serves. The [prospective track record](#prospective-track-record) —
+predictions committed to git before the fights happen — is the only true
+holdout. The [Final held-out test results](#final-held-out-test-results-2024)
+and the market benchmark are one-time artifacts from July 2026 and are left
+as recorded.
 
-**Winner prediction** (1,709 validation fights):
+### Walk-forward evaluation (2018–2026)
+
+Protocol: for each fold year *Y* from 2018 to 2025, train on every fight
+dated before *Y−1*, early-stop (and, for the neural net, fit per-seed
+temperatures) on *Y−1*, and score *Y*; the last fold also absorbs the
+2026 fights. Each fight is scored exactly once, by a model that never saw
+its year, and the eight folds pool to **4,804 fights**. Elo carries no
+tuning step: its ratings are recomputed point-in-time and scored directly.
+
+**Winner prediction** (4,804 pooled walk-forward fights, 2018–2026):
+
+| Model | Accuracy | Log-loss | Brier |
+|---|---|---|---|
+| Elo baseline | 0.553 | 0.683 | 0.245 |
+| XGBoost (46 features) | 0.613 | 0.654 | 0.231 |
+| **Neural net** (5-seed ensemble, calibrated) | **0.610** | **0.651** | **0.230** |
+
+Pooled method macro-F1: XGBoost 0.330, neural net 0.391; finish-round
+macro-F1 (finishes only, 2,446 fights): XGBoost 0.183, neural net 0.305 —
+the same trade-off as before: the class-weighted neural heads identify
+submissions and early finishes instead of defaulting to the majority class.
+
+**Noise floor and pre-registered bar.** Re-running the neural walk-forward
+with three disjoint 5-seed sets gives pooled log-losses of 0.6510 / 0.6516 /
+0.6510, i.e. **σ_seed ≈ 0.00035** (an n=3 estimate; 95% CI roughly
+0.00018–0.0022, `models/walkforward/noise_floor.json`). The pre-registered
+bar for a challenger to *replace* the incumbent is **0.003 pooled log-loss**
+— roughly 9σ, so a change has to be far larger than seed-to-seed wobble, and
+must not regress any single fold, before it ships.
+
+**Refit strategy.** The harness then asked whether early-stopping on a
+held-out year (protocol A) is actually necessary, or whether a fixed budget
+taken from those early-stopping runs, trained on *all* data through the
+newest year (protocol B), does as well. On the same folds: XGBoost
+0.6537 → 0.6524, neural net 0.6510 → 0.6512 — both within the noise floor
+(`models/walkforward/refit_decision.json`). Since B is not worse and uses
+every available fight, the deployed models are therefore trained on all
+**11,238 decisive fights through 2026-08-08** with that fixed budget (neural
+net: 14 epochs, temperature 1.1 on every seed; XGBoost: 82/80/76 trees for
+the winner/method/round heads). `models/torch/metrics_val.json` and
+`models/xgb_metrics_val.json` record the recipe and quote the harness
+numbers as their evidence.
+
+### Original validation window (2021–2023, for continuity)
+
+The numbers below described models trained on pre-2021 fights only and
+scored on 2021–2023 (1,709 fights); they no longer describe the deployed
+models, which train through 2026, and are kept for continuity with earlier
+write-ups.
+
+**Winner prediction** (1,709 validation fights, pre-2021 models):
 
 | Model | Accuracy | Log-loss | Brier |
 |---|---|---|---|
@@ -95,15 +148,17 @@ genuinely hard; these numbers are reported honestly rather than hidden.
 
 ## Final held-out test results (2024+)
 
-*Computed once on 2026-07-13 against the models and 8,337-fight dataset of
-that date; not recomputed after the September 2026 data expansion. The 2024+
-holdout is retired: it is spent as a one-time test and will be folded into the
-walk-forward evaluation planned for the next phase.*
+*This artifact is frozen from the July 2026 model: computed once on
+2026-07-13 against the pre-2021-trained models and 8,337-fight dataset of
+that date, and never recomputed. The 2024+ years are now part of both the
+walk-forward evaluation above and the deployed model's training data, so
+this holdout cannot be repeated — `scripts/final_test_eval.py` refuses to
+run against a refit model.*
 
 These numbers were computed exactly once, by `scripts/final_test_eval.py`,
-after all development was frozen — the 2024+ fights were never read by any
-training, tuning, or calibration code at any point in the project (the
-per-seed temperatures were fit on 2021–2023 validation and reused as-is).
+after all development was frozen — at that point the 2024+ fights had never
+been read by any training, tuning, or calibration code (the per-seed
+temperatures were fit on 2021–2023 validation and reused as-is).
 
 **Winner prediction** (873 test fights):
 
@@ -133,9 +188,11 @@ slightly (0.576 → 0.553), and the ladder's ordering was preserved.
 
 The neural net is a multi-task network (shared trunk; winner, method, and
 finish-round heads) trained as a deterministic 5-seed ensemble with per-seed
-temperature scaling — fitted temperatures all land near 1.0, i.e. the raw
-model was already well calibrated. Uncertainty comes from ensemble spread
-(mean 0.087) and MC dropout. Per the Phase 3 ablation, the era-proxy
+temperature scaling — in the original split protocol the fitted temperatures
+all landed near 1.0, i.e. the raw model was already well calibrated; the
+deployed refit applies the harness-derived temperature 1.1 to every seed.
+Uncertainty comes from ensemble spread (mean 0.087 on the original
+validation window) and MC dropout. Per the Phase 3 ablation, the era-proxy
 `*_missing` flags are excluded from its inputs.
 
 What predicts the winner? Reach and age differentials, Elo differential, and
@@ -244,14 +301,21 @@ its complete artifact, per-seed temperatures included), and promotes only if
 the candidate beats the incumbent by more than 0.002 log-loss. On promotion
 the candidate ensemble is *staged* into `models/torch` (the incumbent is
 backed up on disk first) and nothing else happens — the script performs no
-git writes. A human then runs the suite, reviews the metrics diff, and
+git writes. A human then re-runs the refit recipe (bare `scripts/train_xgb.py`,
+`scripts/train_torch.py`, `scripts/build_display_priors.py` — a split-protocol
+candidate never ships as-is), runs the suite, reviews the metrics diff, and
 commits by hand; the new model's artifact hash (`mma.versioning.model_version`,
 computed over the torch weights and preprocessing stats) becomes the new
 `model_version` and starts a fresh `track_record.json` section automatically.
 Promotion is deliberately a
 manual, stage-only step (`--execute`, run by hand via `workflow_dispatch`)
 and is never wired into CI auto-promotion — the weekly Action only ever runs
-it in `--dry-run` and prints the report.
+it in `--dry-run` and prints the report. One caveat since the refit recipe
+shipped: the deployed incumbent trains through the latest event, so the
+newest-2-years slice is *in-sample* for it and `--execute` now aborts
+rather than run an invalid comparison. Until SP4 moves this gate onto the
+walk-forward harness, recipe comparisons go through the harness
+(`models/walkforward/`), not this slice.
 
 ## Model vs. the betting market
 
@@ -281,10 +345,13 @@ reversed column order (proving this isn't a "column 1 is always the
 favorite" bug) — before any aggregate numbers are trusted.
 
 The **headline comparison** restricts to fights on or after 2021-01-01 —
-the model's validation+test era, which it never trained on — so the model
-isn't credited for fights it already knows the answer to. Odds coverage
-isn't total, but on the matched, 2021+, odds-available set (**1,956
-fights**):
+the validation+test era of the July 2026 model this benchmark was computed
+against, which that model never trained on — so the model isn't credited
+for fights it already knows the answer to. (The currently deployed model is
+refit through the latest event, so those years are in-sample for it and the
+benchmark is left as the one-time July 2026 artifact rather than recomputed.)
+Odds coverage isn't total, but on the matched, 2021+, odds-available set
+(**1,956 fights**):
 
 | | Accuracy | Log-loss | Brier |
 |---|---|---|---|
@@ -336,12 +403,20 @@ and the full ROI sweep at 0%/5%/10% thresholds) are in the committed
   Better still, keep the repo itself outside iCloud (or exclude `.git` from
   sync): sync has corrupted `.git` metadata here more than once.
 - `OMP_NUM_THREADS=1` for any script that imports both torch and xgboost.
-- **Model identity.** Prospective predictions are stamped with
+- **Model identity and evidence.** Prospective predictions are stamped with
   `mma.versioning.model_version()`, a hash of the deployed torch weights and
   preprocessing statistics, so the track record splits by model, not by
   commit. Retraining (weekly refresh or walk-forward promotion) starts a new
   section automatically; retraining is deterministic, so an unchanged
-  dataset yields an unchanged version.
+  dataset yields an unchanged version. The evidence behind each deployed
+  model lives in `models/walkforward/` (the harness reports, noise floor,
+  and refit decision), and the metrics files quote it. After a weekly data
+  refresh the refit reuses the committed budget (14 epochs / T 1.1;
+  82/80/76 trees) on the newer data, but the harness reports are *not*
+  re-run by the Action — re-run `scripts/run_walkforward.py`,
+  `scripts/noise_floor.py`, and `scripts/refit_decision.py` by hand to
+  refresh the evidence (the train scripts warn when the harness's data is
+  older than the training cutoff). Automating that is SP4.
 
 ## Interactive app
 
