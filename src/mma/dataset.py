@@ -45,19 +45,19 @@ def build_fighters(raw: pd.DataFrame) -> pd.DataFrame:
     return fighters.sort_values("fighter_id").reset_index(drop=True)
 
 
-_NO_CONTEST_METHODS = {"overturned", "could not continue", "dq"}
+def _winner_code(status, winner_id, id_a: str, id_b: str) -> str:
+    """'a'/'b' from the winning corner; 'draw'/'nc' from result_status.
 
-
-def _winner_code(winner_id, id_a: str, id_b: str, method_raw) -> str:
-    """'a'/'b' from the winning corner; 'draw'/'nc' when there is no winner.
-
-    No-winner fights are no-contests only for the explicit NC method values;
-    anything else with no winner (decisions, early-era "Other") is a draw.
+    result_status is authoritative for no-winner fights ('draw',
+    'no_contest'); a 'win' whose winner_id matches neither corner is
+    treated as a no-contest rather than guessed.
     """
-    if pd.isna(winner_id):
-        text = "" if pd.isna(method_raw) else str(method_raw).strip().lower()
-        return "nc" if text in _NO_CONTEST_METHODS else "draw"
-    winner = str(winner_id).strip()
+    text = "" if pd.isna(status) else str(status).strip().lower()
+    if text == "draw":
+        return "draw"
+    if text == "no_contest":
+        return "nc"
+    winner = None if pd.isna(winner_id) else str(winner_id).strip()
     if winner == id_a:
         return "a"
     if winner == id_b:
@@ -65,38 +65,46 @@ def _winner_code(winner_id, id_a: str, id_b: str, method_raw) -> str:
     return "nc"
 
 
-def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
-    """One row per fight: ids, date, winner code, targets, context."""
-    ids_a = raw["r_id"].astype("string").str.strip()
-    ids_b = raw["b_id"].astype("string").str.strip()
+def _require_unique_fight_ids(raw: pd.DataFrame) -> pd.Series:
     fight_ids = raw["fight_id"].astype("string").str.strip()
     if fight_ids.isna().any() or not fight_ids.is_unique:
         raise ValueError("fight_id must be present and unique")
+    return fight_ids
+
+
+def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
+    """One row per fight from master.csv: ids, date, winner code, targets, context."""
+    ids_a = raw["r_fighter_id"].astype("string").str.strip()
+    ids_b = raw["b_fighter_id"].astype("string").str.strip()
+    fight_ids = _require_unique_fight_ids(raw)
     if ids_a.isna().any() or ids_b.isna().any():
         raise ValueError("fights with missing corner fighter ids")
     method = raw["method"].map(map_method)
     fights = pd.DataFrame(
         {
             "fight_id": fight_ids,
-            "date": pd.to_datetime(raw["date"], format="mixed", errors="coerce"),
+            "date": pd.to_datetime(raw["event_date"], format="mixed", errors="coerce"),
             "fighter_a_id": ids_a,
             "fighter_b_id": ids_b,
             "winner": [
-                _winner_code(winner_id, id_a, id_b, m)
-                for winner_id, id_a, id_b, m in zip(
-                    raw["winner_id"], ids_a, ids_b, raw["method"]
+                _winner_code(status, winner_id, id_a, id_b)
+                for status, winner_id, id_a, id_b in zip(
+                    raw["result_status"], raw["winner_id"], ids_a, ids_b
                 )
             ],
             "method": method,
             "method_raw": raw["method"],
             "decision_subtype": raw["method"].map(decision_subtype),
-            "scheduled_rounds": pd.to_numeric(
-                raw["total_rounds"], errors="coerce"
-            ).astype("Int64"),
-            "weight_class": raw["division"].map(parse_weight_class),
+            "scheduled_rounds": pd.array(
+                raw["time_format"].map(parse_scheduled_rounds).tolist(), dtype="Int64"
+            ),
+            "weight_class": raw["weight_class"].map(parse_weight_class),
             "title_fight": pd.to_numeric(raw["title_fight"], errors="coerce")
             .fillna(0)
             .astype(bool),
+            "referee": raw["referee"],
+            "event_id": raw["event_id"],
+            "location": raw["event_location"],
         }
     )
     # finish_round only for finishes: decisions go the distance by definition,
@@ -105,24 +113,16 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
     is_finish = fights["method"].isin(["ko_tko", "submission"])
     fights["finish_round"] = last_round.where(is_finish)
 
-    # match_time_sec in the raw data is the clock time WITHIN the final round
-    # fought, not total fight duration (verified: 5-round decisions always
-    # show exactly 300s there). Derive true elapsed duration_sec instead,
-    # approximating every round as a fixed 5 minutes (300s) -- the UFC's
-    # standard round length, though not strictly true for old non-title
-    # 3-round-cap or historic no-time-limit bouts:
-    #   - finish (output finish_round not NA): (finish_round - 1) * 300 + last_round_sec
-    #   - true decision (method == "decision"): went the distance by
-    #     definition -> scheduled_rounds * 300
-    #   - everything else (DQ, Overturned, Could Not Continue, "Other", and
-    #     early no-time-limit-era fights): these are NOT finishes by our
-    #     method mapping, but scheduled_rounds being present does NOT mean
-    #     they went the distance -- most end early (79 of 113 such rows in
-    #     the raw data have finish_round < total_rounds). Fall back to the
-    #     RAW finish_round column, which is populated for every fight in the
-    #     source csv (our own `finish_round` output above is nulled for
-    #     non-finishes, so we can't reuse it here).
-    last_round_sec = pd.to_numeric(raw["match_time_sec"], errors="coerce")
+    # finish_time is the clock WITHIN the final round fought ("m:ss"), not
+    # total duration. Derive elapsed duration_sec with 5-minute rounds:
+    #   - finish: (finish_round - 1) * 300 + final-round clock
+    #   - true decision: scheduled_rounds * 300 (went the distance)
+    #   - everything else (DQ, Overturned, Could Not Continue, "Other",
+    #     no-time-limit era): most end early, so fall back to the raw last
+    #     round fought + clock.
+    last_round_sec = pd.to_numeric(
+        raw["finish_time"].map(parse_mmss_seconds), errors="coerce"
+    )
     raw_last_round = last_round.astype("Float64")
     duration_sec = pd.Series(pd.NA, index=fights.index, dtype="Float64")
     duration_sec = duration_sec.where(
@@ -138,13 +138,17 @@ def build_fights(raw: pd.DataFrame) -> pd.DataFrame:
     duration_sec = duration_sec.where(~fallback_mask, fallback)
     fights["duration_sec"] = duration_sec
 
-    for column in ("winner", "method", "method_raw", "decision_subtype", "weight_class"):
+    for column in (
+        "winner", "method", "method_raw", "decision_subtype", "weight_class",
+        "referee", "event_id", "location",
+    ):
         fights[column] = fights[column].astype("string")
 
     columns = [
         "fight_id", "date", "fighter_a_id", "fighter_b_id", "winner",
         "method", "method_raw", "decision_subtype", "finish_round",
         "scheduled_rounds", "weight_class", "title_fight", "duration_sec",
+        "referee", "event_id", "location",
     ]
     return (
         fights[columns]
