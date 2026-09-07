@@ -2,21 +2,32 @@
 
 Two protocols, selected by the flags given:
 
-* split -- train on ``date < --train-end``, early-stop each head on the
-  ``[--val-start, --val-end]`` slice, and report that slice's metrics in
-  ``xgb_metrics_val.json``. This is the original pre-2021 / 2021-2023 recipe
-  and what ``scripts/roll_window.py --execute`` drives with explicit dates.
-* ``--refit-through DATE`` -- train on every decisive fight dated ``<= DATE``
-  (``latest`` = the newest fight in features.parquet) for a fixed per-head
-  round budget (``--budget``) with no validation set and no early stopping.
-  There is no held-out slice in this mode, so the metrics file instead
-  carries the pooled walk-forward numbers of the harness report given by
-  ``--report`` (the experiment that chose the budget), under the same inner
-  key names the README reads, with nulls where no walk-forward equivalent
-  exists.
+* refit-through (DEFAULT; a bare ``python scripts/train_xgb.py``, which is
+  what the weekly refresh Action runs) -- train on every decisive fight dated
+  ``<= --refit-through`` (``latest`` = the newest fight in features.parquet)
+  for a fixed per-head round budget (``--budget``) with no validation set and
+  no early stopping. There is no held-out slice in this mode, so the metrics
+  file instead carries the pooled walk-forward numbers of the harness report
+  given by ``--report`` (the experiment that chose the budget), under the
+  same inner key names the README reads, with nulls where no walk-forward
+  equivalent exists.
+* split (``--train-end`` / ``--val-start`` / ``--val-end``; passing any one
+  of them selects it) -- train on ``date < --train-end``, early-stop each
+  head on the ``[--val-start, --val-end]`` slice, and report that slice's
+  metrics. This is the original pre-2021 / 2021-2023 recipe and what
+  ``scripts/roll_window.py --execute`` drives with explicit dates.
 
-The two flag families are mutually exclusive. With neither, DEFAULT_MODE
-applies.
+Why refit is the default: the walk-forward harness (scripts/run_walkforward.py)
+compared early-stopping on a held-out year against a fixed budget on all
+data through the newest year, on the same 2018-2025 eval folds; the fixed
+budget was not worse by more than the seed noise floor, and its pre-
+registered rule then ships it (models/walkforward/refit_decision.json,
+``deployment_recipe: refit_through_latest``). The deployed models thereby
+train on ~5 more years of fights than the pre-2021 split. BUDGET, REPORT and
+REFIT_THROUGH below are that decision's numbers; re-derive them via
+run_walkforward.py --fixed-budget-from rather than editing them by hand.
+
+The two flag families are mutually exclusive.
 """
 from __future__ import annotations
 
@@ -39,8 +50,11 @@ ROUND_CLASSES = ["1", "2", "3", "45"]
 HEADS = ("winner", "method", "round")
 
 MODE_SPLIT, MODE_REFIT = "split", "refit_through"
-DEFAULT_MODE = MODE_SPLIT
+DEFAULT_MODE = MODE_REFIT
+# Refit-mode defaults: models/walkforward/refit_decision.json -> xgb.budget.
 REFIT_THROUGH = "latest"
+BUDGET = {"winner": 81, "method": 79, "round": 75}
+REPORT = ROOT / "models" / "walkforward" / "xgb_refit.json"
 
 
 def parse_budget(spec) -> dict:
@@ -214,11 +228,13 @@ def main() -> None:
     parser.add_argument("--val-start", default=None, help=f"split mode (default {VAL_START})")
     parser.add_argument("--val-end", default=None, help=f"split mode (default {VAL_END})")
     parser.add_argument("--refit-through", default=None, metavar="DATE",
-                        help="refit mode: train on every fight dated <= DATE ('latest' = newest fight)")
-    parser.add_argument("--budget", default=None,
-                        help='refit mode: rounds per head, e.g. \'{"winner": 81, "method": 79, "round": 75}\' or 81')
-    parser.add_argument("--report", type=Path, default=None,
-                        help="refit mode: walk-forward report whose pooled metrics fill the metrics file")
+                        help=f"refit mode: train on every fight dated <= DATE ('latest' = newest fight; "
+                             f"default {REFIT_THROUGH})")
+    parser.add_argument("--budget", default=BUDGET,
+                        help=f'refit mode: rounds per head as JSON or a single int (default {json.dumps(BUDGET)})')
+    parser.add_argument("--report", type=Path, default=REPORT,
+                        help=f"refit mode: walk-forward report whose pooled metrics fill the metrics file "
+                             f"(default {REPORT.relative_to(ROOT)})")
     parser.add_argument("--models-dir", type=Path, default=MODELS)
     args = parser.parse_args()
     mode = resolve_mode(args)
@@ -228,8 +244,6 @@ def main() -> None:
         args.val_end = args.val_end or VAL_END
     else:
         args.refit_through = args.refit_through or REFIT_THROUGH
-        if args.budget is None or args.report is None:
-            raise SystemExit("--refit-through needs --budget and --report")
 
     features = pd.read_parquet(PROCESSED / "features.parquet")
     x = feature_frame(features)

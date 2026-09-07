@@ -1,21 +1,45 @@
 {
+  "mode": "refit_through",
+  "train_through": "2026-08-08",
+  "n_train": 11238,
+  "budget": {
+    "winner": 81,
+    "method": 79,
+    "round": 75
+  },
+  "harness_report": "models/walkforward/xgb_refit.json",
+  "walkforward_pooled": {
+    "n": 4804,
+    "winner_log_loss": 0.6525,
+    "accuracy": 0.6151,
+    "brier": 0.2305,
+    "ece": 0.0178,
+    "joint_log_loss": 2.1836,
+    "method_macro_f1": 0.3325,
+    "round_macro_f1": 0.1753,
+    "n_method": 4792,
+    "n_round": 2446
+  },
   "winner": {
-    "n_val": 1709,
-    "accuracy": 0.6056,
-    "log_loss": 0.6595,
-    "brier": 0.2336,
-    "best_iteration": 95
+    "n_val": 4804,
+    "accuracy": 0.6151,
+    "log_loss": 0.6525,
+    "brier": 0.2305,
+    "best_iteration": 81,
+    "source": "walk-forward pooled (models/walkforward/xgb_refit.json); best_iteration is the fixed budget, not an early-stopping result"
   },
   "method": {
-    "n_val": 1703,
-    "accuracy": 0.4891,
-    "macro_f1": 0.3032,
-    "majority_baseline_accuracy": 0.4768
+    "n_val": 4792,
+    "accuracy": null,
+    "macro_f1": 0.3325,
+    "majority_baseline_accuracy": null,
+    "source": "walk-forward pooled (models/walkforward/xgb_refit.json); accuracy and majority_baseline_accuracy have no walk-forward equivalent (null)"
   },
   "finish_round": {
-    "n_val": 891,
-    "accuracy": 0.4949,
-    "macro_f1": 0.1689,
-    "majority_baseline_accuracy": 0.4949
+    "n_val": 2446,
+    "accuracy": null,
+    "macro_f1": 0.1753,
+    "majority_baseline_accuracy": null,
+    "source": "walk-forward pooled (models/walkforward/xgb_refit.json); accuracy and majority_baseline_accuracy have no walk-forward equivalent (null)"
   }
 }

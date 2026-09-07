@@ -3,26 +3,38 @@
 Two protocols, selected by the flags given (see scripts/train_xgb.py for the
 same split in the XGBoost trainer):
 
-* split -- fit the preprocessor and each seed on ``date < --train-end``,
-  early-stop on the ``[--val-start, --val-end]`` slice, fit each seed's
-  temperature on that slice, and report the slice's ensemble metrics in
-  ``metrics_val.json``. This is the original pre-2021 / 2021-2023 recipe and
-  what ``scripts/roll_window.py --execute`` drives with explicit dates.
-* ``--refit-through DATE`` -- fit the preprocessor and each seed on every
-  decisive fight dated ``<= DATE`` (``latest`` = the newest fight in
-  features.parquet) for exactly ``--budget`` epochs with no validation set,
-  and stamp every seed with the ``--temperature`` the harness derived. There
-  is no held-out slice, so the metrics file instead carries the pooled
-  walk-forward numbers of the harness report given by ``--report`` (the
-  experiment that chose the budget), under the same keys as the split
-  layout, with nulls where no walk-forward equivalent exists. Torch is
-  pinned to one intra-op thread in this mode, as the harness pins it, so
-  the deployed checkpoints do not depend on the training host.
+* refit-through (DEFAULT; a bare ``python scripts/train_torch.py``, which is
+  what the weekly refresh Action runs) -- fit the preprocessor and each seed
+  on every decisive fight dated ``<= --refit-through`` (``latest`` = the
+  newest fight in features.parquet) for exactly ``--budget`` epochs with no
+  validation set, and stamp every seed with the ``--temperature`` the
+  harness derived. There is no held-out slice, so the metrics file instead
+  carries the pooled walk-forward numbers of the harness report given by
+  ``--report`` (the experiment that chose the budget), under the same keys
+  as the split layout, with nulls where no walk-forward equivalent exists.
+  Torch is pinned to one intra-op thread in this mode, as the harness pins
+  it, so the deployed checkpoints do not depend on the training host.
+* split (``--train-end`` / ``--val-start`` / ``--val-end``; passing any one
+  of them selects it) -- fit the preprocessor and each seed on ``date <
+  --train-end``, early-stop on the ``[--val-start, --val-end]`` slice, fit
+  each seed's temperature on that slice, and report the slice's ensemble
+  metrics. This is the original pre-2021 / 2021-2023 recipe and what
+  ``scripts/roll_window.py --execute`` drives with explicit dates.
+
+Why refit is the default: the walk-forward harness (scripts/run_walkforward.py)
+compared early-stopping on a held-out year against a fixed budget on all
+data through the newest year, on the same 2018-2025 eval folds; the fixed
+budget was not worse by more than the seed noise floor, and its pre-
+registered rule then ships it (models/walkforward/refit_decision.json,
+``deployment_recipe: refit_through_latest``). The deployed ensemble thereby
+trains on ~5 more years of fights than the pre-2021 split. BUDGET,
+TEMPERATURE, REPORT and REFIT_THROUGH below are that decision's numbers;
+re-derive them via run_walkforward.py --fixed-budget-from rather than
+editing them by hand.
 
 Checkpoint payloads (state_dict, temperature, n_features, n_weight_classes)
 are identical in both modes; ``mma.inference.Ensemble.load`` reads either.
-The two flag families are mutually exclusive. With neither, DEFAULT_MODE
-applies.
+The two flag families are mutually exclusive.
 """
 from __future__ import annotations
 
@@ -49,9 +61,12 @@ VAL_START, VAL_END = "2021-01-01", "2023-12-31"
 SEEDS = (0, 1, 2, 3, 4)
 
 MODE_SPLIT, MODE_REFIT = "split", "refit_through"
-DEFAULT_MODE = MODE_SPLIT
+DEFAULT_MODE = MODE_REFIT
+# Refit-mode defaults: models/walkforward/refit_decision.json -> torch.budget.
 REFIT_THROUGH = "latest"
-TEMPERATURE = 1.0
+BUDGET = 14
+TEMPERATURE = 1.1
+REPORT = ROOT / "models" / "walkforward" / "torch_refit.json"
 
 
 def parse_budget(spec) -> int:
@@ -246,12 +261,14 @@ def main() -> None:
     parser.add_argument("--val-start", default=None, help=f"split mode (default {VAL_START})")
     parser.add_argument("--val-end", default=None, help=f"split mode (default {VAL_END})")
     parser.add_argument("--refit-through", default=None, metavar="DATE",
-                        help="refit mode: train on every fight dated <= DATE ('latest' = newest fight)")
-    parser.add_argument("--budget", default=None, help="refit mode: epochs per seed, e.g. 14")
+                        help=f"refit mode: train on every fight dated <= DATE ('latest' = newest fight; "
+                             f"default {REFIT_THROUGH})")
+    parser.add_argument("--budget", default=BUDGET, help=f"refit mode: epochs per seed (default {BUDGET})")
     parser.add_argument("--temperature", type=float, default=TEMPERATURE,
                         help=f"refit mode: per-seed temperature (default {TEMPERATURE})")
-    parser.add_argument("--report", type=Path, default=None,
-                        help="refit mode: walk-forward report whose pooled metrics fill the metrics file")
+    parser.add_argument("--report", type=Path, default=REPORT,
+                        help=f"refit mode: walk-forward report whose pooled metrics fill the metrics file "
+                             f"(default {REPORT.relative_to(ROOT)})")
     parser.add_argument("--out-dir", type=Path, default=OUT)
     args = parser.parse_args()
     mode = resolve_mode(args)
@@ -261,8 +278,6 @@ def main() -> None:
         args.val_end = args.val_end or VAL_END
     else:
         args.refit_through = args.refit_through or REFIT_THROUGH
-        if args.budget is None or args.report is None:
-            raise SystemExit("--refit-through needs --budget and --report")
 
     features = pd.read_parquet(PROCESSED / "features.parquet")
     out_dir = args.out_dir
