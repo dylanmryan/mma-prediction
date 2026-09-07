@@ -250,3 +250,51 @@ def test_sigma_from_reports_is_sample_std():
     assert out["sigma_seed"] == pytest.approx(np.std([0.650, 0.652, 0.648], ddof=1))
     assert out["bar"] == pytest.approx(max(0.003, 2 * out["sigma_seed"]))
     assert out["n_reports"] == 3
+
+
+from scripts.run_walkforward import build_candidate, fixed_budget_from
+
+
+def test_fixed_budget_from_per_head_xgb_medians():
+    report = {"fit_info": {"best_iteration": [
+        {"winner": 80, "method": 70, "round": 90},
+        {"winner": 81, "method": 79, "round": 75},
+        {"winner": 100, "method": 85, "round": 60},
+    ]}}
+    assert fixed_budget_from(report) == {"fixed_rounds": {"winner": 81, "method": 79, "round": 75}}
+
+
+def test_fixed_budget_from_torch_per_fold_seed_lists():
+    report = {"fit_info": {
+        "best_epoch": [[7, 6], [26, 4], [19, 25]],
+        "temperature": [[1.05, 1.10], [1.2, 1.0], [1.15, 1.1]],
+    }}
+    out = fixed_budget_from(report)
+    # per-fold medians 6.5, 15, 22 -> median 15 -> +1 (best_epoch is 0-based)
+    assert out["fixed_epochs"] == 16
+    # per-fold medians 1.075, 1.1, 1.125 -> 1.1
+    assert out["temperature"] == pytest.approx(1.1)
+    assert "fixed_rounds" not in out
+
+
+def test_fixed_budget_from_legacy_flat_best_iteration():
+    report = {"fit_info": {"best_iteration": [50, 70, 90]}}
+    assert fixed_budget_from(report) == {"fixed_rounds": 70}
+
+
+def test_build_candidate_rejects_mismatched_budget():
+    torch_budget = {"fixed_epochs": 14, "temperature": 1.1}
+    xgb_budget = {"fixed_rounds": {"winner": 81, "method": 79, "round": 75}}
+    with pytest.raises(SystemExit, match="fixed_rounds"):
+        build_candidate("xgb", "x", "0", {}, torch_budget)
+    with pytest.raises(SystemExit, match="fixed_epochs"):
+        build_candidate("torch", "t", "0", {}, xgb_budget)
+    with pytest.raises(SystemExit, match="elo"):
+        build_candidate("elo", "e", "0", {}, xgb_budget)
+    # no --fixed-budget-from at all: every learner builds in early-stopping mode
+    assert build_candidate("xgb", "x", "0", {}, None).fixed_rounds is None
+    assert build_candidate("torch", "t", "0,1", {}, None).fixed_epochs is None
+    # matching budgets are applied
+    assert build_candidate("xgb", "x", "0", {}, xgb_budget).fixed_rounds == xgb_budget["fixed_rounds"]
+    torch_cand = build_candidate("torch", "t", "0,1", {}, torch_budget)
+    assert torch_cand.fixed_epochs == 14 and torch_cand.temperature == 1.1 and torch_cand.seeds == (0, 1)

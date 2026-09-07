@@ -60,9 +60,22 @@ def fixed_budget_from(report: dict) -> dict:
     return budget
 
 
-def build_candidate(kind: str, name: str, seeds: str, config: dict, budget: dict):
+def build_candidate(kind: str, name: str, seeds: str, config: dict, budget: dict | None):
+    """``budget`` is None without --fixed-budget-from; otherwise the dict from
+    fixed_budget_from, which must carry the key this learner consumes
+    (fixed_rounds for xgb, fixed_epochs for torch) -- a budget derived from
+    the wrong learner's report, or an elo candidate, is a usage error."""
     if kind == "elo":
+        if budget is not None:
+            raise SystemExit("--fixed-budget-from does not apply to the elo candidate (nothing is fit)")
         return EloCandidate()
+    needed = "fixed_rounds" if kind == "xgb" else "fixed_epochs"
+    if budget is not None and needed not in budget:
+        raise SystemExit(
+            f"--fixed-budget-from report has no {needed!r} budget for the {kind} candidate "
+            f"(found {sorted(budget) or 'nothing'}); point it at a {kind} walk-forward report"
+        )
+    budget = budget or {}
     if kind == "xgb":
         return XGBCandidate(name=name, params=config, fixed_rounds=budget.get("fixed_rounds"))
     return TorchCandidate(name=name, seeds=tuple(int(s) for s in seeds.split(",")), config=config,
@@ -87,8 +100,9 @@ def main() -> None:
         .sort_values("date", kind="stable").reset_index(drop=True)
     )
     config = json.loads(args.config_json) if args.config_json else {}
-    budget = fixed_budget_from(json.loads(args.fixed_budget_from.read_text())) if args.fixed_budget_from else {}
+    budget = fixed_budget_from(json.loads(args.fixed_budget_from.read_text())) if args.fixed_budget_from else None
     candidate = build_candidate(args.candidate, args.name, args.seeds, config, budget)
+    budget = budget or {}  # report shape: always a dict
 
     fold_results = []
     started = time.time()

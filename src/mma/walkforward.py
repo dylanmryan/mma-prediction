@@ -207,14 +207,14 @@ def bar_check(candidate: dict, incumbent: dict, sigma_seed: float) -> dict:
     """Pre-registered winner bar (spec §5): pooled Δ log-loss < −max(MIN_BAR, 2σ_seed)
     and no fold year worse than the incumbent by more than MIN_FOLD_REGRESSION.
 
-    Deltas are candidate − incumbent (negative = better). The pooled delta is
-    rounded to 6 dp before the strict comparison so that a candidate sitting
-    exactly on the bar does not clear it on float noise. The pair is
+    Deltas are candidate − incumbent (negative = better). Both the bar and the
+    pooled delta are rounded to 6 dp before the strict comparison so that a
+    candidate sitting exactly on the bar does not clear it on float noise. The pair is
     `comparable` only when both reports cover the same fold years and the
     same pooled `n`; a non-comparable pair never ships."""
     if sigma_seed is None or not np.isfinite(sigma_seed):
         raise ValueError("sigma_seed must be a finite number; run scripts/noise_floor.py first")
-    bar = max(MIN_BAR, 2.0 * float(sigma_seed))
+    bar = round(max(MIN_BAR, 2.0 * float(sigma_seed)), 6)
     delta = round(candidate["pooled"]["winner_log_loss"] - incumbent["pooled"]["winner_log_loss"], 6)
     cand_years, inc_years = set(candidate["folds"]), set(incumbent["folds"])
     missing_folds = sorted(cand_years ^ inc_years)
