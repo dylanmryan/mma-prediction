@@ -8,6 +8,7 @@ fight_stats.parquet, round_stats.parquet, bonuses.parquet.
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -31,6 +32,15 @@ def check(condition: bool, message: str) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--allow-regression",
+        action="store_true",
+        help="print the reconciliation report but do not fail on dropped fights "
+        "or winner relabels (use after a human review of a legitimate upstream change)",
+    )
+    args = parser.parse_args()
+
     raw_master = pd.read_csv(RAW / "master.csv")
     raw_fighters = pd.read_csv(RAW / "fighter.csv")
     raw_rounds = pd.read_csv(RAW / "round.csv")
@@ -84,9 +94,12 @@ def main() -> None:
 
     modern_cutoff = pd.Timestamp("2014-01-01")
     modern_fights = set(fights.loc[fights["date"] >= modern_cutoff, "fight_id"])
+    modern_cover = len(modern_fights & round_fights) / max(len(modern_fights), 1)
+    # Rate, not zero-tolerance: upstream's own scrape_error.csv shows single
+    # fights can fail to parse; one such fight must not stall the weekly refresh.
     check(
-        modern_fights <= round_fights,
-        "some fight dated on/after 2014-01-01 has no round rows",
+        modern_cover >= 0.995,
+        f"round stats cover only {modern_cover:.2%} of fights dated on/after 2014-01-01",
     )
 
     today = pd.Timestamp.today().normalize()
@@ -104,7 +117,7 @@ def main() -> None:
     # auto-committed by the weekly refresh Action. Compare against whatever
     # fights.parquet is already committed (if any) before overwriting it. A
     # legitimate relabelling that pushes agreement below the threshold needs
-    # a human to delete the old parquet (or otherwise review) rather than
+    # a human review, then an explicit --allow-regression run, rather than
     # loosening this bar.
     old_fights_path = PROCESSED / "fights.parquet"
     if old_fights_path.exists():
@@ -113,15 +126,19 @@ def main() -> None:
         print("\nreconcile vs committed fights.parquet:")
         print(f"  n_dropped_by_new: {report['n_dropped_by_new']}")
         print(f"  winner agreement: {report['agreement']['winner']:.4f}")
-        check(
-            report["n_dropped_by_new"] == 0,
-            f"new fights table drops {report['n_dropped_by_new']} fights present in the "
-            "committed table",
-        )
-        check(
-            report["agreement"]["winner"] >= 0.999,
-            f"winner agreement with committed table only {report['agreement']['winner']:.4f}",
-        )
+        if args.allow_regression:
+            print("  --allow-regression set: not enforcing the regression guard")
+        else:
+            check(
+                report["n_dropped_by_new"] == 0,
+                f"new fights table drops {report['n_dropped_by_new']} fights present in "
+                "the committed table (re-run with --allow-regression after review)",
+            )
+            check(
+                report["agreement"]["winner"] >= 0.999,
+                f"winner agreement with committed table only "
+                f"{report['agreement']['winner']:.4f} (re-run with --allow-regression after review)",
+            )
 
     PROCESSED.mkdir(parents=True, exist_ok=True)
     fighters.to_parquet(PROCESSED / "fighters.parquet", index=False)

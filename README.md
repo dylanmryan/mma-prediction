@@ -96,8 +96,9 @@ genuinely hard; these numbers are reported honestly rather than hidden.
 ## Final held-out test results (2024+)
 
 *Computed once on 2026-07-13 against the models and 8,337-fight dataset of
-that date; not recomputed after the September 2026 data expansion, since the
-2024+ years are now part of ordinary evaluation.*
+that date; not recomputed after the September 2026 data expansion. The 2024+
+holdout is retired: it is spent as a one-time test and will be folded into the
+walk-forward evaluation planned for the next phase.*
 
 These numbers were computed exactly once, by `scripts/final_test_eval.py`,
 after all development was frozen — the 2024+ fights were never read by any
@@ -332,6 +333,8 @@ and the full ROI sweep at 0%/5%/10% thresholds) are in the committed
 - **Local-disk virtualenv.** If the repo lives in an iCloud-synced folder,
   create the venv elsewhere (`python3 -m venv ~/.venvs/mma && ~/.venvs/mma/bin/pip install -e ".[dev,app]"`)
   — torch's shared libraries stall for minutes when paged in from iCloud.
+  Better still, keep the repo itself outside iCloud (or exclude `.git` from
+  sync): sync has corrupted `.git` metadata here more than once.
 - `OMP_NUM_THREADS=1` for any script that imports both torch and xgboost.
 - **Model identity.** Prospective predictions are stamped with
   `mma.versioning.model_version()`, a hash of the deployed torch weights and

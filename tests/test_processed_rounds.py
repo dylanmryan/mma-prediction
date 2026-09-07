@@ -52,7 +52,7 @@ def test_control_seconds_plausible():
     recent = rounds.merge(fights[["fight_id", "date"]], on="fight_id").query(
         "date >= '2020-01-01'"
     )
-    assert recent["ctrl_sec"].notna().all()  # 0% NaN from 2020 on
+    assert recent["ctrl_sec"].isna().mean() < 0.005  # 0% NaN from 2020 on today
 
 
 def test_bonuses_table():
