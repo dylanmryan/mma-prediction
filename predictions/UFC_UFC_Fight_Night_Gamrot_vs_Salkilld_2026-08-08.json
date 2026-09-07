@@ -29,7 +29,15 @@
       "elo_b": 1574.461912392679,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:26Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "17734443a833cdf7",
+      "correct": false,
+      "log_loss_contribution": 0.7824017836934904,
+      "brier_contribution": 0.29451640823863756,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Diyar Nurgozhay",
@@ -56,7 +64,15 @@
       "elo_b": 1497.2902618094906,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:02Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "709fadb644ee3f51",
+      "correct": false,
+      "log_loss_contribution": 0.9072518546745234,
+      "brier_contribution": 0.35565486241082334,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Carlos Diego Ferreira",
@@ -110,7 +126,15 @@
       "elo_b": 1544.7081623769561,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:02Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "545092d13c67aa49",
+      "correct": false,
+      "log_loss_contribution": 0.7803485193382602,
+      "brier_contribution": 0.2934970977034388,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Ty Miller",
@@ -146,7 +170,15 @@
       "elo_b": 1533.2071723408328,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:19Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "70380ccdc81915b8",
+      "correct": true,
+      "log_loss_contribution": 0.4070220603628185,
+      "brier_contribution": 0.1118036271834768,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Juliana Miller",
@@ -173,7 +205,15 @@
       "elo_b": 1471.7281149634766,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:19Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "aa0c573da7119292",
+      "correct": false,
+      "log_loss_contribution": 0.8694023752263669,
+      "brier_contribution": 0.337326316916994,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Miles Johns",
