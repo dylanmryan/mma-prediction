@@ -1,31 +1,40 @@
 """Builders that turn the raw Kaggle UFC CSVs into clean tables.
 
-Source schema: neelagiriaditya/ufc-datasets-1994-2025 (pre-parsed numeric
-values, stable hex fighter ids). See the Phase 1 plan addendum for details.
+Source schema (rebuilt 2026-08-11): neelagiriaditya/ufc-datasets-1994-2025 —
+master.csv (one row per fight incl. fight-total stats), fighter.csv,
+round.csv (per-round stats), fighter_bonus.csv. Stable ufcstats hex ids
+throughout. See docs/superpowers/plans/2026-09-06-sp0-repair-ingestion.md.
 """
 from __future__ import annotations
 
 import pandas as pd
 
-from mma.labels import decision_subtype, map_method, parse_weight_class
+from mma.labels import decision_subtype, map_method, parse_scheduled_rounds, parse_weight_class
+from mma.parsing import parse_height_inches, parse_mmss_seconds
+
+
+_INCH_CM = 2.54
 
 
 def build_fighters(raw: pd.DataFrame) -> pd.DataFrame:
     """One row per fighter: stable id + biographical fields only.
 
-    Career-aggregate columns (wins, splm, td_avg, ...) are dropped on
-    purpose: they are as-of-scrape values and would leak the future if
-    joined to historical fights.
+    Career-aggregate columns (slpm, td_avg, ...) and weight_lbs are dropped
+    on purpose: they are as-of-scrape values and would leak the future if
+    joined to historical fights. Height arrives as `5' 10"` text and reach
+    as inches; both are converted to centimetres to keep the processed
+    schema identical to the pre-2026 one.
     """
-    ids = raw["id"].astype("string").str.strip()
+    ids = raw["fighter_id"].astype("string").str.strip()
     if ids.isna().any():
         raise ValueError(f"{int(ids.isna().sum())} fighter rows have missing ids")
+    height_in = raw["height"].map(parse_height_inches)
     fighters = pd.DataFrame(
         {
             "fighter_id": ids,
-            "name": raw["name"].astype("string").str.strip(),
-            "height_cm": pd.to_numeric(raw["height"], errors="coerce"),
-            "reach_cm": pd.to_numeric(raw["reach"], errors="coerce"),
+            "name": raw["fighter_name"].astype("string").str.strip(),
+            "height_cm": pd.to_numeric(height_in, errors="coerce") * _INCH_CM,
+            "reach_cm": pd.to_numeric(raw["reach_inches"], errors="coerce") * _INCH_CM,
             "stance": raw["stance"].astype("string").str.strip(),
             "dob": pd.to_datetime(raw["dob"], format="mixed", errors="coerce"),
         }
