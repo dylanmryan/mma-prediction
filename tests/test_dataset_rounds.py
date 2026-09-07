@@ -115,3 +115,17 @@ def test_reconcile_counts_and_agreement():
     assert report["agreement"]["winner"] == 0.5
     assert report["agreement"]["finish_round"] == 1.0  # NaN == NaN counts as agreement
     assert report["added_by_year"] == {2021: 1}
+
+
+def test_reconcile_counts_one_sided_nulls_as_disagreement():
+    old = pd.DataFrame({
+        "fight_id": ["f1", "f2"], "winner": ["a", "b"],
+        "method": pd.array(["ko_tko", "decision"], dtype="string"),
+        "finish_round": [1, 3], "scheduled_rounds": [3, 3], "weight_class": ["Lightweight"] * 2,
+        "fighter_a_id": ["x", "y"], "fighter_b_id": ["p", "q"],
+        "date": pd.to_datetime(["2020-01-01", "2020-02-01"]),
+    })
+    new = old.copy()
+    new["method"] = pd.array(["ko_tko", pd.NA], dtype="string")
+    report = reconcile(old, new)
+    assert report["agreement"]["method"] == 0.5
