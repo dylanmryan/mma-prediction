@@ -1,0 +1,345 @@
+# Predictor v3: Simulated Fights, Expanded Data, Walk-Forward Evaluation — Design
+
+**Date:** 2026-09-06
+**Status:** Draft, awaiting user review
+**Scope:** Predictions only. The value-betting / odds-analysis layer is a
+later, separate spec (see "Out of scope").
+
+## 1. Why this pass exists
+
+The v1 models are done and honest: winner log-loss 0.633 on the (now spent)
+2024+ test set, with the torch ensemble the best of a coin-flip → Elo →
+XGBoost → neural ladder. Two later experiment sessions (Elo v1.1, model v2)
+tuned and blended everything reachable from the current feature table and
+gained at most 0.003 log-loss, against a measured ensemble noise floor of
+about 0.0014. The devigged betting market beats the model by 0.038 on the
+same fights. That gap is an order of magnitude larger than anything tuning
+has produced, so this pass changes **what the model sees** and **what it
+predicts**, not how hard it is tuned:
+
+1. **New signal.** The Kaggle source was rebuilt in August 2026 with a new
+   schema that carries per-round stats, strike-target and position splits,
+   referees, and bonuses — none of which the feature table uses. A public,
+   MIT-licensed snapshot of Sherdog, Tapology, and Fight Matrix data (through
+   roughly January 2025) supplies pre-UFC careers, gyms, and nationality.
+   The best leak-controlled public work (a 2025 Yale thesis that matched the
+   Bovada closing line on ~4,000 walk-forward fights) attributes its gains
+   to exactly these kinds of alternative data, not to architecture.
+2. **A different prediction paradigm.** Replace the three loosely coupled
+   classification heads with a **round-by-round fight simulator**: a
+   per-round hazard model for each finish type plus a decision model, played
+   out by Monte Carlo. Winner, method, round, and "goes the distance" all
+   fall out of one coherent process. This directly targets the method and
+   round heads, which today barely beat the majority class.
+3. **A bigger, pre-registered evaluation.** 1,507 validation fights cannot
+   resolve 0.003 effects, and the 2024+ test set is spent. An expanding-window
+   walk-forward over 2018–2025 evaluates on ~3,900 fights and lets every
+   experiment be judged against a measured noise floor.
+
+Everything the project already does well — point-in-time discipline with the
+truncation-invariance test, corner symmetrization, reproducible artifacts, the
+weekly refresh Action, the prospective track record — is preserved and
+extended, not replaced.
+
+## 2. Findings that shape the design (verified this session)
+
+| Finding | Consequence |
+|---|---|
+| Kaggle dataset `neelagiriaditya/ufc-datasets-1994-2025` was rebuilt 2026-08-11: new files `fighter.csv`, `event.csv`, `fight.csv` (11,441 rows, +referee, +bonuses), `round.csv` (25,131 per-round rows); same ufcstats hex ids. | Our download/refresh scripts are pinned to the old `UFC.csv` layout, so the weekly Action has found "no new data" for a year. Re-ingestion is the first task. The 11,441 vs 8,337 fight-row discrepancy must be reconciled before trusting the new file. |
+| Origin holds 78 prospective predictions, 0 graded, because grading waits on refreshed data. | Once ingestion works, grading catches up automatically and the track record becomes real. |
+| `scripts/predict_upcoming.py` stamps `model_version` with the HEAD commit sha at run time; weekly "predictions and grading" commits change HEAD, so the track record fragments into a new "version" every week with an unchanged model. | Version must derive from the model artifacts (hash of `models/torch/*` + `models/*.json`), not from HEAD. Existing records get re-keyed by a one-time migration. |
+| The raw `r_weight`/`b_weight` columns are per-fighter profile values (0 fighters have more than one distinct value across their fights), not weigh-in weights. | Not usable; as-of-scrape leak. |
+| Head/body/leg, distance/clinch/ground, and referee are populated for 99.7% of fights in the current raw file; the new `round.csv` adds them per round. | Rich in-fight signal is available without any external source. |
+| Tapology ToS forbids scraping; Sherdog ToS forbids aggregating content elsewhere; Fight Matrix data is now sold through an enterprise API. | Use the static open snapshot (`ehan03/jds-mma-data`, MIT) for external data; no scraping of those sites. |
+| Repo lives on an iCloud-synced folder; torch runs have stalled for minutes on page-ins and `.git` has been corrupted twice; five byte-identical `* 2.*` sync duplicates are sitting untracked. | Training runs use a scratch venv on local disk. Moving the repo off iCloud is recommended (user action). Duplicates are deleted in SP0. |
+
+## 3. Targets and outputs
+
+The predictor produces, for one fight (A vs B, R scheduled rounds), a full
+outcome distribution:
+
+- **Joint outcome**: P(winner ∈ {A, B} × method ∈ {KO/TKO, submission,
+  decision} × round ∈ {1, 2, 3, 4, 5}) with round only defined for finishes
+  and rounds 4–5 only for five-round fights. Draws and no-contests are not
+  predicted (as today).
+- **Marginals** derived from the joint: P(A wins), P(method), P(finish
+  round), P(goes the distance), P(A by KO in R1), etc.
+- **Uncertainty**: for every reported probability, an interval from the
+  spread across model members (see §6), separate from fight randomness.
+
+Method label mapping is unchanged (`labels.py`): KO/TKO includes doctor
+stoppages; all decision types collapse to "decision".
+
+## 4. Sub-projects
+
+The work decomposes into five sub-projects. Each gets its own implementation
+plan under `docs/superpowers/plans/`, is built on its own branch (SP0 and SP1
+sequentially; SP2 and SP3 may run in parallel worktrees once SP1 lands), and
+is merged only when its acceptance criteria hold.
+
+```
+SP0 repair ─► SP1 eval harness ─┬─► SP2 data + features v3 ─┐
+                                └─► SP3 fight simulator ─────┴─► SP4 ship + prospective
+```
+
+### SP0 — Repair and foundations
+
+Goal: the pipeline ingests the new data and the prospective loop is trustworthy.
+
+- **New-schema ingestion.** `download_data.py` / `refresh_data.py` fetch the
+  new file set. `dataset.py` gains a schema adapter that builds the existing
+  `fighters`, `fights`, `fight_stats` tables from the new files (same output
+  columns and dtypes, so every downstream test keeps passing) plus a new
+  `round_stats` table (one row per fighter per round: sig/total strikes by
+  target and position, kd, td, sub attempts, control). Old-schema builders are
+  removed once the new path reproduces the old tables on the overlapping
+  fights; a reconciliation script reports fight-count, id, and label
+  differences between old and new sources and must be reviewed before the
+  switch is committed.
+- **Truncation-invariance test** extended to `round_stats`-derived columns.
+- **Model version fix.** `model_version` = short sha256 over the sorted bytes
+  of the deployed model artifacts. One-time migration re-keys existing
+  prediction files and `track_record.json`; the weekly Action then grades the
+  78 pending fights.
+- **Housekeeping.** Delete the five iCloud `* 2.*` duplicates; document the
+  local-disk scratch-venv procedure in the README's development section;
+  recommend (not perform) moving the repo off iCloud.
+- **Acceptance:** full suite green; `refresh_data.py` reports newer data;
+  rebuilt `fights.parquet` covers through 2026-08-08; `track_record.json`
+  shows one version per real model and graded fights > 0 after the next
+  Action run (or a local grading run).
+
+### SP1 — Evaluation harness v2
+
+Goal: one function that scores any candidate model honestly enough to detect
+0.003-scale effects, with the acceptance bar written down before any
+candidate is run.
+
+- **Split.** Expanding-window walk-forward: for each fold year Y in
+  2018…2025, train on all decisive fights dated before Y-01-01, evaluate on
+  fights in Y. Hyperparameters and early stopping use the last training year
+  as an inner validation slice (never the fold year). Pooled metrics over all
+  fold years (~3,900 fights) are the headline; per-fold metrics are reported
+  to catch regressions concentrated in one era. 2026 fights (partial year)
+  are appended to the 2025 fold. The spent 2024+ test set is folded in; the
+  **prospective track record is the only remaining true holdout**, and the
+  README says so.
+- **Metrics.** Winner: log-loss (primary), accuracy, Brier, ECE. Joint
+  outcome: log-loss over the outcome classes defined in §3 (primary for the
+  simulator), plus marginal method macro-F1 and finish-round macro-F1 for
+  continuity with v1 tables. Slices reported for every candidate: debut
+  involved, women's bouts, five-round fights, fights with any external-data
+  feature missing (post-snapshot debutants), fold year.
+- **Noise floor.** Measured once: the incumbent architecture retrained with
+  three disjoint seed sets through the full harness; the standard deviation
+  of pooled winner log-loss across them is `σ_seed`. Cached alongside the
+  harness output.
+- **Pre-registered bars** (fixed in this spec, applied mechanically):
+  - A feature block or model change **ships for winner** only if pooled
+    winner log-loss improves by more than `max(0.003, 2·σ_seed)` and no fold
+    year worsens by more than 0.01.
+  - The simulator **ships as the joint predictor** only if joint-outcome
+    log-loss beats the composed v1 baseline (v1 winner × v1 method × v1 round
+    probabilities) by more than 0.01 **and** its winner marginal is not worse
+    than the incumbent winner model by more than `σ_seed`.
+  - Because several blocks and configs are tried on the same fights, the
+    final shipped configuration is re-scored once with fresh seeds; the
+    fresh-seed number is the one reported.
+- **Compute.** The harness caches per-fold feature matrices and runs from a
+  local-disk scratch venv; a full walk-forward of the XGBoost winner model
+  must complete in minutes, the torch ensemble in under an hour on this
+  machine, so experiments stay cheap enough to run many.
+- **Deliverables:** `src/mma/walkforward.py` (fold construction, scoring,
+  slices, bar check), `scripts/run_walkforward.py` (candidate spec in → JSON
+  report out under `models/walkforward/`), noise-floor artifact, README
+  section replacing the spent-test story with the walk-forward story.
+- **Acceptance:** incumbent XGBoost and torch models re-scored through the
+  harness with numbers that reproduce the committed 2021–2023 validation
+  metrics on those folds; `σ_seed` recorded; unit tests cover fold
+  boundaries (no fold-year fight in any training set), slice masks, and the
+  bar arithmetic.
+
+### SP2 — Data expansion and features v3
+
+Goal: add signal in evaluated blocks; keep only blocks that clear the SP1 bar.
+
+All features stay point-in-time by construction (built inside the
+chronological accumulators in `history.py`, or joined on dated rows with a
+strict `date <` filter) and pass the truncation-invariance test. Every
+external feature carries a missingness flag. Blocks are evaluated in this
+order, each on top of whatever previously cleared the bar, with negative
+results documented in the plan file as before.
+
+1. **In-fight profile block** (from `round_stats` and the strike splits):
+   per-fighter expanding rates of head/body/leg and distance/clinch/ground
+   output and absorption; knockdowns absorbed per fight; round-1 output share
+   and late-round fade (round-over-round change in sig strikes landed and
+   absorbed); finish and been-finished rates by round; median time-to-finish;
+   KO-loss count and recency ("chin" proxies).
+2. **Opponent-adjusted block:** for the core rates (sig landed/absorbed per
+   minute, TD landed/allowed, control share) an expanding "versus expectation"
+   version: fighter's value minus what their opponents allowed on average
+   before that fight; and average opponent quality of wins vs losses.
+3. **Rating-trajectory block:** Glicko-2 rating and deviation as features
+   (previously rejected as an Elo *replacement*; here tested as *additional*
+   columns), average post-fight Elo change over the last 3 and 5 fights,
+   peak-minus-current Elo, years since UFC debut, age², age × fight count.
+4. **Context block:** referee's historical finish rate and decision rate
+   (point-in-time), event location country vs fighter nationality (home
+   advantage; nationality from the external snapshot), bonus history
+   (performance-bonus count as a "fan-friendly finisher" proxy).
+5. **External snapshot block** (`ehan03/jds-mma-data`, vendored as a
+   *derived* compact per-fighter parquet of a few MB, regenerated by a
+   script from the downloaded snapshot, never the raw 80 MB): pre-UFC record
+   at UFC debut (wins, losses, finishes, finish-loss count), days since pro
+   debut, pre-UFC opponent quality (mean opponent record), regional
+   promotion of origin; gym id → gym win-rate accumulator (only if the
+   snapshot dates gym membership; a static current-gym column is as-of-scrape
+   and is rejected); nationality. Entity matching uses the snapshot's
+   ufcstats-id mapping; unmatched fighters are flagged, and the post-snapshot
+   debutant slice from SP1 monitors degradation over time.
+
+Feature selection is by block, not by column, to limit multiple-comparison
+optimism; within a block, a column is dropped only if a documented ablation
+shows it hurts.
+
+- **Acceptance:** each block's harness report committed; the shipped feature
+  table is the union of blocks that cleared the bar; `features.parquet`
+  rebuilt; truncation test green over every column; README feature section
+  updated.
+
+### SP3 — Fight simulator
+
+Goal: a Monte Carlo simulator whose empirical outcome distribution is the
+prediction, meeting the SP1 simulator bar.
+
+**Model.** Two learned components on pre-fight features (the v3 table plus
+round index and scheduled rounds), each symmetrized by running both corner
+orderings and averaging:
+
+- **Hazard model.** Discrete-time survival: one training row per
+  (fight, round actually fought), label ∈ {A KO/TKO, A submission, B KO/TKO,
+  B submission, round completes}. Rounds never reached are simply absent,
+  which handles censoring correctly. Inputs: pre-fight features, round
+  number, scheduled rounds, and (v1) nothing about the fight so far.
+- **Decision model.** P(A wins on the scorecards | features, scheduled
+  rounds), trained on fights that went the distance (draws excluded).
+
+Base learners: XGBoost multiclass and the existing torch trunk with a 5-way
+hazard head and a decision head (multi-task on the same rows), each as a
+seed ensemble with per-fold temperature calibration. The harness decides
+which base learner (or the average) ships.
+
+**Simulation.** For each fight and each of N runs (default 10,000): draw a
+model member (ensemble seed, or bootstrap of the hazard rows for XGBoost),
+then for r = 1…R draw the round outcome from the member's hazard
+distribution; if all rounds complete, draw the winner from the member's
+decision probability. Two randomness layers are recorded separately: the
+across-member spread of each probability is reported as the uncertainty
+interval; the within-member outcome frequencies are the prediction. N is
+chosen so Monte Carlo standard error on P(A wins) is below 0.005.
+
+**Experiments inside SP3, each judged by the harness:**
+
+- E1: hazard + decision on v1 features (isolates paradigm from data).
+- E2: same on v3 features.
+- E3: Bayesian hierarchical hazard model (PyMC; fighter random effects on
+  finish propensity and durability, weakly informative priors) as an
+  alternative member sampler — posterior draws replace ensemble seeds. Kept
+  only if it beats E2 or materially improves the debut slice.
+- E4: latent in-fight state — simulate per-round strike/takedown counts from
+  a generative model fit on `round_stats`, and condition later rounds'
+  hazards on cumulative simulated damage (a Markov-chain fight model in the
+  style of Holmes, McHale & Żychaluk 2023). Highest ceiling, highest cost;
+  attempted only if E2 ships, and gated separately.
+
+**Fallback if the simulator wins on joint outcome but loses the winner
+marginal:** a documented hybrid where the direct winner model's probability
+is imposed and the simulator supplies P(method, round | winner) by
+re-weighting simulated runs. This is a defined branch, not an ad-hoc patch.
+
+- **Acceptance:** SP3 bar from SP1 met on fresh seeds; `src/mma/simulator.py`
+  with a pure function `simulate(features_row, n_runs, members) -> OutcomeDistribution`;
+  tests for label construction (censoring), round masking for three-round
+  fights, symmetry under corner swap, Monte Carlo error bound, and that the
+  winner marginal equals 1 minus the opponent's; harness report committed.
+
+### SP4 — Ship, app, prospective loop
+
+Goal: the winning predictor is what the app shows, the weekly Action runs,
+and the track record grades.
+
+- `inference.py` exposes the outcome distribution; `display_priors.json`
+  logic is retired if the simulator's marginals are already base-rate
+  consistent (verified on the harness), otherwise retained for the marginals.
+- App: probability of win with interval, an outcome table ("A by KO/TKO in
+  R2: 11%"), P(distance), and the "simulated N times" framing; explanations
+  move to the hazard model's top factors.
+- Prospective records store the full joint distribution; grading scores joint
+  log-loss and marginals; `roll_window.py`'s promotion gate switches to the
+  SP1 bar on the walk-forward metric; the weekly Action rebuilds
+  `round_stats` and the derived external table.
+- README rewritten around the new ladder (v1 heads → simulator), the
+  walk-forward results, and the honest "market still wins / market gap"
+  section carried forward.
+- **Acceptance:** suite green; app boots headless; one weekly Action run
+  green end to end; a prospective prediction file produced by the new model
+  with joint distributions.
+
+## 5. Evaluation protocol summary (locked for this pass)
+
+- Expanding-window walk-forward, fold years 2018–2025(+2026 partial).
+- Primary metrics: winner log-loss; joint-outcome log-loss.
+- Bars: winner Δ > max(0.003, 2·σ_seed) with no fold worse by 0.01; simulator
+  joint Δ > 0.01 with winner marginal within σ_seed of incumbent.
+- Final numbers re-scored with fresh seeds; slices always reported.
+- Market comparison remains evaluation-only on the 2021+ odds-matched subset
+  and is re-run for the shipped model.
+- Prospective track record is the only true holdout and is never used for
+  selection.
+
+## 6. Uncertainty semantics
+
+Two sources are kept distinct everywhere they are shown:
+
+- **Model uncertainty** — spread across ensemble members / posterior draws.
+  Reported as an interval around every probability. Wide intervals are
+  expected for debutants and post-snapshot fighters.
+- **Outcome randomness** — the fight itself. Represented by the outcome
+  distribution; not an interval.
+
+The betting layer (later) needs both; the app shows both.
+
+## 7. Tooling used in this pass
+
+- **Subagents in parallel worktrees** for SP2 and SP3 once SP1 lands, with
+  the two-stage review convention from earlier phases.
+- **PyMC** (available skill) for the SP3 E3 Bayesian hazard variant.
+- **Research lookup / web search** already used for the data-source and
+  literature sweep; re-used for any specific method question (Glicko-2
+  parameters, discrete-time survival with XGBoost).
+- **Context7** for library documentation (xgboost multiclass with sample
+  weights, torch, pymc) instead of memory.
+- Prediction-market and Kaggle-odds connectors are deferred to the betting
+  spec.
+
+## 8. Risks and mitigations
+
+| Risk | Mitigation |
+|---|---|
+| New Kaggle schema differs from what the research agent saw, or the 11,441 fight rows include non-UFC or upcoming fights | SP0 reconciliation script and a hard review step before switching sources |
+| Walk-forward × ensembles is slow on this machine | Feature caching per fold, small search spaces, local-disk venv, XGBoost first for screening, torch only for finalists |
+| External snapshot entity matching is incomplete | Match by ufcstats id only; report match rate; missingness flags; dedicated slice |
+| Simulator winner marginal underperforms the direct model | Defined hybrid fallback; simulator still ships for method/round |
+| Multiple-comparison optimism across blocks and experiments | Block-level selection, fixed bars, fresh-seed final scoring |
+| iCloud corrupts `.git` or stalls training again | Scratch venv on local disk; `git status` verification before every commit; recommend moving the repo |
+
+## 9. Out of scope (deferred to later specs)
+
+- Value-betting layer: devigging, edge and Kelly sizing, backtest against the
+  Kaggle daily odds dataset (moneyline + method props), live odds API,
+  prediction-market connectors. Odds remain evaluation-only in this pass.
+- Judge-level scorecard data (UFC-DataLab, SCORE Network) and judge-effect
+  models for decision-bound fights.
+- Any scraping of Sherdog, Tapology, or Fight Matrix; paid data.
+- Six-class method targets, live in-fight prediction.
