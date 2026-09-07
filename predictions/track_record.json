@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-08-31T19:03:44Z",
+  "generated_at_utc": "2026-09-07T02:43:48Z",
   "overall": {
     "n_predicted": 78,
     "n_graded": 0,
@@ -8,77 +8,13 @@
     "brier": null
   },
   "model_versions": {
-    "690024f": {
-      "n_predicted": 12,
-      "n_graded": 0,
-      "accuracy": null,
-      "log_loss": null,
-      "brier": null,
-      "first_prediction_at": "2026-07-20T14:24:02Z"
-    },
-    "f55fd4d": {
-      "n_predicted": 6,
-      "n_graded": 0,
-      "accuracy": null,
-      "log_loss": null,
-      "brier": null,
-      "first_prediction_at": "2026-08-10T13:24:29Z"
-    },
-    "0d037cf": {
-      "n_predicted": 8,
-      "n_graded": 0,
-      "accuracy": null,
-      "log_loss": null,
-      "brier": null,
-      "first_prediction_at": "2026-08-24T13:03:46Z"
-    },
-    "79135ef": {
-      "n_predicted": 13,
+    "f4aa6f8d9d6f": {
+      "n_predicted": 78,
       "n_graded": 0,
       "accuracy": null,
       "log_loss": null,
       "brier": null,
       "first_prediction_at": "2026-07-15T16:48:23Z"
-    },
-    "fed19ae": {
-      "n_predicted": 7,
-      "n_graded": 0,
-      "accuracy": null,
-      "log_loss": null,
-      "brier": null,
-      "first_prediction_at": "2026-07-27T14:52:19Z"
-    },
-    "dc48663": {
-      "n_predicted": 11,
-      "n_graded": 0,
-      "accuracy": null,
-      "log_loss": null,
-      "brier": null,
-      "first_prediction_at": "2026-08-17T12:56:59Z"
-    },
-    "e47f720": {
-      "n_predicted": 5,
-      "n_graded": 0,
-      "accuracy": null,
-      "log_loss": null,
-      "brier": null,
-      "first_prediction_at": "2026-07-15T17:05:59Z"
-    },
-    "2191bb3": {
-      "n_predicted": 3,
-      "n_graded": 0,
-      "accuracy": null,
-      "log_loss": null,
-      "brier": null,
-      "first_prediction_at": "2026-08-03T14:56:12Z"
-    },
-    "d0bfe66": {
-      "n_predicted": 13,
-      "n_graded": 0,
-      "accuracy": null,
-      "log_loss": null,
-      "brier": null,
-      "first_prediction_at": "2026-08-31T19:03:41Z"
     }
   },
   "baselines": {

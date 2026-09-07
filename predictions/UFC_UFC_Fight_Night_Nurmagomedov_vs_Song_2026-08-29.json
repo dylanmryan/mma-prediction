@@ -3,7 +3,7 @@
   "event_date": "2026-08-29",
   "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Nurmagomedov_vs._Song",
   "predicted_at_utc": "2026-08-03T14:56:12Z",
-  "model_version": "2191bb3",
+  "model_version": "f4aa6f8d9d6f",
   "fights": [
     {
       "fighter_a_name": "Umar Nurmagomedov",
@@ -30,7 +30,7 @@
       "elo_b": 1731.5485134411413,
       "skipped": false,
       "predicted_at_utc": "2026-08-03T14:56:12Z",
-      "model_version": "2191bb3"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Yan Xiaonan",
@@ -57,7 +57,7 @@
       "elo_b": 1607.5070676515536,
       "skipped": false,
       "predicted_at_utc": "2026-08-03T14:56:12Z",
-      "model_version": "2191bb3"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Aori Qileng",
@@ -66,7 +66,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Aori Qileng' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-03T14:56:12Z",
-      "model_version": "2191bb3"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Su Mudaerji",
@@ -75,7 +75,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Su Mudaerji' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-03T14:56:12Z",
-      "model_version": "2191bb3"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Rei Tsuruya",
@@ -102,7 +102,7 @@
       "elo_b": 1439.9427360986385,
       "skipped": false,
       "predicted_at_utc": "2026-08-03T14:56:12Z",
-      "model_version": "2191bb3"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Liu Ce",
@@ -111,7 +111,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Liu Ce' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-03T14:56:12Z",
-      "model_version": "2191bb3"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Namsrai Batbayar",
@@ -120,7 +120,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Namsrai Batbayar' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-10T13:24:31Z",
-      "model_version": "f55fd4d"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Jack Jenkins",
@@ -147,7 +147,7 @@
       "elo_b": 1603.4499524061737,
       "skipped": false,
       "predicted_at_utc": "2026-08-10T13:24:31Z",
-      "model_version": "f55fd4d"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Xiong Jingnan",
@@ -156,7 +156,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Xiong Jingnan' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-10T13:24:31Z",
-      "model_version": "f55fd4d"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Bilal Hasan",
@@ -165,7 +165,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Bilal Hasan' (exact or accent-folded); no fighter in fighters.parquet matches name 'Nilson Rojas' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:43Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Xiao Long",
@@ -174,7 +174,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Francesco Nuzzi' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:43Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Lawrence Lui",
@@ -183,7 +183,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Lawrence Lui' (exact or accent-folded); no fighter in fighters.parquet matches name 'Hector Santiago' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:43Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Ding Meng",
@@ -192,7 +192,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Ding Meng' (exact or accent-folded); no fighter in fighters.parquet matches name 'Cameron Nelson' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:43Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     }
   ]
 }

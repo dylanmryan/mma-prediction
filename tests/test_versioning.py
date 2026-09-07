@@ -4,6 +4,7 @@ import json
 import pytest
 
 from mma.versioning import MODEL_ARTIFACT_GLOBS, model_version
+from scripts.migrate_model_versions import rekey_record
 
 
 def _make_models(root, seed_bytes=b"seed0"):
@@ -47,3 +48,19 @@ def test_missing_artifacts_raise(tmp_path):
 def test_globs_cover_torch_and_xgb():
     assert any("net_seed" in g for g in MODEL_ARTIFACT_GLOBS)
     assert any("xgb_winner" in g for g in MODEL_ARTIFACT_GLOBS)
+
+
+def test_rekey_replaces_git_shas_and_leaves_hashes():
+    record = {
+        "model_version": "79135ef",
+        "fights": [
+            {"model_version": "e47f720", "p_a_wins": 0.6},
+            {"model_version": "abcdef012345", "p_a_wins": 0.4},
+            {"skipped": True},
+        ],
+    }
+    assert rekey_record(record, "abcdef012345") == 2
+    assert record["model_version"] == "abcdef012345"
+    assert record["fights"][0]["model_version"] == "abcdef012345"
+    assert record["fights"][1]["model_version"] == "abcdef012345"
+    assert rekey_record(record, "abcdef012345") == 0  # idempotent

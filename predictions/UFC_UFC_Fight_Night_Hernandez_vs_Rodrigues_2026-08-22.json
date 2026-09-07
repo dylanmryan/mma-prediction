@@ -3,7 +3,7 @@
   "event_date": "2026-08-22",
   "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Hernandez_vs._Rodrigues",
   "predicted_at_utc": "2026-07-27T14:52:21Z",
-  "model_version": "fed19ae",
+  "model_version": "f4aa6f8d9d6f",
   "fights": [
     {
       "fighter_a_name": "Anthony Hernandez",
@@ -30,7 +30,7 @@
       "elo_b": 1665.2300177659897,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "fed19ae"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Roman Dolidze",
@@ -57,7 +57,7 @@
       "elo_b": 1701.9300255883506,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "fed19ae"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Serghei Spivac",
@@ -84,7 +84,7 @@
       "elo_b": 1572.3442840951209,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "fed19ae"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Kennedy Nzechukwu",
@@ -111,7 +111,7 @@
       "elo_b": 1593.485475911326,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "fed19ae"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Kody Steele",
@@ -138,7 +138,7 @@
       "elo_b": 1499.7497477090283,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "fed19ae"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Carli Judice",
@@ -147,7 +147,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Jeisla Chaves' (exact or accent-folded)",
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "fed19ae"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Wesley Schultz",
@@ -156,7 +156,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Wesley Schultz' (exact or accent-folded)",
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "fed19ae"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Shanelle Dyer",
@@ -165,7 +165,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Shanelle Dyer' (exact or accent-folded)",
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "fed19ae"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "MarQuel Mederos",
@@ -192,7 +192,7 @@
       "elo_b": 1554.5170307116475,
       "skipped": false,
       "predicted_at_utc": "2026-08-17T12:56:59Z",
-      "model_version": "dc48663"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Terrance Chatman",
@@ -201,7 +201,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Terrance Chatman' (exact or accent-folded); no fighter in fighters.parquet matches name 'Anthony Wint' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-17T12:56:59Z",
-      "model_version": "dc48663"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Jamall Emmers",
@@ -210,7 +210,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Lerryan Douglas' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-17T12:56:59Z",
-      "model_version": "dc48663"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Chris Padilla",
@@ -237,7 +237,7 @@
       "elo_b": 1655.8127896218045,
       "skipped": false,
       "predicted_at_utc": "2026-08-17T12:56:59Z",
-      "model_version": "dc48663"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "M\u00e1rcio Barbosa",
@@ -246,7 +246,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'M\u00e1rcio Barbosa' (exact or accent-folded); no fighter in fighters.parquet matches name 'Ryan Kuse' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-17T12:56:59Z",
-      "model_version": "dc48663"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Gauge Young",
@@ -255,7 +255,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Stanley Dorsainvil' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-17T12:56:59Z",
-      "model_version": "dc48663"
+      "model_version": "f4aa6f8d9d6f"
     }
   ]
 }

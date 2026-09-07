@@ -3,7 +3,7 @@
   "event_date": "2026-09-19",
   "source_page": "https://en.wikipedia.org/wiki/UFC_331",
   "predicted_at_utc": "2026-08-24T13:03:46Z",
-  "model_version": "0d037cf",
+  "model_version": "f4aa6f8d9d6f",
   "fights": [
     {
       "fighter_a_name": "Joshua Van",
@@ -30,7 +30,7 @@
       "elo_b": 1783.4625477589293,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Arman Tsarukyan",
@@ -57,7 +57,7 @@
       "elo_b": 1577.6130433389599,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Patr\u00edcio Pitbull",
@@ -66,7 +66,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Patr\u00edcio Pitbull' (exact or accent-folded); no fighter in fighters.parquet matches name 'Choi Doo-ho' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Renato Moicano",
@@ -93,7 +93,7 @@
       "elo_b": 1695.7753636396571,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Alonzo Menifield",
@@ -102,7 +102,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Iwo Baraniewski' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Gable Steveson",
@@ -111,7 +111,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Gable Steveson' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Marlon Vera",
@@ -138,7 +138,7 @@
       "elo_b": 1560.456405795544,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Tai Tuivasa",
@@ -165,7 +165,7 @@
       "elo_b": 1468.418904086524,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Edmen Shahbazyan",
@@ -192,7 +192,7 @@
       "elo_b": 1590.7654169365946,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Giga Chikadze",
@@ -219,7 +219,7 @@
       "elo_b": 1628.698675939084,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Casey O'Neill",
@@ -246,7 +246,7 @@
       "elo_b": 1574.8405107388787,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Ryan Gandra",
@@ -255,7 +255,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Ryan Gandra' (exact or accent-folded); no fighter in fighters.parquet matches name 'Osman Diaz' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Michael Aswell Jr.",
@@ -264,7 +264,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Michael Aswell Jr.' (exact or accent-folded); no fighter in fighters.parquet matches name 'Yoo Joo-sang' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "0d037cf"
+      "model_version": "f4aa6f8d9d6f"
     }
   ]
 }

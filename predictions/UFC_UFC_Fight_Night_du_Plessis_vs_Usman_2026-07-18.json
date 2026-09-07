@@ -3,7 +3,7 @@
   "event_date": "2026-07-18",
   "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_du_Plessis_vs._Usman",
   "predicted_at_utc": "2026-07-15T16:48:23Z",
-  "model_version": "79135ef",
+  "model_version": "f4aa6f8d9d6f",
   "fights": [
     {
       "fighter_a_name": "Dricus du Plessis",
@@ -29,7 +29,7 @@
       "elo_b": 1822.1731825347372,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Jared Cannonier",
@@ -55,7 +55,7 @@
       "elo_b": 1607.7798348055715,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Chase Hooper",
@@ -81,7 +81,7 @@
       "elo_b": 1434.3087956363447,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Tabatha Ricci",
@@ -107,7 +107,7 @@
       "elo_b": 1565.1291394776679,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Tommy McMillen",
@@ -116,7 +116,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Tommy McMillen'; no fighter in fighters.parquet matches name 'Alberto Montes'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Austin Bashi",
@@ -125,7 +125,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Jose Miguel Delgado'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Jean-Paul Lebosnoyani",
@@ -134,7 +134,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Jean-Paul Lebosnoyani'; no fighter in fighters.parquet matches name 'Ko Seok-hyeon'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Levi Rodrigues Jr.",
@@ -143,7 +143,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Levi Rodrigues Jr.'; no fighter in fighters.parquet matches name 'Felipe Franco'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Alden Coria",
@@ -152,7 +152,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Alden Coria'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "RJ Harris",
@@ -161,7 +161,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'RJ Harris'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     },
     {
       "fighter_a_name": "Anna Melisano",
@@ -170,7 +170,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Anna Melisano'",
       "predicted_at_utc": "2026-07-15T16:48:23Z",
-      "model_version": "79135ef"
+      "model_version": "f4aa6f8d9d6f"
     }
   ]
 }
