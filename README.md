@@ -224,8 +224,10 @@ the candidate beats the incumbent by more than 0.002 log-loss. On promotion
 the candidate ensemble is *staged* into `models/torch` (the incumbent is
 backed up on disk first) and nothing else happens — the script performs no
 git writes. A human then runs the suite, reviews the metrics diff, and
-commits by hand; that commit's git sha becomes the new `model_version` and
-starts a fresh `track_record.json` section. Promotion is deliberately a
+commits by hand; the new model's artifact hash (`mma.versioning.model_version`,
+computed over the torch weights and preprocessing stats) becomes the new
+`model_version` and starts a fresh `track_record.json` section automatically.
+Promotion is deliberately a
 manual, stage-only step (`--execute`, run by hand via `workflow_dispatch`)
 and is never wired into CI auto-promotion — the weekly Action only ever runs
 it in `--dry-run` and prints the report.
