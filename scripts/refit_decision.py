@@ -11,10 +11,14 @@ independent checks are reported:
   not worse than A's by more than sigma_seed (the seed noise floor).
 * ``bar_check_B_vs_A`` -- the unrelated "ships as a challenger" bar from the
   same spec section (pooled improvement > max(0.003, 2*sigma_seed) and no
-  fold year regresses by more than 0.01). B is not a challenger here (it
-  does not need to beat A, only not lose to it), so ``ships`` is expected to
-  be False even when the deployment recipe is adopted; this block is kept
-  for visibility, not as the decision rule.
+  fold year regresses by more than 0.01), via `mma.walkforward.bar_check`. B
+  is not a challenger here (it does not need to beat A, only not lose to
+  it), so ``ships`` is expected to be False even when the deployment recipe
+  is adopted; this block is kept for visibility, not as the decision rule.
+
+Also builds ``fresh_seed_rescore``: a fresh-seed (5-9) re-run of the same B
+vs A comparison for the torch candidate, confirming the deployment-recipe
+gate is not a seed-lucky fluke of the original seed-0-4 comparison.
 
 Usage:
     python scripts/refit_decision.py
@@ -25,18 +29,22 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from mma.walkforward import bar_check, paired_delta  # noqa: E402
+
 WF = ROOT / "models" / "walkforward"
 OUT = WF / "refit_decision.json"
 NOISE_FLOOR = WF / "noise_floor.json"
+FRESH_SEED_A = WF / "torch_v1_seeds5.json"
+FRESH_SEED_B = WF / "torch_refit_seeds5.json"
 
 RULE = "B ships as the deployment recipe iff torch B pooled winner log-loss <= torch A + sigma_seed (spec v3 §4 SP1)"
 DEPLOYMENT_RECIPE = "refit_through_latest"
-# "ships as a challenger" bar (spec v3 SS4 SP1) -- informational here, see
-# module docstring; not the gate that decides the deployment recipe.
-FOLD_REGRESSION_MAX = 0.01
 
 REPORTS = {
     "xgb": {"A": WF / "xgb_v1.json", "B": WF / "xgb_refit.json"},
@@ -57,44 +65,11 @@ def sigma_ci_95(sigma: float, n_reports: int) -> list[float]:
     return [lower, upper]
 
 
-def candidate_decision(report_a: dict, report_b: dict, sigma_seed: float, bar: float) -> dict:
-    a_pooled, b_pooled = report_a["pooled"], report_b["pooled"]
-    delta = round(b_pooled["winner_log_loss"] - a_pooled["winner_log_loss"], 4)
-
-    a_folds, b_folds = report_a["folds"], report_b["folds"]
-    common_years = sorted(set(a_folds) & set(b_folds), key=int)
-    missing_folds = sorted(set(a_folds) ^ set(b_folds), key=int)
-    fold_deltas = {
-        year: round(b_folds[year]["winner_log_loss"] - a_folds[year]["winner_log_loss"], 4)
-        for year in common_years
-    }
-    worst_fold_delta = max(fold_deltas.values()) if fold_deltas else None
-    comparable = not missing_folds
-    clears_delta = delta <= -bar
-    no_fold_regression = worst_fold_delta is not None and worst_fold_delta <= FOLD_REGRESSION_MAX
-    ships = bool(comparable and clears_delta and no_fold_regression)
-
-    return {
-        "A_pooled": a_pooled,
-        "B_pooled": b_pooled,
-        "delta_B_minus_A": delta,
-        "sigma_seed": sigma_seed,
-        "B_not_worse_than_A_by_sigma": delta <= sigma_seed,
-        "bar_check_B_vs_A": {
-            "bar": bar,
-            "sigma_seed": sigma_seed,
-            "delta": delta,
-            "fold_deltas": fold_deltas,
-            "worst_fold_delta": worst_fold_delta,
-            "comparable": comparable,
-            "missing_folds": missing_folds,
-            "clears_delta": clears_delta,
-            "no_fold_regression": no_fold_regression,
-            "ships": ships,
-        },
-        "per_fold_B_minus_A": fold_deltas,
-        "budget": report_b["config"]["budget"],
-    }
+def candidate_decision(report_a: dict, report_b: dict, sigma_seed: float) -> dict:
+    result = paired_delta(report_a, report_b, sigma_seed)
+    result["bar_check_B_vs_A"] = bar_check(report_b, report_a, sigma_seed)
+    result["budget"] = report_b["config"]["budget"]
+    return result
 
 
 def main() -> None:
@@ -104,15 +79,27 @@ def main() -> None:
 
     noise_floor = json.loads(NOISE_FLOOR.read_text())
     sigma_seed = noise_floor["sigma_seed"]
-    bar = noise_floor["bar"]
     lower, upper = sigma_ci_95(sigma_seed, noise_floor["n_reports"])
 
     decision = {"rule": RULE}
     for name, paths in REPORTS.items():
         report_a = json.loads(paths["A"].read_text())
         report_b = json.loads(paths["B"].read_text())
-        decision[name] = candidate_decision(report_a, report_b, sigma_seed, bar)
+        decision[name] = candidate_decision(report_a, report_b, sigma_seed)
     decision["deployment_recipe"] = DEPLOYMENT_RECIPE
+
+    # Fresh-seed re-scoring (spec §4 SP1): re-run the shipped torch B vs A
+    # comparison on disjoint seeds 5-9 and confirm the gate still holds --
+    # does not change deployment_recipe automatically even if it fails.
+    fresh_a = json.loads(FRESH_SEED_A.read_text())
+    fresh_b = json.loads(FRESH_SEED_B.read_text())
+    fresh_seed_rescore = paired_delta(fresh_a, fresh_b, sigma_seed)
+    fresh_seed_rescore["verdict"] = (
+        "confirmed" if fresh_seed_rescore["B_not_worse_than_A_by_sigma"]
+        else "NOT confirmed — see notes"
+    )
+    decision["fresh_seed_rescore"] = fresh_seed_rescore
+
     decision["notes"] = [
         f"sigma_seed is an n={noise_floor['n_reports']} estimate; its 95% CI (chi-square, "
         f"{noise_floor['n_reports'] - 1} dof) is roughly [0.5σ, 6.3σ] "
@@ -127,6 +114,8 @@ def main() -> None:
         "sets, while the recipe applies the all-fold median 1.1; B is worse by ~+0.0024 on "
         "2023–2025 and better on 2020–2022. Test a budget/temperature taken from the "
         "most recent k folds through the same harness against torch_v1.",
+        "Fresh-seed re-scoring (spec §4 SP1): B and A both re-run with seeds 5–9; "
+        "see fresh_seed_rescore.",
     ]
     decision["sigma_ci_95"] = [lower, upper]
 

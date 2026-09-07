@@ -28,6 +28,16 @@
     "delta_B_minus_A": -0.0013,
     "sigma_seed": 0.0003464101615137373,
     "B_not_worse_than_A_by_sigma": true,
+    "per_fold_B_minus_A": {
+      "2018": -0.006,
+      "2019": -0.0021,
+      "2020": -0.0063,
+      "2021": 0.0046,
+      "2022": -0.0014,
+      "2023": -0.0009,
+      "2024": -0.0007,
+      "2025": 0.0005
+    },
     "bar_check_B_vs_A": {
       "bar": 0.003,
       "sigma_seed": 0.0003464101615137373,
@@ -48,16 +58,6 @@
       "clears_delta": false,
       "no_fold_regression": true,
       "ships": false
-    },
-    "per_fold_B_minus_A": {
-      "2018": -0.006,
-      "2019": -0.0021,
-      "2020": -0.0063,
-      "2021": 0.0046,
-      "2022": -0.0014,
-      "2023": -0.0009,
-      "2024": -0.0007,
-      "2025": 0.0005
     },
     "budget": {
       "fixed_rounds": {
@@ -95,6 +95,16 @@
     "delta_B_minus_A": 0.0002,
     "sigma_seed": 0.0003464101615137373,
     "B_not_worse_than_A_by_sigma": true,
+    "per_fold_B_minus_A": {
+      "2018": 0.0,
+      "2019": 0.0008,
+      "2020": -0.0033,
+      "2021": -0.0033,
+      "2022": -0.0016,
+      "2023": 0.0023,
+      "2024": 0.0023,
+      "2025": 0.0024
+    },
     "bar_check_B_vs_A": {
       "bar": 0.003,
       "sigma_seed": 0.0003464101615137373,
@@ -116,27 +126,58 @@
       "no_fold_regression": true,
       "ships": false
     },
-    "per_fold_B_minus_A": {
-      "2018": 0.0,
-      "2019": 0.0008,
-      "2020": -0.0033,
-      "2021": -0.0033,
-      "2022": -0.0016,
-      "2023": 0.0023,
-      "2024": 0.0023,
-      "2025": 0.0024
-    },
     "budget": {
       "fixed_epochs": 14,
       "temperature": 1.1
     }
   },
   "deployment_recipe": "refit_through_latest",
+  "fresh_seed_rescore": {
+    "A_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6516,
+      "accuracy": 0.6126,
+      "brier": 0.2303,
+      "ece": 0.0096,
+      "joint_log_loss": 2.3207,
+      "method_macro_f1": 0.382,
+      "round_macro_f1": 0.3112,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "B_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6518,
+      "accuracy": 0.6153,
+      "brier": 0.2302,
+      "ece": 0.0107,
+      "joint_log_loss": 2.3191,
+      "method_macro_f1": 0.3904,
+      "round_macro_f1": 0.3097,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "delta_B_minus_A": 0.0002,
+    "sigma_seed": 0.0003464101615137373,
+    "B_not_worse_than_A_by_sigma": true,
+    "per_fold_B_minus_A": {
+      "2018": 0.0007,
+      "2019": 0.0004,
+      "2020": -0.0019,
+      "2021": -0.003,
+      "2022": -0.0016,
+      "2023": 0.0009,
+      "2024": 0.0009,
+      "2025": 0.0031
+    },
+    "verdict": "confirmed"
+  },
   "notes": [
     "sigma_seed is an n=3 estimate; its 95% CI (chi-square, 2 dof) is roughly [0.5\u03c3, 6.3\u03c3] (for \u03c3=0.000346: lower \u2248 \u03c3\u00b7sqrt(2/7.378) = 0.000180, upper \u2248 \u03c3\u00b7sqrt(2/0.0506) = 0.002177)",
     "the torch rule passed by a margin smaller than the 4-dp storage precision of pooled log-loss (\u0394=+0.0002 vs \u03c3=0.00035)",
     "bar_check is informational here: ships=False is expected because B is a deployment recipe that must only be not-worse than A, not a challenger that must beat it",
-    "follow-up experiment (not a re-decision): per-fold optimal temperature drifts from ~1.3\u20131.65 (2018\u20132022) to ~0.9\u20131.0 (2023\u20132025) across all three seed sets, while the recipe applies the all-fold median 1.1; B is worse by ~+0.0024 on 2023\u20132025 and better on 2020\u20132022. Test a budget/temperature taken from the most recent k folds through the same harness against torch_v1."
+    "follow-up experiment (not a re-decision): per-fold optimal temperature drifts from ~1.3\u20131.65 (2018\u20132022) to ~0.9\u20131.0 (2023\u20132025) across all three seed sets, while the recipe applies the all-fold median 1.1; B is worse by ~+0.0024 on 2023\u20132025 and better on 2020\u20132022. Test a budget/temperature taken from the most recent k folds through the same harness against torch_v1.",
+    "Fresh-seed re-scoring (spec \u00a74 SP1): B and A both re-run with seeds 5\u20139; see fresh_seed_rescore."
   ],
   "sigma_ci_95": [
     0.00018036131426059986,

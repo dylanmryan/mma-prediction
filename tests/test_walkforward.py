@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from mma.walkforward import FOLD_YEARS, make_folds, recency_weights
-from mma.walkforward import bar_check, build_report, pool, score_rows, slice_masks
+from mma.walkforward import bar_check, build_report, paired_delta, pool, score_rows, slice_masks
 
 METHOD = ["ko_tko", "submission", "decision"]
 ROUND = ["1", "2", "3", "45"]
@@ -199,6 +199,29 @@ def test_bar_check_rejects_nan_sigma():
         bar_check(cand, inc, sigma_seed=float("nan"))
     with pytest.raises(ValueError, match="sigma_seed"):
         bar_check(cand, inc, sigma_seed=None)
+
+
+def test_paired_delta_arithmetic():
+    a = {"pooled": {"winner_log_loss": 0.650}, "folds": {"2018": {"winner_log_loss": 0.64}, "2019": {"winner_log_loss": 0.66}}}
+    b = {"pooled": {"winner_log_loss": 0.640}, "folds": {"2018": {"winner_log_loss": 0.65}, "2019": {"winner_log_loss": 0.63}}}
+    out = paired_delta(a, b, sigma_seed=0.002)
+    assert out["A_pooled"] is a["pooled"] and out["B_pooled"] is b["pooled"]
+    assert out["delta_B_minus_A"] == pytest.approx(-0.010)
+    assert out["per_fold_B_minus_A"] == {"2018": pytest.approx(0.01), "2019": pytest.approx(-0.03)}
+    assert out["B_not_worse_than_A_by_sigma"] is True
+
+    # B worse than A by more than sigma_seed -> gate fails
+    b["pooled"]["winner_log_loss"] = 0.653
+    out = paired_delta(a, b, sigma_seed=0.002)
+    assert out["delta_B_minus_A"] == pytest.approx(0.003)
+    assert out["B_not_worse_than_A_by_sigma"] is False
+
+
+def test_paired_delta_folds_restricted_to_common_years():
+    a = {"pooled": {"winner_log_loss": 0.5}, "folds": {"2018": {"winner_log_loss": 0.5}, "2019": {"winner_log_loss": 0.5}}}
+    b = {"pooled": {"winner_log_loss": 0.5}, "folds": {"2019": {"winner_log_loss": 0.4}, "2020": {"winner_log_loss": 0.5}}}
+    out = paired_delta(a, b, sigma_seed=0.002)
+    assert out["per_fold_B_minus_A"] == {"2019": pytest.approx(-0.1)}
 
 
 def test_build_report_shape():

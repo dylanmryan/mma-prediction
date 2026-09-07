@@ -14,7 +14,9 @@ present) reported for every candidate; `pool` concatenates per-fold
 (mask, prediction) pairs into one row-aligned frame and prediction dict
 for pooled scoring; `build_report` assembles the full JSON report for a
 candidate; `bar_check` applies the pre-registered winner bar to a
-candidate/incumbent report pair. A report has the shape `{name, config,
+candidate/incumbent report pair; `paired_delta` computes the plain B-minus-A
+pooled/per-fold delta and the refit deployment-recipe gate (no bar, no
+comparability check) shared by `scripts/refit_decision.py`. A report has the shape `{name, config,
 fold_years, folds: {year: metrics}, pooled: metrics, slices: {name:
 metrics}, fit_info: {key: [per-fold values]}}`.
 """
@@ -234,4 +236,31 @@ def bar_check(candidate: dict, incumbent: dict, sigma_seed: float) -> dict:
         "comparable": bool(comparable), "missing_folds": missing_folds,
         "clears_delta": bool(clears), "no_fold_regression": bool(no_regression),
         "ships": bool(comparable and clears and no_regression),
+    }
+
+
+def paired_delta(report_a: dict, report_b: dict, sigma_seed: float) -> dict:
+    """Paired A/B pooled-metric delta with per-fold detail (spec §4 SP1).
+
+    Delta is B minus A (negative = B better). ``B_not_worse_than_A_by_sigma``
+    is the refit deployment-recipe gate: B ships as the recipe iff its pooled
+    winner log-loss is not worse than A's by more than ``sigma_seed``. Unlike
+    `bar_check`, this has no "ships as a challenger" bar or comparability
+    check -- it is the shared arithmetic behind both the main A/B refit
+    comparison and a fresh-seed re-score of the same pair."""
+    a_pooled, b_pooled = report_a["pooled"], report_b["pooled"]
+    delta = round(b_pooled["winner_log_loss"] - a_pooled["winner_log_loss"], 4)
+    a_folds, b_folds = report_a["folds"], report_b["folds"]
+    common_years = sorted(set(a_folds) & set(b_folds), key=int)
+    fold_deltas = {
+        year: round(b_folds[year]["winner_log_loss"] - a_folds[year]["winner_log_loss"], 4)
+        for year in common_years
+    }
+    return {
+        "A_pooled": a_pooled,
+        "B_pooled": b_pooled,
+        "delta_B_minus_A": delta,
+        "sigma_seed": sigma_seed,
+        "B_not_worse_than_A_by_sigma": bool(delta <= sigma_seed),
+        "per_fold_B_minus_A": fold_deltas,
     }
