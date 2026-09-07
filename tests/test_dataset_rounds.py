@@ -71,6 +71,20 @@ def test_duplicate_fight_round_rejected():
         build_round_stats(raw)
 
 
+def test_missing_round_no_rejected():
+    raw = _raw_round()
+    raw.loc[0, "round_no"] = None
+    with pytest.raises(ValueError, match="fight_id, round_no"):
+        build_round_stats(raw)
+
+
+def test_missing_corner_id_rejected():
+    raw = _raw_round()
+    raw.loc[0, "b_id"] = None
+    with pytest.raises(ValueError, match="missing corner"):
+        build_round_stats(raw)
+
+
 def test_bonuses():
     raw = pd.DataFrame({
         "fight_id": ["f2", "f1", "f1"],

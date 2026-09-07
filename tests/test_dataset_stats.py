@@ -17,6 +17,7 @@ def _raw_master():
         "fight_id": ["f2", "f1"],
         "r_fighter_id": ["jj", "cm"],
         "b_fighter_id": ["dc", "ed"],
+        "rounds_fought": [3, 2],
     }
     base = {"r": 10, "b": 20}
     for corner in ("r", "b"):
@@ -68,4 +69,30 @@ def test_duplicate_fight_ids_rejected():
     raw = _raw_master()
     raw.loc[1, "fight_id"] = "f2"
     with pytest.raises(ValueError, match="fight_id"):
+        build_fight_stats(raw)
+
+
+def test_no_round_record_nulls_stats():
+    raw = _raw_master()
+    raw.loc[1, "rounds_fought"] = 0
+    stats = build_fight_stats(raw).set_index(["fight_id", "corner"])
+    for corner in ("a", "b"):
+        row = stats.loc[("f1", corner)]
+        assert pd.isna(row["kd"])
+        assert pd.isna(row["sig_landed"])
+        assert pd.isna(row["ctrl_sec"])
+        assert pd.isna(row["rev"])
+        assert pd.isna(row["head_landed"])
+        assert pd.notna(row["fighter_id"])
+    assert stats.loc[("f1", "a"), "fighter_id"] == "cm"
+    assert stats.loc[("f1", "b"), "fighter_id"] == "ed"
+    f2 = stats.loc[("f2", "a")]
+    assert pd.notna(f2["kd"]) and pd.notna(f2["sig_landed"])
+    assert pd.notna(f2["ctrl_sec"]) and pd.notna(f2["head_landed"])
+
+
+def test_missing_corner_id_rejected():
+    raw = _raw_master()
+    raw.loc[0, "r_fighter_id"] = None
+    with pytest.raises(ValueError, match="missing corner"):
         build_fight_stats(raw)

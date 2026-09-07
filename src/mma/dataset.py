@@ -180,8 +180,21 @@ _TARGET_STAT_SUFFIXES = {
 
 
 def build_fight_stats(raw: pd.DataFrame) -> pd.DataFrame:
-    """Two rows per fight (one per fighter) with fight-total performance stats."""
+    """Two rows per fight (one per fighter) with fight-total performance stats.
+
+    Fights with no per-round record (`rounds_fought == 0`, all pre-2014)
+    carry zeros in the source; those are nulled so missing stats stay
+    missing.
+    """
     fight_ids = _require_unique_fight_ids(raw)
+    ids_a = raw["r_fighter_id"].astype("string").str.strip()
+    ids_b = raw["b_fighter_id"].astype("string").str.strip()
+    if ids_a.isna().any() or ids_b.isna().any():
+        raise ValueError("fights with missing corner fighter ids")
+    no_record = pd.to_numeric(raw["rounds_fought"], errors="coerce").fillna(0) == 0
+    stat_columns = (
+        list(_CORE_STAT_SUFFIXES) + ["ctrl_sec", "rev"] + list(_TARGET_STAT_SUFFIXES)
+    )
     frames = []
     for corner, prefix, id_column in (
         ("a", "r_total_", "r_fighter_id"), ("b", "b_total_", "b_fighter_id"),
@@ -199,6 +212,7 @@ def build_fight_stats(raw: pd.DataFrame) -> pd.DataFrame:
         frame["rev"] = pd.to_numeric(raw[prefix + "rev"], errors="coerce")
         for out_name, suffix in _TARGET_STAT_SUFFIXES.items():
             frame[out_name] = pd.to_numeric(raw[prefix + suffix], errors="coerce")
+        frame.loc[no_record, stat_columns] = pd.NA
         frames.append(frame)
     stats = pd.concat(frames, ignore_index=True)
     return stats.sort_values(["fight_id", "corner"]).reset_index(drop=True)
@@ -207,9 +221,18 @@ def build_fight_stats(raw: pd.DataFrame) -> pd.DataFrame:
 def build_round_stats(raw: pd.DataFrame) -> pd.DataFrame:
     """Two rows per fight per round with that round's performance stats."""
     fight_ids = raw["fight_id"].astype("string").str.strip()
-    round_no = pd.to_numeric(raw["round_no"], errors="coerce").astype("int64")
-    if fight_ids.isna().any() or pd.DataFrame({"f": fight_ids, "r": round_no}).duplicated().any():
+    round_no_numeric = pd.to_numeric(raw["round_no"], errors="coerce")
+    if (
+        fight_ids.isna().any()
+        or round_no_numeric.isna().any()
+        or pd.DataFrame({"f": fight_ids, "r": round_no_numeric}).duplicated().any()
+    ):
         raise ValueError("(fight_id, round_no) must be present and unique")
+    round_no = round_no_numeric.astype("int64")
+    ids_a = raw["r_id"].astype("string").str.strip()
+    ids_b = raw["b_id"].astype("string").str.strip()
+    if ids_a.isna().any() or ids_b.isna().any():
+        raise ValueError("fights with missing corner fighter ids")
     frames = []
     for corner, prefix, id_column in (("a", "r_", "r_id"), ("b", "b_", "b_id")):
         frame = pd.DataFrame(
