@@ -3,6 +3,10 @@ import pandas as pd
 import pytest
 
 from mma.walkforward import FOLD_YEARS, make_folds, recency_weights
+from mma.walkforward import bar_check, build_report, pool, score_rows, slice_masks
+
+METHOD = ["ko_tko", "submission", "decision"]
+ROUND = ["1", "2", "3", "45"]
 
 
 def _dates():
@@ -61,3 +65,117 @@ def test_recency_weights_half_life():
 def test_recency_weights_none_is_uniform():
     dates = pd.Series(pd.to_datetime(["2018-01-01", "2014-01-01"]))
     assert recency_weights(dates, pd.Timestamp("2018-01-01"), None).tolist() == [1.0, 1.0]
+
+
+def _rows(n=8, seed=0):
+    rng = np.random.default_rng(seed)
+    feats = pd.DataFrame({
+        "date": pd.to_datetime(["2018-03-01"] * 4 + ["2019-03-01"] * 4),
+        "y_winner": rng.integers(0, 2, size=n),
+        "y_method": pd.array(["ko_tko", "decision", "submission", "decision"] * 2, dtype="string"),
+        "y_finish_round": pd.array(["1", None, "3", None] * 2, dtype="string"),
+        "weight_class": pd.array(["Lightweight", "Women's Strawweight"] * 4, dtype="string"),
+        "scheduled_rounds": pd.array([3, 5, 3, 3] * 2, dtype="Int64"),
+        "debut_a": [True, False] * 4, "debut_b": [False] * 8,
+    })
+    pred = {
+        "winner": rng.uniform(0.2, 0.8, size=n),
+        "method": np.full((n, 3), 1 / 3),
+        "round": np.full((n, 4), 0.25),
+    }
+    return feats, pred
+
+
+def test_score_rows_reports_all_metrics():
+    feats, pred = _rows()
+    out = score_rows(feats, pred, METHOD, ROUND)
+    for key in ("n", "winner_log_loss", "accuracy", "brier", "ece",
+                "joint_log_loss", "method_macro_f1", "round_macro_f1", "n_method", "n_round"):
+        assert key in out
+    assert out["n"] == 8 and out["n_method"] == 8 and out["n_round"] == 4
+    assert out["joint_log_loss"] is not None and out["method_macro_f1"] is not None
+
+
+def test_score_rows_joint_matches_direct_computation():
+    feats, pred = _rows()
+    out = score_rows(feats, pred, METHOD, ROUND)
+    # uniform heads: finishes cost -log(pw * 1/3 * 1/4), decisions -log(pw * 1/3)
+    y = feats["y_winner"].to_numpy()
+    pw = np.where(y == 1, pred["winner"], 1 - pred["winner"])
+    is_finish = feats["y_finish_round"].notna().to_numpy()
+    expected = -np.mean(np.log(pw / 3 / np.where(is_finish, 4, 1)))
+    assert out["joint_log_loss"] == pytest.approx(expected, abs=1e-4)
+
+
+def test_score_rows_without_method_head():
+    feats, pred = _rows()
+    out = score_rows(feats, {"winner": pred["winner"], "method": None, "round": None}, METHOD, ROUND)
+    assert out["joint_log_loss"] is None and out["method_macro_f1"] is None and out["round_macro_f1"] is None
+
+
+def test_slice_masks():
+    feats, _ = _rows()
+    masks = slice_masks(feats)
+    assert set(masks) == {"debut", "womens", "five_round"}
+    assert masks["debut"].sum() == 4
+    assert masks["womens"].sum() == 4
+    assert masks["five_round"].sum() == 2
+    feats["external_missing"] = [True] + [False] * 7
+    assert slice_masks(feats)["external_missing"].sum() == 1
+
+
+def test_pool_concatenates_fold_predictions_in_row_order():
+    feats, pred = _rows()
+    a = np.array([True] * 4 + [False] * 4)
+    b = ~a
+    sub = lambda m: {k: (v[m] if v is not None else None) for k, v in pred.items()}  # noqa: E731
+    pooled_feats, pooled_pred = pool(feats, [(a, sub(a)), (b, sub(b))])
+    assert len(pooled_feats) == 8
+    assert pooled_pred["winner"].tolist() == pred["winner"].tolist()
+    assert pooled_pred["method"].shape == (8, 3)
+
+
+def test_pool_without_heads():
+    feats, pred = _rows()
+    a = np.array([True] * 4 + [False] * 4)
+    _, pooled = pool(feats, [(a, {"winner": pred["winner"][a], "method": None, "round": None}),
+                             (~a, {"winner": pred["winner"][~a], "method": None, "round": None})])
+    assert pooled["method"] is None and pooled["round"] is None
+
+
+def test_bar_check_arithmetic():
+    cand = {"pooled": {"winner_log_loss": 0.640}, "folds": {"2018": {"winner_log_loss": 0.65}, "2019": {"winner_log_loss": 0.63}}}
+    inc = {"pooled": {"winner_log_loss": 0.650}, "folds": {"2018": {"winner_log_loss": 0.64}, "2019": {"winner_log_loss": 0.66}}}
+    out = bar_check(cand, inc, sigma_seed=0.002)
+    assert out["bar"] == pytest.approx(0.004)          # max(0.003, 2*sigma)
+    assert out["delta"] == pytest.approx(-0.010)
+    assert out["worst_fold_delta"] == pytest.approx(0.010)  # 2018 got worse by exactly 0.01, allowed
+    assert out["clears_delta"] is True and out["no_fold_regression"] is True and out["ships"] is True
+    inc["folds"]["2018"]["winner_log_loss"] = 0.635
+    assert bar_check(cand, inc, 0.002)["ships"] is False
+
+
+def test_bar_check_uses_min_bar_when_sigma_small():
+    cand = {"pooled": {"winner_log_loss": 0.6475}, "folds": {}}
+    inc = {"pooled": {"winner_log_loss": 0.650}, "folds": {}}
+    out = bar_check(cand, inc, sigma_seed=0.0005)
+    assert out["bar"] == pytest.approx(0.003)
+    assert out["clears_delta"] is False  # delta -0.0025 does not beat -0.003
+
+
+def test_build_report_shape():
+    feats, pred = _rows()
+    a = np.array([True] * 4 + [False] * 4)
+    sub = lambda m: {k: (v[m] if v is not None else None) for k, v in pred.items()}  # noqa: E731
+    report = build_report(
+        name="toy", config={"k": 1}, features=feats,
+        fold_results=[(2018, a, sub(a), {"best_iteration": 10}),
+                      (2019, ~a, sub(~a), {"best_iteration": 20})],
+        method_classes=METHOD, round_classes=ROUND,
+    )
+    assert set(report) >= {"name", "config", "fold_years", "folds", "pooled", "slices", "fit_info"}
+    assert set(report["folds"]) == {"2018", "2019"}
+    assert report["fold_years"] == [2018, 2019]
+    assert report["fit_info"]["best_iteration"] == [10, 20]
+    assert "debut" in report["slices"] and "womens" in report["slices"]
+    assert report["pooled"]["n"] == 8
