@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-09-07T02:43:48Z",
+  "generated_at_utc": "2026-09-07T02:56:46Z",
   "overall": {
     "n_predicted": 78,
     "n_graded": 0,
@@ -8,7 +8,7 @@
     "brier": null
   },
   "model_versions": {
-    "f4aa6f8d9d6f": {
+    "40df77ec43c7": {
       "n_predicted": 78,
       "n_graded": 0,
       "accuracy": null,

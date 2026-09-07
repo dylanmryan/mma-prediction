@@ -3,7 +3,7 @@
   "event_date": "2026-08-08",
   "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Gamrot_vs._Salkilld",
   "predicted_at_utc": "2026-07-15T16:48:26Z",
-  "model_version": "f4aa6f8d9d6f",
+  "model_version": "40df77ec43c7",
   "fights": [
     {
       "fighter_a_name": "Mateusz Gamrot",
@@ -29,7 +29,7 @@
       "elo_b": 1574.461912392679,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:26Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Diyar Nurgozhay",
@@ -56,7 +56,7 @@
       "elo_b": 1497.2902618094906,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:02Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Carlos Diego Ferreira",
@@ -65,7 +65,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Carlos Diego Ferreira' (exact or accent-folded)",
       "predicted_at_utc": "2026-07-20T14:24:02Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Louie Sutherland",
@@ -74,7 +74,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Louie Sutherland' (exact or accent-folded); no fighter in fighters.parquet matches name 'Jos\u00e9 Luiz' (exact or accent-folded)",
       "predicted_at_utc": "2026-07-20T14:24:02Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Steven Asplund",
@@ -83,7 +83,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Steven Asplund' (exact or accent-folded); no fighter in fighters.parquet matches name 'Guilherme Pat' (exact or accent-folded)",
       "predicted_at_utc": "2026-07-20T14:24:02Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Amanda Lemos",
@@ -110,7 +110,7 @@
       "elo_b": 1544.7081623769561,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:02Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Ty Miller",
@@ -119,7 +119,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Ty Miller' (exact or accent-folded)",
       "predicted_at_utc": "2026-07-27T14:52:19Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Darren Elkins",
@@ -146,7 +146,7 @@
       "elo_b": 1533.2071723408328,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:19Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Juliana Miller",
@@ -173,7 +173,7 @@
       "elo_b": 1471.7281149634766,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:19Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Miles Johns",
@@ -182,7 +182,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Jessie Rosas' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-03T14:56:09Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Manoel Sousa",
@@ -191,7 +191,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Manoel Sousa' (exact or accent-folded); no fighter in fighters.parquet matches name 'Richie Miranda' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-03T14:56:09Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     }
   ]
 }

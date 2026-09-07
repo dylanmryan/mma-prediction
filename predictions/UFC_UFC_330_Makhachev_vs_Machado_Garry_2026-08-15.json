@@ -3,7 +3,7 @@
   "event_date": "2026-08-15",
   "source_page": "https://en.wikipedia.org/wiki/UFC_330",
   "predicted_at_utc": "2026-07-20T14:24:03Z",
-  "model_version": "f4aa6f8d9d6f",
+  "model_version": "40df77ec43c7",
   "fights": [
     {
       "fighter_a_name": "Islam Makhachev",
@@ -30,7 +30,7 @@
       "elo_b": 1743.9986944023813,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Mackenzie Dern",
@@ -57,7 +57,7 @@
       "elo_b": 1668.141766152723,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Jeremiah Wells",
@@ -84,7 +84,7 @@
       "elo_b": 1597.279427322723,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Erin Blanchfield",
@@ -111,7 +111,7 @@
       "elo_b": 1669.4778589470322,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Jalin Turner",
@@ -138,7 +138,7 @@
       "elo_b": 1582.0214299636414,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Geoff Neal",
@@ -165,7 +165,7 @@
       "elo_b": 1533.24339986283,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Neil Magny",
@@ -192,7 +192,7 @@
       "elo_b": 1550.2881119922047,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Mansur Abdul-Malik",
@@ -219,7 +219,7 @@
       "elo_b": 1451.4533642052074,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Vicente Luque",
@@ -246,7 +246,7 @@
       "elo_b": 1463.6356378064481,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Edson Barboza",
@@ -273,7 +273,7 @@
       "elo_b": 1582.6059842348504,
       "skipped": false,
       "predicted_at_utc": "2026-07-20T14:24:03Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Donte Johnson",
@@ -282,7 +282,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Donte Johnson' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-03T14:56:10Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Chidi Njokuani",
@@ -309,7 +309,7 @@
       "elo_b": 1699.2703695543105,
       "skipped": false,
       "predicted_at_utc": "2026-08-10T13:24:29Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Rafael Tobias",
@@ -318,7 +318,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Rafael Tobias' (exact or accent-folded); no fighter in fighters.parquet matches name 'Lucas Fernando' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-10T13:24:29Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     }
   ]
 }

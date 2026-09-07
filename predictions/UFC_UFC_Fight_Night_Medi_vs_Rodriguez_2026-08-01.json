@@ -3,7 +3,7 @@
   "event_date": "2026-08-01",
   "source_page": "https://en.wikipedia.org/wiki/UFC_Fight_Night%3A_Medi%C4%87_vs._Rodriguez",
   "predicted_at_utc": "2026-07-15T16:48:25Z",
-  "model_version": "f4aa6f8d9d6f",
+  "model_version": "40df77ec43c7",
   "fights": [
     {
       "fighter_a_name": "Uro\u0161 Medi\u0107",
@@ -30,7 +30,7 @@
       "elo_b": 1681.3866598204118,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T17:05:59Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Aleksandar Raki\u0107",
@@ -57,7 +57,7 @@
       "elo_b": 1629.0703660815373,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T17:05:59Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Du\u0161ko Todorovi\u0107",
@@ -84,7 +84,7 @@
       "elo_b": 1396.628276852812,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T17:05:59Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Vlasto \u010cepo",
@@ -93,7 +93,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Vlasto \u010cepo'",
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "\u013dudov\u00edt Klein",
@@ -120,7 +120,7 @@
       "elo_b": 1462.8807272857966,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T17:05:59Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Oban Elliott",
@@ -129,7 +129,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Michael Oliveira'",
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Mark Vologdin",
@@ -138,7 +138,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Mark Vologdin'",
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Dennis Buzukja",
@@ -164,7 +164,7 @@
       "elo_b": 1509.6802490054256,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Mateusz R\u0119becki",
@@ -191,7 +191,7 @@
       "elo_b": 1418.1600753740624,
       "skipped": false,
       "predicted_at_utc": "2026-07-15T17:05:59Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Nina Nikolija Milo\u0161evi\u0107",
@@ -200,7 +200,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Nina Nikolija Milo\u0161evi\u0107'",
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Jovan Leka",
@@ -209,7 +209,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Jovan Leka'; no fighter in fighters.parquet matches name 'Max Gimenis'",
       "predicted_at_utc": "2026-07-15T16:48:25Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     },
     {
       "fighter_a_name": "Jan B\u0142achowicz",
@@ -218,7 +218,7 @@
       "skipped": true,
       "reason": "no fighter in fighters.parquet matches name 'Jan B\u0142achowicz' (exact or accent-folded)",
       "predicted_at_utc": "2026-07-20T14:24:01Z",
-      "model_version": "f4aa6f8d9d6f"
+      "model_version": "40df77ec43c7"
     }
   ]
 }

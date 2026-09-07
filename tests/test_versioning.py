@@ -76,3 +76,20 @@ def test_rekey_replaces_git_shas_and_leaves_hashes():
     assert record["fights"][0]["model_version"] == "abcdef012345"
     assert record["fights"][1]["model_version"] == "abcdef012345"
     assert rekey_record(record, "abcdef012345") == 0  # idempotent
+
+
+def test_rekey_replaces_old_values_only_when_passed():
+    record = {
+        "model_version": "f4aa6f8d9d6f",
+        "fights": [
+            {"model_version": "f4aa6f8d9d6f", "p_a_wins": 0.6},
+            {"skipped": True},
+        ],
+    }
+    assert rekey_record(record, "0123456789ab") == 0
+    assert record["model_version"] == "f4aa6f8d9d6f"
+    assert record["fights"][0]["model_version"] == "f4aa6f8d9d6f"
+
+    assert rekey_record(record, "0123456789ab", old_values=("f4aa6f8d9d6f",)) == 2
+    assert record["model_version"] == "0123456789ab"
+    assert record["fights"][0]["model_version"] == "0123456789ab"
