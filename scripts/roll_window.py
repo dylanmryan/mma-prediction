@@ -22,7 +22,7 @@ proxy:
 
 CAVEAT -- the comparison is only valid when the slice is OUT-OF-TIME for the
 incumbent. Under the default deployment recipe (refit_through_latest, see
-models/walkforward/refit_decision.json and the train scripts) the incumbent
+models/walkforward/refit_decision_v3.json and the train scripts) the incumbent
 is trained on EVERY fight through the latest data date, so its training
 cutoff equals the latest date and the two-year "held-forward" slice is
 IN-SAMPLE for it: the incumbent would be scored on fights it trained on,
