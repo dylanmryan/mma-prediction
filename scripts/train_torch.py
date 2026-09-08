@@ -25,12 +25,15 @@ Why refit is the default: the walk-forward harness (scripts/run_walkforward.py)
 compared early-stopping on a held-out year against a fixed budget on all
 data through the newest year, on the same 2018-2025 eval folds; the fixed
 budget was not worse by more than the seed noise floor, and its pre-
-registered rule then ships it (models/walkforward/refit_decision.json,
+registered rule then ships it (models/walkforward/refit_decision_v3.json,
 ``deployment_recipe: refit_through_latest``). The deployed ensemble thereby
 trains on ~5 more years of fights than the pre-2021 split. BUDGET,
 TEMPERATURE, REPORT and REFIT_THROUGH below are that decision's numbers;
 re-derive them via run_walkforward.py --fixed-budget-from rather than
-editing them by hand.
+editing them by hand. The budget belongs to a FEATURE TABLE, not to the
+recipe: these are the SP2 `base,external` table's numbers
+(refit_decision_v3.json), and the SP1 46-column table's -- 14 epochs at
+temperature 1.1 -- are kept in refit_decision.json for the record.
 
 Checkpoint payloads (state_dict, temperature, n_features, n_weight_classes)
 are identical in both modes; ``mma.inference.Ensemble.load`` reads either.
@@ -63,11 +66,11 @@ SEEDS = (0, 1, 2, 3, 4)
 
 MODE_SPLIT, MODE_REFIT = "split", "refit_through"
 DEFAULT_MODE = MODE_REFIT
-# Refit-mode defaults: models/walkforward/refit_decision.json -> torch.budget.
+# Refit-mode defaults: models/walkforward/refit_decision_v3.json -> torch.budget.
 REFIT_THROUGH = "latest"
-BUDGET = 14
-TEMPERATURE = 1.1
-REPORT = ROOT / "models" / "walkforward" / "torch_refit.json"
+BUDGET = 10
+TEMPERATURE = 1.07
+REPORT = ROOT / "models" / "walkforward" / "torch_v3_refit.json"
 
 
 def parse_budget(spec) -> int:

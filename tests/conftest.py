@@ -6,12 +6,6 @@ import os
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 
-import json
-from pathlib import Path
-
-_PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
-
-
 def table_blocks() -> tuple[str, ...]:
     """The feature blocks `data/processed/features.parquet` was built from.
 
@@ -20,10 +14,10 @@ def table_blocks() -> tuple[str, ...]:
     against a block-enabled table and fails on shape rather than on the thing
     it is checking. `scripts/build_features.py` writes the sidecar next to the
     table for exactly this: it is the record of what is on disk.
-    """
-    from mma.feature_blocks import BASE_BLOCK
 
-    sidecar = _PROCESSED / "features_blocks.json"
-    if not sidecar.exists():
-        return (BASE_BLOCK,)
-    return tuple(json.loads(sidecar.read_text())["blocks"])
+    The serving path reads the same sidecar (`build_matchup` defaults to it),
+    so this is a thin re-export rather than a second implementation.
+    """
+    from mma.feature_blocks import table_blocks as _table_blocks
+
+    return _table_blocks()
