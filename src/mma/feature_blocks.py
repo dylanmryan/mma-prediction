@@ -267,3 +267,33 @@ register(Block(
     ),
     fight_level=("external_missing", "same_country"),
 ))
+
+
+
+# --- SP2 block: notice (MEASURED AND REJECTED) -------------------------------
+# Short notice and missed weight, from the Bet MMA tables in the same
+# `ehan03/jds-mma-data` snapshot. Deliberately NOT registered: the block was
+# built, evaluated and reverted in SP2 Task 12. It did not clear the bar
+# (torch pooled 0.6472 against the incumbent 0.6476 with the coverage flag held
+# out of the model, 0.6482 with it in -- a fifth of the 0.003 bar at best), and
+# the reason is coverage rather than signal: the source's bout list ends
+# 2024-12-14, so the columns are unknown on 100% of 2025 and 2026 rows, which
+# is exactly where the deployed model predicts. The raw signal is real and
+# large where it exists -- of the 484 observed fights with one corner on <=30
+# days' notice, that corner wins 35% of the time, and 26% at <=7 days -- but it
+# reaches only 4% of the table.
+#
+# What was kept, because it is reusable and correct: the derivation in
+# `scripts/build_external.py`, the committed `data/external/fight_notice.parquet`,
+# the loader `mma.notice`, and `mma.wiki_cards.parse_background`, which is the
+# only route to these facts for a FUTURE event. Registering the block again
+# means restoring the four lines below plus the `_side_frame` / `build_matchup`
+# wiring; see the SP2 plan's Task 12 notes.
+#
+#     register(Block(
+#         name="notice",
+#         differentials=(("notice_shortfall_days", "notice_shortfall_days"),
+#                        ("missed_weight_over_lbs", "missed_weight_over_lbs")),
+#         booleans=("short_notice_7", "short_notice_30", "missed_weight"),
+#         fight_level=("notice_unknown",),
+#     ))

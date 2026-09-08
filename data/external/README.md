@@ -77,3 +77,37 @@ asserts it on the real table. `scripts/build_external.py` carries the full
 argument, including the zero-wins convention for an unrecorded opponent;
 `src/mma/external.py` carries the join (by fighter id only, never by name) and
 the missingness rules.
+
+# `fight_notice.parquet` — short notice and missed weight
+
+One row per CORNER of every UFC bout the snapshot's Bet MMA tables cover:
+11348 rows over 5674 fights, 0.496 of our
+11441 fights (0.917 of the 2013-04-20 .. 2024-12-14 window the source spans).
+517 of those corners were late replacements (notice
+1-46 days) and 223 missed weight.
+
+| | |
+|---|---|
+| Source tables | `Bet MMA/late_replacements.csv`, `Bet MMA/missed_weights.csv`, `Bet MMA/bouts.csv`, `bout_mapping.csv`, `Bet MMA/fighters.csv` |
+| Licence | MIT, same snapshot and commit as above |
+| Coverage | 2013-04-20 .. 2024-12-14 |
+
+**Membership is the three-state boundary.** The two source lists name only the
+fighters a thing happened to, so "no row" would otherwise be ambiguous between
+"trained a full camp" and "nobody recorded it". Bet MMA's own bout list
+resolves it: inside the bouts it covers, absence of a replacement row is an
+observation; outside them, absence is ignorance. The derivation therefore emits
+BOTH corners of a covered bout or neither, which also means the block carries
+no per-corner missingness channel at all — the failure mode the `external`
+section above describes. `src/mma/notice.py` carries the rule and
+`tests/test_notice.py` checks it against the committed table.
+
+**Corner assignment never uses names.** `bout_mapping.csv` gives our
+`fight_id`, both Bet MMA fighter ids resolve to ufcstats ids through
+`fighter_mapping.csv` and `Bet MMA/fighters.csv`, and the derivation asserts
+the resulting pair is exactly the pair our own fights table records for that
+fight; a bout where it is not is dropped whole.
+
+**Point-in-time.** A replacement is booked and a weigh-in happens before the
+bout, so both facts are known on fight morning, and neither is accumulated
+across fights.
