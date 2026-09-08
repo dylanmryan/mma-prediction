@@ -133,27 +133,121 @@ def test_every_state_key_the_block_declares_is_one_this_module_emits():
     assert set(declared) <= set(external.STATE_KEYS)
 
 
-def test_missingness_is_fight_level_only_never_per_corner():
-    """Regression guard for a measured leak (SP2 Task 11).
+@pytest.mark.skipif(
+    not (PROCESSED / "features.parquet").exists()
+    or not (PROCESSED / "fights.parquet").exists()
+    or not external.DEFAULT_PATH.exists(),
+    reason="data not built",
+)
+def test_a_half_matched_fight_carries_exactly_one_value_tuple():
+    """The data-level leak guard for this block (SP2 Task 11).
 
     Membership of the snapshot's cross-source fighter mapping is a function of
-    how long a fighter's UFC career turned out to be: among 2013-2022
-    debutants 24% of the one-and-done fighters are in it against 100% of those
-    with 11+ bouts. A per-corner `external_missing_a`/`_b` pair therefore
-    encodes which corner went on to have a career -- the unmapped corner loses
-    76% of the time overall and 90% of the time in the debut slice, and the
-    walk-forward result flips from -0.014 on the historical folds to +0.049 on
-    2025 once missingness starts meaning "debuted after the snapshot" instead.
-    The row-level OR is symmetric in the corners, so it keeps the missingness
-    visible to the slice without saying who wins.
+    how long a fighter's UFC career turned out to be -- among 2013-2022
+    debutants, 24% of the one-and-done fighters are in it against 100% of
+    those with 11+ bouts -- and the unmapped corner loses 76% of the time
+    overall, 90% of the time in the debut slice. A per-corner
+    `external_missing_a`/`_b` pair therefore told the model which corner went
+    on to have a career, and the walk-forward signature confirmed it: -0.014
+    on the historical folds, +0.049 on 2025, where missingness starts meaning
+    "debuted after the snapshot" instead.
+
+    The property that makes that unreachable is not a naming rule, so this
+    does not check names: over the rows where exactly ONE corner is unmapped
+    -- the rows the selection effect could be read off -- the block's eight
+    columns must take exactly ONE distinct value tuple. If they do, no
+    function of them can separate a fight whose unmapped corner is A from one
+    whose unmapped corner is B, whatever the columns happen to be called.
+    Adding any per-corner channel breaks this immediately.
     """
     from mma.feature_blocks import BLOCKS, EXTERNAL_BLOCK, columns_of
 
-    block = BLOCKS[EXTERNAL_BLOCK]
-    columns = columns_of(block)
-    assert "external_missing" in block.fight_level
-    assert "external_missing_a" not in columns and "external_missing_b" not in columns
+    features = pd.read_parquet(PROCESSED / "features.parquet")
+    fights = pd.read_parquet(PROCESSED / "fights.parquet")
+    mapped = set(external.load_table()["fighter_id"])
+    unmapped_a = ~fights["fighter_a_id"].isin(mapped)
+    unmapped_b = ~fights["fighter_b_id"].isin(mapped)
+    half = set(fights.loc[unmapped_a ^ unmapped_b, "fight_id"])
+    assert len(half) > 100, f"fixture assumption: too few half-matched fights ({len(half)})"
+
+    columns = list(columns_of(BLOCKS[EXTERNAL_BLOCK]))
+    # Not every fight reaches the feature table (undecided outcomes are
+    # filtered out), so this is a subset of `half`, not all of it.
+    rows = features.loc[features["fight_id"].isin(half), columns]
+    assert len(rows) > 1000, f"only {len(rows)} half-matched feature rows"
+    distinct = {
+        tuple("NaN" if pd.isna(value) else value for value in row)
+        for row in rows.itertuples(index=False)
+    }
+    assert len(distinct) == 1, (
+        f"{len(distinct)} distinct value tuples over {len(rows)} half-matched rows; "
+        "the block can tell which corner is unmapped, which is the measured leak"
+    )
+    # Cheap extra: the naming rule that used to stand in for the property.
+    assert "external_missing" in BLOCKS[EXTERNAL_BLOCK].fight_level
     assert not any(column.endswith(("_a", "_b")) for column in columns)
+
+
+def test_a_missing_pro_debut_date_is_dropped_rather_than_flagged_present(table):
+    """A NaT debut used to slip through: `NaT > date` is False, so the negated
+    sanity condition kept the fighter, whose `days_since_pro_debut` then came
+    out NaN while `external_missing` said False -- a present flag over absent
+    values, which is the one invariant this module has."""
+    with_nat = pd.concat([table, pd.DataFrame([{
+        "fighter_id": "nat", "pre_ufc_wins": 7, "pre_ufc_losses": 1,
+        "pre_ufc_finish_rate": 0.5, "pre_ufc_finish_loss_rate": 0.0,
+        "pre_ufc_avg_opp_wins": 3.0, "pro_debut_date": pd.NaT,
+        "first_ufc_date": pd.Timestamp("2015-01-01"),
+        "nationality": "Brazil", "gym_id": None,
+    }])], ignore_index=True)
+
+    assert "nat" not in set(external.drop_source_errors(with_nat)["fighter_id"])
+    side = external.attach(_side(["nat"], ["2018-01-01"]), with_nat).iloc[0]
+    assert bool(side["external_missing"])
+    assert pd.isna(side["days_since_pro_debut"])
+    assert pd.isna(side["pre_ufc_wins"])
+    assert external.state_for("nat", pd.Timestamp("2018-01-01"), with_nat)[
+        "external_missing"] is True
+
+
+@pytest.mark.skipif(
+    not (PROCESSED / "fights.parquet").exists() or not external.DEFAULT_PATH.exists(),
+    reason="data not built",
+)
+def test_pre_ufc_values_are_constant_across_a_fighters_ufc_career():
+    """The real point-in-time guarantee for this block, asserted directly.
+
+    `test_no_leakage_truncation_invariance` cannot provide it: the external
+    table is a static committed artifact, so truncating the fights table
+    cannot change anything derived from it and the test passes regardless of
+    what is in here. What actually makes the block safe is the cut in
+    `scripts/build_external.derive` -- `history["date"] < first_ufc_date` --
+    which means every `pre_ufc_*` value summarises a window that closed
+    before the fighter's UFC career began, and is therefore the SAME at every
+    one of their UFC fights. A column that leaked a later result would vary
+    across a fighter's own fights; these do not.
+    """
+    fights = pd.read_parquet(PROCESSED / "fights.parquet")
+    corners = pd.concat([
+        fights[["fighter_a_id", "date"]].rename(columns={"fighter_a_id": "fighter_id"}),
+        fights[["fighter_b_id", "date"]].rename(columns={"fighter_b_id": "fighter_id"}),
+    ])
+    attached = external.attach(corners)
+    repeat = attached[attached["external_missing"].eq(False)]
+    counts = repeat["fighter_id"].value_counts()
+    veterans = set(counts[counts >= 2].index)
+    repeat = repeat[repeat["fighter_id"].isin(veterans)]
+    assert len(veterans) > 500, f"fixture assumption: {len(veterans)} multi-fight fighters"
+
+    varying = repeat.groupby("fighter_id")[list(external.NUMERIC_STATE_KEYS)].nunique(
+        dropna=False
+    ).max()
+    assert (varying == 1).all(), f"varies within a fighter's UFC career:\n{varying}"
+
+    # `days_since_pro_debut` is the deliberate exception: it is a duration from
+    # a fixed date, so it MUST advance across a fighter's career.
+    spans = repeat.groupby("fighter_id")["days_since_pro_debut"].nunique(dropna=False)
+    assert (spans > 1).any(), "days_since_pro_debut should vary within a career"
 
 
 @pytest.mark.skipif(
@@ -222,3 +316,52 @@ def test_the_flags_survive_into_the_table_and_out_of_both_model_matrices():
     assert not flags & set(feature_frame(features).columns)
     prep = Preprocessor.fit(features, train_mask=np.ones(len(features), dtype=bool))
     assert not flags & set(prep.numeric_columns)
+
+
+# --- the id-only join, guarded at the serving boundary -----------------------
+
+
+@pytest.mark.parametrize("label", [
+    "Jon Jones",                 # a name-indexed bio row: the failure that motivated this
+    "07f72a2a7591b30b ",         # trailing whitespace
+    "07F72A2A7591B30B",          # uppercase hex
+    "07f72a2a7591b30",           # 15 characters
+    "07f72a2a7591b30bb",         # 17 characters
+    "07f72a2a7591b30g",          # not hex
+    None,                        # unlabelled
+    12345,                       # not a string at all
+])
+def test_only_a_ufcstats_shaped_id_is_accepted_as_a_bio_label(label):
+    """A name-indexed bio row must raise, not serve an all-NaN external corner.
+
+    `fighters.set_index("name").loc["Jon Jones"]` is the obvious wrong call and
+    it produces a bio row whose label is a string, so the old
+    `isinstance(str)` check passed it. The lookup then matched nothing in the
+    external table and the fighter -- who may well be in it -- was served NaN
+    everywhere with `external_missing` set. Silent, and exactly the
+    name-matching failure the id-only join exists to prevent.
+    """
+    from mma.inference import _fighter_id
+
+    bio = pd.Series({"height_cm": 180.0}, name=label)
+    with pytest.raises(KeyError, match="ufcstats fighter id"):
+        _fighter_id(bio, "a")
+
+
+def test_a_real_ufcstats_id_is_accepted():
+    from mma.inference import _fighter_id
+
+    bio = pd.Series({"height_cm": 180.0}, name="07f72a2a7591b30b")
+    assert _fighter_id(bio, "a") == "07f72a2a7591b30b"
+
+
+@pytest.mark.skipif(
+    not (PROCESSED / "fighters.parquet").exists(), reason="processed data not built"
+)
+def test_every_real_fighter_id_passes_the_shape_check():
+    """The validation rule is only safe because the whole id space fits it."""
+    from mma.inference import _fighter_id
+
+    ids = pd.read_parquet(PROCESSED / "fighters.parquet")["fighter_id"]
+    for fighter_id in ids:
+        assert _fighter_id(pd.Series(dtype=float, name=fighter_id), "a") == fighter_id
