@@ -72,7 +72,7 @@ Given a block name `B` already implemented and registered:
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Branch from main and confirm the starting state**
+- [x] **Step 1: Branch from main and confirm the starting state**
 
 ```bash
 git checkout main && git status --short && git checkout -b sp2-features
@@ -92,7 +92,7 @@ The feature contract is currently written twice: `src/mma/features.py` builds th
 - Create: `tests/test_serving_parity.py`
 - Modify: `src/mma/features.py`, `src/mma/inference.py`
 
-- [ ] **Step 1: Write the failing parity test**
+- [x] **Step 1: Write the failing parity test**
 
 `tests/test_serving_parity.py`:
 ```python
@@ -213,14 +213,14 @@ def test_training_table_and_served_row_have_the_same_columns(tables):
     assert set(served.columns) == set(trained.columns) - identifiers
 ```
 
-- [ ] **Step 2: Run to see the current state**
+- [x] **Step 2: Run to see the current state**
 
 ```bash
 OMP_NUM_THREADS=1 ~/.venvs/mma/bin/pytest tests/test_serving_parity.py -q
 ```
 Expected: it may already pass or fail on a few columns. **Record the exact output in the Completion notes.** If a column mismatches, that is a pre-existing serving bug worth its own line in the notes — investigate before refactoring (the known intentional case is `career_fights` feeding both `elo_fights_diff` and `career_fights_diff`, documented at `inference.py:314-320`; a mismatch there is expected to be tiny, and if it is non-zero the test's tolerance must not be loosened without saying why).
 
-- [ ] **Step 3: Extract the shared builder into `src/mma/serving.py`**
+- [x] **Step 3: Extract the shared builder into `src/mma/serving.py`**
 
 ```python
 """The one place a (fighter A, fighter B, context) pair becomes a feature row.
@@ -284,7 +284,7 @@ def feature_row(state_a: dict, state_b: dict, context: dict,
 ```
 Then rewrite `build_matchup` in `inference.py` so its `side()` helper produces the state dict and the row comes from `serving.feature_row`, and rewrite the numeric section of `features.py::build_features` to call `serving.feature_row` per fight (vectorised construction is fine as long as the column set and values come from the shared spec — if a row-wise loop over 11,238 fights is too slow, keep the vectorised implementation but derive the column lists from `serving.DIFFERENTIALS`/`ABSOLUTES`/`BOOLEANS` so the two cannot diverge, and say so in the docstring).
 
-- [ ] **Step 4: Verify parity and no table change**
+- [x] **Step 4: Verify parity and no table change**
 
 ```bash
 OMP_NUM_THREADS=1 ~/.venvs/mma/bin/pytest tests/test_serving_parity.py tests/test_features.py tests/test_inference.py tests/test_prospective.py tests/test_explain.py -q
@@ -293,7 +293,7 @@ git status --short data/processed
 ```
 Expected: all pass; `features.parquet` **byte-identical** (no `git status` output). If the table changes, the refactor altered a value — stop and find out which column before continuing.
 
-- [ ] **Step 5: Full suite and commit**
+- [x] **Step 5: Full suite and commit**
 
 ```bash
 OMP_NUM_THREADS=1 ~/.venvs/mma/bin/pytest -q -p no:cacheprovider 2>&1 | tail -1
@@ -315,7 +315,7 @@ EOF
 - Create: `src/mma/feature_blocks.py`, `tests/test_feature_blocks.py`
 - Modify: `src/mma/features.py`, `scripts/build_features.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_feature_blocks.py`:
 ```python
@@ -357,7 +357,7 @@ def test_columns_for_is_cumulative():
 ```
 (Registry entries for blocks not yet implemented are added by their own task; at this point only `BASE_BLOCK` and a stub for `in_fight` need to exist — the test iterates whatever is registered.)
 
-- [ ] **Step 2: Implement `src/mma/feature_blocks.py`**
+- [x] **Step 2: Implement `src/mma/feature_blocks.py`**
 
 ```python
 """Feature blocks: named, independently evaluable groups of columns.
@@ -417,11 +417,11 @@ def columns_for(names) -> tuple[str, ...]:
 ```
 Register `BASE_BLOCK` from the tuples now living in `serving.py` (move them here and have `serving.py` import them, so there is one definition), and have `serving.feature_row` take a block list instead of three tuples.
 
-- [ ] **Step 3: `--blocks` in `scripts/build_features.py`**
+- [x] **Step 3: `--blocks` in `scripts/build_features.py`**
 
 Add `--blocks` (comma-separated, default `base`) and `--out` (default `data/processed/features.parquet`). Write a sidecar `data/processed/features_blocks.json` recording `{"blocks": [...], "n_rows": N, "n_columns": M}` so a report can be traced to the table it was computed on. (No timestamp: the sidecar is committed alongside the table and records nothing time-varying, which is how the byte-identity check on `features.parquet` stays meaningful.) Print the block list and column count.
 
-- [ ] **Step 4: Verify the default is unchanged**
+- [x] **Step 4: Verify the default is unchanged**
 
 ```bash
 OMP_NUM_THREADS=1 ~/.venvs/mma/bin/pytest tests/test_feature_blocks.py -q
@@ -430,7 +430,7 @@ git status --short data/processed
 ```
 Expected: tests pass; only `features_blocks.json` is new; `features.parquet` unchanged.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/mma/feature_blocks.py src/mma/serving.py src/mma/features.py scripts/build_features.py tests/test_feature_blocks.py data/processed/features_blocks.json
@@ -449,7 +449,7 @@ EOF
 
 **Files:** Create `scripts/block_decision.py`, extend `tests/test_walkforward.py`
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 ```python
 """Apply the pre-registered bar to one block's walk-forward report.
@@ -465,11 +465,11 @@ table, and the block's code is reverted when it does not ship.
 ```
 It reads `models/walkforward/noise_floor.json` for σ_seed (override with `--sigma`), calls `mma.walkforward.bar_check`, prints `json.dumps(..., indent=2)`, and additionally prints a two-column slice comparison (candidate vs incumbent winner LL for `debut`, `womens`, `five_round`, and `external_missing` when present). Exit code 0 always (it is a report, not a gate).
 
-- [ ] **Step 2: Test the slice-comparison helper**
+- [x] **Step 2: Test the slice-comparison helper**
 
 Factor the slice table as a pure function `slice_comparison(candidate, incumbent) -> list[dict]` and test it in `tests/test_walkforward.py` with two synthetic reports (one slice present in both, one only in the candidate → reported as `None` for the incumbent).
 
-- [ ] **Step 3: Verify against the committed reports and commit**
+- [x] **Step 3: Verify against the committed reports and commit**
 
 ```bash
 OMP_NUM_THREADS=1 ~/.venvs/mma/bin/python scripts/block_decision.py --candidate models/walkforward/torch_refit.json --incumbent models/walkforward/torch_v1.json
@@ -492,7 +492,7 @@ The richest un-mined source: `data/processed/round_stats.parquet` (50,262 rows) 
 
 **Files:** Modify `src/mma/history.py`, `src/mma/feature_blocks.py`, `src/mma/snapshots.py`; extend `tests/test_history.py`; create the reports.
 
-- [ ] **Step 1: Write the failing accumulator tests** (append to `tests/test_history.py`)
+- [x] **Step 1: Write the failing accumulator tests** (append to `tests/test_history.py`)
 
 Cover, with a hand-built two-fight fixture whose numbers you can verify by hand:
 - `head_share`, `body_share`, `leg_share` — career significant strikes landed to each target divided by total significant strikes landed; NaN before any landed strike.
@@ -506,7 +506,7 @@ Cover, with a hand-built two-fight fixture whose numbers you can verify by hand:
 
 Each must be **pre-fight**: the accumulator updates after both corners are snapshotted, exactly as the existing fields do (`history.py:130-150`).
 
-- [ ] **Step 2: Implement in `_FighterState`**
+- [x] **Step 2: Implement in `_FighterState`**
 
 Extend `_FighterState.__init__`, `.snapshot()` and `.update()`. `build_history` gains a `round_stats` argument (default `None` so the base block still builds without it) and passes each fight's round rows to `update`. Register the block in `feature_blocks.py`:
 ```python
@@ -526,7 +526,7 @@ register(Block(
 ```
 Mirror the new fields in `snapshots.py` so serving has them (the parity test from Task 2 will fail loudly if you forget).
 
-- [ ] **Step 3: Leakage and parity gates**
+- [x] **Step 3: Leakage and parity gates**
 
 ```bash
 OMP_NUM_THREADS=1 ~/.venvs/mma/bin/python scripts/build_features.py --blocks in_fight | tail -4
@@ -534,9 +534,9 @@ OMP_NUM_THREADS=1 ~/.venvs/mma/bin/pytest tests/test_processed_features.py tests
 ```
 Expected: table gains 17 columns; truncation-invariance and parity both pass. **Both are blocking** — a failure here means the block is leaky or serving-incomplete, not that the test is wrong.
 
-- [ ] **Step 4: Evaluate** — run the Block evaluation procedure with `B = in_fight`, cleared set = `base`.
+- [x] **Step 4: Evaluate** — run the Block evaluation procedure with `B = in_fight`, cleared set = `base`.
 
-- [ ] **Step 5: Record and commit**
+- [x] **Step 5: Record and commit**
 
 Append the results row to the Completion notes. Commit the code and reports if it ships; if it does not, `git revert`/reset the code changes and commit only the reports plus the notes row:
 ```bash
@@ -557,7 +557,7 @@ A fighter's raw rates conflate skill with opposition. For each core rate, subtra
 
 **Files:** Modify `src/mma/history.py`, `src/mma/feature_blocks.py`, `src/mma/snapshots.py`; extend `tests/test_history.py`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 The accumulator needs two passes' worth of information but must stay single-pass and point-in-time. Implementation contract to test:
 - Maintain, per fighter, running "allowed" aggregates: `sig_allowed_pm`, `td_allowed_pf`, `ctrl_allowed_share` (what opponents achieved against them).
@@ -566,13 +566,13 @@ The accumulator needs two passes' worth of information but must stay single-pass
 - Plus `avg_opp_elo_wins` and `avg_opp_elo_losses` (mean pre-fight Elo of beaten / losing opponents; NaN with no such fight).
 Tests: a debutant has NaN everywhere; a fighter who outperforms a "leaky" opponent gets a positive `sig_pm_vs_exp`; the opponent's allowed value used is the one *before* the shared fight (construct three chronological fights and assert the exact number).
 
-- [ ] **Step 2: Implement and register** the block with those seven differentials.
+- [x] **Step 2: Implement and register** the block with those seven differentials.
 
-- [ ] **Step 3: Leakage and parity gates** (same two commands as Task 5, Step 3).
+- [x] **Step 3: Leakage and parity gates** (same two commands as Task 5, Step 3).
 
-- [ ] **Step 4: Evaluate** — Block evaluation procedure, `B = opponent_adjusted`, cleared set = base + whatever cleared so far.
+- [x] **Step 4: Evaluate** — Block evaluation procedure, `B = opponent_adjusted`, cleared set = base + whatever cleared so far.
 
-- [ ] **Step 5: Record and commit** (same shape as Task 5, Step 5).
+- [x] **Step 5: Record and commit** (same shape as Task 5, Step 5).
 
 ---
 
@@ -582,11 +582,11 @@ Elo v1.1 rejected Glicko as a *replacement*; here it is tested as *additional* c
 
 **Files:** Create `src/mma/glicko.py`; modify `src/mma/history.py`, `src/mma/feature_blocks.py`, `src/mma/snapshots.py`, `scripts/build_ratings.py`; create `tests/test_glicko.py`.
 
-- [ ] **Step 1: Write the failing Glicko-2 tests**
+- [x] **Step 1: Write the failing Glicko-2 tests**
 
 Implement Glicko-2 (Glickman's published algorithm: rating μ, deviation φ, volatility σ, system constant τ = 0.5, convergence ε = 1e-6) and test against the worked example in the official paper: a player rated 1500 with RD 200 facing three opponents (1400/30, 1550/100, 1700/300) with results W/L/L ends at rating ≈ 1464.06, RD ≈ 151.52. Assert to 2 decimals. Also test: RD grows with inactivity; a single upset moves a high-RD player more than a low-RD one.
 
-- [ ] **Step 2: Add the ratings pass and the block**
+- [x] **Step 2: Add the ratings pass and the block**
 
 `build_ratings.py` gains Glicko-2 columns to `ratings.parquet` (`pre_glicko_mu`, `pre_glicko_phi`, `pre_glicko_sigma`), computed in the same chronological pass as Elo (rating periods = one per event date). Block columns:
 - `glicko_mu` (diff), `glicko_phi` (diff — uncertainty), `glicko_sigma` (diff)
@@ -596,7 +596,7 @@ Implement Glicko-2 (Glickman's published algorithm: rating μ, deviation φ, vol
 - `age_squared` (absolute per corner) and `age_x_fights` (diff)
 Tests: momentum is zero for a debutant, equals the sum of the last three deltas for a veteran; peak-minus-current is ≥ 0.
 
-- [ ] **Step 3: Rebuild ratings, then gates**
+- [x] **Step 3: Rebuild ratings, then gates**
 
 ```bash
 OMP_NUM_THREADS=1 ~/.venvs/mma/bin/python scripts/build_ratings.py | tail -6
@@ -605,9 +605,9 @@ OMP_NUM_THREADS=1 ~/.venvs/mma/bin/pytest tests/test_processed_features.py tests
 ```
 Note `ratings.parquet` changes here even if the block is rejected (new columns); that is acceptable — the Elo columns must be **byte-identical**, verify by comparing the pre-existing columns against `git show main:data/processed/ratings.parquet`.
 
-- [ ] **Step 4: Evaluate** — Block evaluation procedure, `B = trajectory`.
+- [x] **Step 4: Evaluate** — Block evaluation procedure, `B = trajectory`.
 
-- [ ] **Step 5: Record and commit.**
+- [x] **Step 5: Record and commit.**
 
 ---
 
@@ -617,19 +617,19 @@ Note `ratings.parquet` changes here even if the block is rejected (new columns);
 
 Point-in-time care: referee and location are known before the fight (they are on the card), but the *statistics* about them must be computed from prior fights only.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 - `referee_finish_rate`, `referee_decision_rate` (fight-level): the referee's rate over their prior fights only; NaN for a referee's first fight; `referee_missing` flag. A chronological three-fight fixture pins the exact values.
 - `home_country_a` / `home_country_b` (boolean): fighter nationality equals the event country. Nationality comes from the external snapshot (Task 11) — until that block exists, derive the event country from `fights.location` (last comma-separated component, normalised) and leave the nationality side NaN with `nationality_missing`. If the external block is rejected later, this feature degrades to "unknown" for everyone and must be dropped from the block; note that dependency in the block docstring.
 - `bonus_rate` (diff): career performance-bonus wins per fight, from `bonuses.parquet`, prior fights only.
 
-- [ ] **Step 2: Implement**, registering `context` with `fight_level=("referee_finish_rate", "referee_decision_rate", "referee_missing")` and the rest as differentials/booleans.
+- [x] **Step 2: Implement**, registering `context` with `fight_level=("referee_finish_rate", "referee_decision_rate", "referee_missing")` and the rest as differentials/booleans.
 
-- [ ] **Step 3: Gates** (leakage + parity, as before). The referee columns are fight-level, so `serving.feature_row` must accept them through `context` — and `build_matchup`'s caller (`prospective.predict_event`) must supply the referee when known and `None` otherwise; make the missing path explicit and tested, because Wikipedia cards do not carry referees, so **at prediction time these are always missing**. That asymmetry is a real risk: a feature that is always present in training and always missing in serving will hurt. State in the block docstring that `context` ships only if it clears the bar *and* a re-run with the referee columns forced missing on the evaluation rows does not lose more than σ_seed — run that ablation as part of Step 4 and record both numbers.
+- [x] **Step 3: Gates** (leakage + parity, as before). The referee columns are fight-level, so `serving.feature_row` must accept them through `context` — and `build_matchup`'s caller (`prospective.predict_event`) must supply the referee when known and `None` otherwise; make the missing path explicit and tested, because Wikipedia cards do not carry referees, so **at prediction time these are always missing**. That asymmetry is a real risk: a feature that is always present in training and always missing in serving will hurt. State in the block docstring that `context` ships only if it clears the bar *and* a re-run with the referee columns forced missing on the evaluation rows does not lose more than σ_seed — run that ablation as part of Step 4 and record both numbers.
 
-- [ ] **Step 4: Evaluate** — Block evaluation procedure plus the forced-missing ablation described above.
+- [x] **Step 4: Evaluate** — Block evaluation procedure plus the forced-missing ablation described above.
 
-- [ ] **Step 5: Record and commit.**
+- [x] **Step 5: Record and commit.**
 
 ---
 
@@ -705,12 +705,12 @@ Expected: reports how many fights the secondary source has beyond 2026-08-08 (to
 
 Source: `ehan03/jds-mma-data` (MIT), specifically `data/clean/fighter_mapping.csv` (ufcstats id ↔ other site ids), Sherdog `fighter_histories.csv` / `fighters.csv`, Tapology `fighters.csv` / `fighter_gyms.csv`. Coverage ends ≈ 2024-08; every column carries a missingness flag and feeds the `external_missing` slice.
 
-- [ ] **Step 1: `scripts/build_external.py`** downloads the snapshot (git clone or raw file fetch into the scratch dir — never commit the raw 80 MB) and derives, keyed by ufcstats `fighter_id`:
+- [x] **Step 1: `scripts/build_external.py`** downloads the snapshot (git clone or raw file fetch into the scratch dir — never commit the raw 80 MB) and derives, keyed by ufcstats `fighter_id`:
 `pre_ufc_wins`, `pre_ufc_losses`, `pre_ufc_finish_rate`, `pre_ufc_finish_loss_rate`, `days_since_pro_debut` (as of a given date, so store the debut date), `pre_ufc_avg_opp_wins`, `nationality`, `gym_id`. Write `data/external/fighter_external.parquet` (a few MB) plus a `data/external/README.md` recording source, licence, snapshot commit, and coverage dates.
-- [ ] **Step 2: `src/mma/external.py`** joins it to a fight row **strictly by fighter id** (never by name), computing `days_since_pro_debut` relative to the fight date and emitting `external_missing` per corner and a row-level `external_missing`. Tests: unmatched fighter → all NaN plus the flag; a fighter whose UFC debut precedes their recorded pro debut → flagged and NaN (data error, not negative days).
-- [ ] **Step 3: Gates.** Leakage: pre-UFC career values are as-of-snapshot and therefore constant — that is safe *only* because they describe the period before the fighter's UFC career; assert in a test that no external column changes when the fights table is truncated (this is exactly what the truncation-invariance test checks). Parity: serving must join the same table.
-- [ ] **Step 4: Evaluate**, and additionally report the `external_missing` slice explicitly — a block that helps overall but hurts the post-snapshot debutant slice materially is recorded as such.
-- [ ] **Step 5: Record and commit** (including the derived parquet and its README).
+- [x] **Step 2: `src/mma/external.py`** joins it to a fight row **strictly by fighter id** (never by name), computing `days_since_pro_debut` relative to the fight date and emitting `external_missing` per corner and a row-level `external_missing`. Tests: unmatched fighter → all NaN plus the flag; a fighter whose UFC debut precedes their recorded pro debut → flagged and NaN (data error, not negative days).
+- [x] **Step 3: Gates.** Leakage: pre-UFC career values are as-of-snapshot and therefore constant — that is safe *only* because they describe the period before the fighter's UFC career; assert in a test that no external column changes when the fights table is truncated (this is exactly what the truncation-invariance test checks). Parity: serving must join the same table.
+- [x] **Step 4: Evaluate**, and additionally report the `external_missing` slice explicitly — a block that helps overall but hurts the post-snapshot debutant slice materially is recorded as such.
+- [x] **Step 5: Record and commit** (including the derived parquet and its README).
 
 ---
 
@@ -718,15 +718,15 @@ Source: `ehan03/jds-mma-data` (MIT), specifically `data/clean/fighter_mapping.cs
 
 Both are smaller and share the "join an external table by id, flag missingness" shape of Task 11.
 
-- [ ] **Step 1: `notice`** — `late_replacements.csv` / `missed_weights.csv` from the same snapshot (through 2024-08) give `notice_days` (binned: ≤7 / ≤30 / full camp / unknown, as one-hot `short_notice_7`, `short_notice_30`, `notice_unknown`) and `missed_weight_lbs` (+ `missed_weight` boolean). Extend `src/mma/wiki_cards.py` with a `parse_background(html) -> {withdrawals: [...], missed_weight: [...]}` parser for the templated prose ("X was expected to face Y ... replaced by Z", "weighed in at N pounds, M pounds over") to extend coverage past 2024-08 and to serve future fights; unit-test it against three saved fixture pages under `tests/fixtures/wikipedia/` (add them). **Serving asymmetry check**, as in Task 8: score the block with these columns forced missing on the evaluation rows and record both numbers, since the Wikipedia parser will not always find them.
-- [ ] **Step 2: `rankings`** — weekly official rankings history (2013→now; CC0). Fighter matching is by name, so reuse the prospective matcher's never-guess policy: exact then accent-folded, and anything else is unmatched (flagged). Columns: `rank` (diff, unranked = NaN + flag), `is_champion_a/b`, `is_ranked_a/b`, `rank_missing`, plus `ranking_regime_post_2026_06` (fight-level flag for the Elo-based ranking switch).
-- [ ] **Step 3:** For each, run the Block evaluation procedure; record; commit.
+- [x] **Step 1: `notice`** — `late_replacements.csv` / `missed_weights.csv` from the same snapshot (through 2024-08) give `notice_days` (binned: ≤7 / ≤30 / full camp / unknown, as one-hot `short_notice_7`, `short_notice_30`, `notice_unknown`) and `missed_weight_lbs` (+ `missed_weight` boolean). Extend `src/mma/wiki_cards.py` with a `parse_background(html) -> {withdrawals: [...], missed_weight: [...]}` parser for the templated prose ("X was expected to face Y ... replaced by Z", "weighed in at N pounds, M pounds over") to extend coverage past 2024-08 and to serve future fights; unit-test it against three saved fixture pages under `tests/fixtures/wikipedia/` (add them). **Serving asymmetry check**, as in Task 8: score the block with these columns forced missing on the evaluation rows and record both numbers, since the Wikipedia parser will not always find them.
+- [x] **Step 2: `rankings`** — weekly official rankings history (2013→now; CC0). Fighter matching is by name, so reuse the prospective matcher's never-guess policy: exact then accent-folded, and anything else is unmatched (flagged). Columns: `rank` (diff, unranked = NaN + flag), `is_champion_a/b`, `is_ranked_a/b`, `rank_missing`, plus `ranking_regime_post_2026_06` (fight-level flag for the Elo-based ranking switch).
+- [x] **Step 3:** For each, run the Block evaluation procedure; record; commit.
 
 ---
 
 ### Task 13: Assemble, redeploy, document, merge
 
-- [ ] **Step 1: Build the shipped table**
+- [x] **Step 1: Build the shipped table**
 
 ```bash
 export OMP_NUM_THREADS=1
@@ -734,7 +734,7 @@ export OMP_NUM_THREADS=1
 ~/.venvs/mma/bin/pytest tests/test_processed_features.py tests/test_serving_parity.py -q
 ```
 
-- [ ] **Step 2: Fresh-seed re-score of the shipped set**
+- [x] **Step 2: Fresh-seed re-score of the shipped set**
 
 ```bash
 ~/.venvs/mma/bin/python scripts/run_walkforward.py --candidate torch --name torch_v3_seeds5 --seeds 5,6,7,8,9
@@ -742,7 +742,7 @@ export OMP_NUM_THREADS=1
 ```
 The fresh-seed delta is the number reported publicly. If it does not clear the bar, the shipped set is reduced to the blocks that survive fresh seeds — say so in the notes.
 
-- [ ] **Step 3: Re-derive the deployment budget and redeploy**
+- [x] **Step 3: Re-derive the deployment budget and redeploy**
 
 The budget in the train-script defaults was derived from the v1 feature table; a new table needs a new budget:
 ```bash
@@ -752,11 +752,11 @@ The budget in the train-script defaults was derived from the v1 feature table; a
 ```
 Update the train scripts' default `BUDGET`/`TEMPERATURE`/`REPORT` from the v3 reports (and the recency setting if Task 9 cleared one), retrain (`train_xgb.py`, `train_torch.py`, `build_display_priors.py`), record the new model hash, and confirm `Ensemble.load()` works and the app boots headless.
 
-- [ ] **Step 4: Documentation**
+- [x] **Step 4: Documentation**
 
 README: a "Features" section listing the shipped blocks and what each contributes, the block results table (including rejected blocks — the honest-negative-results story this project already tells twice), the new pooled numbers, and the data-source credits with licences. Plan Completion notes: the full results table, the fresh-seed number, the new hash, and the follow-ups. Spec: mark SP2 done and note anything deferred to SP3/SP4.
 
-- [ ] **Step 5: Verify and merge**
+- [x] **Step 5: Verify and merge**
 
 ```bash
 OMP_NUM_THREADS=1 ~/.venvs/mma/bin/pytest -q -p no:cacheprovider 2>&1 | tail -1
@@ -774,7 +774,7 @@ EOF
 
 ## Completion notes (filled in during execution)
 
-**Serving parity (Task 2):** _pre-existing mismatches found: …_
+**Serving parity (Task 2):** the commit for that task did not record the first run's output, so this line is filled from what is verifiable now rather than reconstructed: both parity tests pass on every table built during this sub-project, including the shipped one, and the single known intentional divergence is the documented one -- `career_fights` feeds both `elo_fights_diff` and `career_fights_diff` at serving time, where training has two separate counters (`inference.py`, `build_matchup`'s closing NOTE). It is within the test's 1e-6 tolerance on the compared fights and the tolerance was never loosened.
 
 **Block results** (pooled winner log-loss; incumbent in parentheses):
 
@@ -1610,5 +1610,143 @@ distinguishable in the track record and in any post-hoc audit.
 `round_stats.parquet` would lag `fights.parquet` for the gap-filled fights --
 harmless today (no shipped block reads it) but a silent hole for any future
 per-round feature.
-**Shipped set:** _…_ ; fresh-seed re-score: _…_ ; deployed model hash: _…_
-**Follow-ups:** _…_
+**Task 13 (assemble, redeploy, document, merge).**
+
+**Shipped set: `base,external`** -- `data/processed/features.parquet` is
+11,238 x 54 with the sidecar `{"blocks": ["base","external"]}`. Six pre-UFC
+differentials are modelled; `external_missing` and `same_country` live in the
+table and are excluded from both model matrices (`mma.tensors.DROPPED`,
+`mma.models.xgb.MODEL_EXCLUDED`).
+
+**Fresh-seed re-score (the locked rule's number): -0.0043.** The paired
+incumbent was built first, exactly as `torch_v1_extslice` was: the v1 recipe
+on the CURRENT 54-column table with all eight external columns held out of
+the model, seeds 5-9, as `torch_v1_seeds5_extslice`. It reproduces
+`torch_v1_seeds5.json` **bit-exactly** -- pooled, all eight folds, all three
+shared slices and every `fit_info` entry -- differing only in `name` and in
+carrying the extra `external_missing` slice, which is what makes it a valid
+paired stand-in rather than a regenerated incumbent. Against it,
+`torch_external_diffsonly_seeds5` scores pooled **0.6473** vs **0.6516**,
+delta **-0.0043**, worst fold +0.0006 (2025); `clears_delta: true`,
+`no_fold_regression: true`, **`ships: true`**. Fold deltas: 2018 -0.0056,
+2019 -0.0128, 2020 -0.0094, 2021 -0.0033, 2022 -0.0065, 2023 -0.0014,
+2024 -0.0006, 2025 +0.0006. Slices: debut -0.0068, womens -0.0018,
+five_round +0.0011, external_missing +0.0002. The block clears the bar on
+seeds it was never chosen on, by MORE than it did on seeds 0-4 (-0.0034),
+and the `external_missing` slice cost is smaller on fresh seeds (+0.0002
+against +0.0018) -- i.e. that cost is at the edge of seed noise.
+
+**Deployment budget, re-derived on the shipped table.** The train scripts'
+`BUDGET`/`TEMPERATURE`/`REPORT` were derived from reports computed on the v1
+46-column table, and a budget belongs to a feature table, not to a recipe. So
+protocol A and protocol B were both re-run on the shipped table with the
+shipped `--drop-columns external_missing,same_country`:
+
+| candidate | A (early stopping) | B (fixed budget, all data) | delta | gate |
+|---|---|---|---|---|
+| xgb | `xgb_v3` 0.6506 | `xgb_v3_refit` 0.6507 | +0.0001 | passes |
+| torch | `torch_v3` 0.6476 | `torch_v3_refit` **0.6470** | **-0.0006** | passes |
+
+Both inside sigma_seed, so the pre-registered rule ships B again:
+`deployment_recipe: refit_through_latest`. Fresh-seed re-scoring of the same
+B-vs-A pair (seeds 5-9: `torch_external_diffsonly_seeds5` vs
+`torch_v3_refit_seeds5`) gives +0.0002, `verdict: confirmed`. New budgets:
+**XGB {winner 105, method 61, round 75} trees; torch 10 epochs at temperature
+1.07** (against the v1 table's 82/80/76 and 14 epochs at 1.1). Written to
+`models/walkforward/refit_decision_v3.json`.
+
+`scripts/refit_decision.py` hard-coded the v1 report paths, so it grew a
+`--reports` argument over a `REPORT_SETS` registry: each set names its four
+A/B reports plus the fresh-seed pair, records the feature table it was
+computed on, and writes its own decision file. `refit_decision.json`
+regenerates byte-for-byte apart from the new `feature_table` field.
+`deployment_recipe` is now COMPUTED from the torch gate instead of asserted,
+so the file cannot record a recipe its own numbers do not support.
+`tests/test_refit_decision.py` (6 tests) pins the registry, the
+reproducibility of both committed decision files, and both branches of the
+recipe rule.
+
+**Redeploy.** `train_xgb.py` / `train_torch.py` refit-mode defaults updated to
+the v3 budget and reports; `build_display_priors.py` rerun. New model hash
+**`b617b96dae45`** (was `40df77ec43c7`). `Ensemble.load()` returns 5 nets at
+temperature 1.07 each; the deployed `models/torch/preprocess.json` now carries
+41 numeric columns including the six `pre_ufc_*`/`days_since_pro_debut`
+differentials and NOT `external_missing`/`same_country`. Determinism checked
+rather than assumed: retraining both learners into a scratch directory
+reproduces all eleven artifacts byte-for-byte. `tests/test_roll_window.py`
+green (the split-protocol path is untouched); suite **532 passed, 1 skipped**
+(526 before, +6 from `test_refit_decision.py`).
+
+**A real serving bug this step exposed.** `inference.build_matchup` defaulted
+to `blocks=(BASE_BLOCK,)`, and no serving caller overrode it -- so the app,
+`prospective.predict_fight` and the explainer would all have built rows
+missing the six external columns the newly deployed preprocessor asks for.
+The suite failed loudly (12 tests) the moment the artifacts were retrained,
+which is the parity discipline working, but the fix is the point: the default
+is now `feature_blocks.table_blocks()`, which reads the sidecar
+`scripts/build_features.py` writes next to the table. The serving contract is
+therefore the table on disk, not a tuple each caller has to remember, and
+`tests/conftest.py::table_blocks` becomes a re-export of it rather than a
+second implementation. Fixtures that stood in for bio rows now carry real
+ufcstats ids, because the external block joins on the bio row's index label.
+
+**End-to-end exercise, actually run rather than reasoned about.** Through the
+same code path `prospective.predict_fight` uses, with the real committed
+ensemble and `as_of` a future date:
+- mapped vs UNmapped corner (Alex Perez `ab2b4ff41d6ebe0f` vs Josh Hokit
+  `955da1675ad58a50`): the six differentials come back NaN with
+  `external_missing=True`, `same_country=False`, no crash, and
+  `p_a_wins = 0.2606` with a full method distribution;
+- mapped vs mapped (Perez vs Adam Fugitt): real values flow through
+  (`pre_ufc_wins_diff` 9.0, `days_since_pro_debut_diff` 1982.0,
+  `external_missing=False`), `p_a_wins = 0.6952`.
+The app boots headless (`/_stcore/health` -> 200) on the redeployed
+artifacts.
+
+**Shipped set:** `base,external` (11,238 x 54; six pre-UFC differentials
+modelled, two coverage flags in the table and out of both model matrices) ;
+fresh-seed re-score: **-0.0043** pooled (0.6516 -> 0.6473, seeds 5-9, worst
+fold +0.0006, `ships: true`) ; deployed model hash: **`b617b96dae45`**.
+
+**Follow-ups (carried into SP3/SP4):**
+
+1. **The external snapshot is static and decaying.** `ehan03/jds-mma-data`
+   covers UFC events to 2024-12-14; `external_missing` is 0.201 of all rows
+   but 0.359 of 2025 and 0.534 of 2026, and the block's gain follows
+   (-0.0047 row-weighted on 2018-2023 against -0.0006 on 2024-2025). Without
+   a refreshable source -- or a live scrape of the pre-UFC record --
+   `scripts/build_external.py` will drift the only shipped block to neutral.
+2. **Enabling secondary-source writes needs four things** (Task 10):
+   (a) an adaptation of `ufc_fighter_tott.csv` into `fighters.parquet`, or
+   the freshest card is the one that merges worst (8 of 52 gap fights are
+   rejected today for 9 unknown debutants); (b) a resolution of the collision
+   with `make_dataset.py`, which rebuilds `fights.parquet` wholesale from
+   Kaggle and whose regression guard fails when the rebuild drops rows a
+   secondary write added; (c) a provenance column on the fights table;
+   (d) `round_stats.parquet`, which this adapter does not fill.
+3. **`mma.wiki_cards.parse_background` is built and fixture-tested but not
+   wired into `prospective.predict_event`.** It is the only route to
+   withdrawals and missed weight for a FUTURE event; it stayed unwired
+   because the `notice` block did not ship. A live source for those facts
+   would change the block's verdict, since its raw marginal is strong (a
+   corner on <=7 days' notice wins 0.264) and its problem is purely coverage.
+4. **Three rankings name-match misses are mechanical.** `Jan Błachowicz`,
+   `Klaudia Syguła` (stroked Latin letters, which NFKD does not decompose the
+   way it decomposes an accent) and `Lone'er Kavanagh` (curly vs straight
+   apostrophe) would close by extending `mma.prospective.fold_accents` with a
+   stroked-letter map and apostrophe normalisation, without weakening the
+   never-guess rule. Left alone here because `fold_accents` is on the live
+   prediction path and the `rankings` block did not ship.
+5. **One row carries a `dob` data error.** Fight `92961925688cd2d6`
+   (2003-05-16) has `age_b` = 4.61. Harmless for the base block's linear age
+   differential -- it is one row of 11,238, pre-dating every fold year -- but
+   it would matter to anything quadratic in age (the `trajectory` block's
+   `age_squared`, or an SP3 hazard model with an age term), so a sanity bound
+   on `dob` belongs in `scripts/make_dataset.py` before such a feature ships.
+6. **Recency and temperature drift** (Task 9 Step 3), unchanged: the
+   recent-fold budget/temperature pays on 2022-2025 and costs on 2018-2021,
+   netting +0.0002 pooled. The honest test is a recency-weighted headline
+   metric or more fold years, not a tighter read of the same eight numbers.
+7. **`roll_window.py`'s promotion gate** still scores a newest-2-years slice
+   that is in-sample for a refit-through-latest incumbent, so `--execute`
+   aborts. SP4 moves it onto the walk-forward harness.
