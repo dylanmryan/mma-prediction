@@ -639,7 +639,7 @@ Not new columns: the SP1 harness capability, searched as a block.
 
 **Files:** none in `src/`; reports only, plus the Completion notes.
 
-- [ ] **Step 1: Grid over training window and half-life**
+- [x] **Step 1: Grid over training window and half-life**
 
 ```bash
 export OMP_NUM_THREADS=1
@@ -653,11 +653,11 @@ done
 ```
 16 XGB runs ≈ 4 minutes. Record every pooled number in the Completion notes as a 4×4 table.
 
-- [ ] **Step 2: Carry the best two configurations to torch**
+- [x] **Step 2: Carry the best two configurations to torch**
 
 Run the two best XGB cells on torch (`--candidate torch --name torch_rec_<...>`), then `block_decision.py` against `torch_v1.json`.
 
-- [ ] **Step 3: Temperature/budget from recent folds** (the SP1 follow-up)
+- [x] **Step 3: Temperature/budget from recent folds** (the SP1 follow-up)
 
 Per `models/walkforward/refit_decision.json`'s notes, per-fold optimal temperature drifts from ≈1.4 (2018–2022) to ≈0.96 (2023–2025) while the deployed recipe uses 1.1. Derive a budget and temperature from the **last four folds only** and score that refit variant:
 ```bash
@@ -674,7 +674,7 @@ PY
 ```
 Then run a torch walk-forward with those values (add a `--fixed-epochs` / `--temperature` pass-through to `run_walkforward.py` if `--fixed-budget-from` cannot express it — a small CLI addition, tested) and compare against `torch_refit.json` with `block_decision.py`. This decides whether SP4 should deploy the recent-fold temperature instead of 1.1.
 
-- [ ] **Step 4: Record and commit** the reports and the notes; if a recency configuration clears the bar, record it as a **deployment setting** (it changes how the train scripts are invoked, not the feature table) and update the train-script defaults in Task 13.
+- [x] **Step 4: Record and commit** the reports and the notes; if a recency configuration clears the bar, record it as a **deployment setting** (it changes how the train scripts are invoked, not the feature table) and update the train-script defaults in Task 13.
 
 ---
 
@@ -784,7 +784,7 @@ EOF
 | opponent_adjusted | 0.6519 (0.6537) | 0.6532 (0.6510) | +0.0022 vs torch_v1 | **no** | XGB liked it (-0.0018), torch did not; every fold worse on torch. Slices: debut +0.0030, womens +0.0020, five_round -0.0018. Coverage 0.63/0.51 of rows. Incumbent stays `{xgb,torch}_v1`. |
 | trajectory | _…_ | _…_ | _…_ | _…_ | |
 | context | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
-| recency | _…_ | _…_ | _…_ | _…_ | best window/half-life: _…_ |
+| recency | 0.6525 (0.6537) | 0.6499 (0.6510) | -0.0011 vs torch_v1 | **no** | best window/half-life: half-life 8y (window barely matters); improves on both scorers but by a third of the 0.003 bar. Incumbent stays `{xgb,torch}_v1`. |
 | external | _…_ | _…_ | _…_ | _…_ | external_missing slice: _…_ |
 | notice | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | rankings | _…_ | _…_ | _…_ | _…_ | match rate: _…_ |
@@ -860,8 +860,77 @@ beaten and lost to).
   test never exercises a new block's snapshot fields at all -- so the two
   "blocking gates" could not actually gate a block.
 
-**Recency grid (Task 9):** _4×4 table_
-**Recent-fold temperature experiment:** _…_
+**Block `recency` (Task 9), measured and rejected.** No feature columns: the
+SP1 harness's `--train-start` / `--half-life` capability searched as a block.
+The feature table stayed base-only (11,238 x 46) throughout.
+
+16 XGB runs, pooled winner log-loss (rows = training-window start, columns =
+recency half-life in years):
+
+| train_start \ half-life | inf | 8 | 4 | 2 |
+|---|---|---|---|---|
+| none (1993-) | **0.6537** | **0.6525** | 0.6541 | 0.6540 |
+| 2000-01-01 | 0.6535 | **0.6525** | 0.6531 | 0.6560 |
+| 2005-01-01 | 0.6534 | **0.6525** | 0.6527 | 0.6529 |
+| 2010-01-01 | 0.6539 | 0.6542 | 0.6556 | 0.6544 |
+
+- Harness sanity check: the `none`/`inf` cell reproduced `xgb_v1.json`'s
+  0.6537 exactly, so the grid is comparable to the incumbent reports.
+- The signal is the half-life, not the window. An 8-year half-life is the best
+  cell in three of the four rows; truncating hard (2010) is the worst row of
+  the grid, at or above baseline in every column -- it throws away 2,741 of
+  the 9,710 training rows available to the 2025 fold for no gain (the 2005
+  window drops 885 and is roughly neutral). Half-lives
+  shorter than 8y overshoot: 2y is worse than baseline in three rows.
+- Best cells: a three-way tie at 0.6525 (`none`/8, `2000-01-01`/8,
+  `2005-01-01`/8) at the reports' 4-dp storage precision. Tie broken on mean
+  per-fold log-loss (2005/8 0.65426 < none/8 0.65461 < 2000/8 0.65470), so
+  `2005-01-01`/8 and `none`/8 were carried to torch.
+- torch decision, `torch_rec_2005-01-01_8`: pooled **0.6499** vs incumbent
+  0.6510 (delta **-0.0011**, better). `bar_check` -> `clears_delta: false`,
+  `no_fold_regression: true`, **`ships: false`**. Best folds 2025 -0.0052 and
+  2024 -0.0034; worst 2019 +0.0032. Slices: debut -0.0022, womens -0.0019,
+  five_round +0.0015.
+- torch decision, `torch_rec_none_8`: pooled **0.6501** (delta **-0.0009**),
+  same verdict; worst fold 2019 +0.0023. Slices: debut -0.0027,
+  womens +0.0007, five_round 0.0000.
+- Both configurations agree in sign and in shape -- down-weighting old fights
+  helps, and helps most on the newest folds, which is the era-drift story the
+  block was testing -- but the effect is about a third of the pre-registered
+  0.003 bar and roughly 3 sigma_seed, so **no recency setting is adopted**.
+  Task 13's train scripts keep uniform weights over the full history.
+- Reports kept: the 16 `models/walkforward/xgb_rec_*.json` plus
+  `torch_rec_2005-01-01_8.json` and `torch_rec_none_8.json`. Nothing in
+  `src/` changed, so there is no block code to revert.
+
+**Recent-fold temperature experiment (Task 9 Step 3, the SP1 follow-up).**
+`refit_decision.json` recorded that the per-fold optimal temperature drifts
+from ~1.3-1.65 (2018-2022) to ~0.9-1.0 (2023-2025) while the deployed refit
+recipe applies the all-fold median 1.1, and that the refit variant lost to the
+incumbent protocol on exactly the recent folds. Derived from `torch_v1.json`'s
+last four folds (2022-2025): per-fold median epochs [19, 25, 10, 16] ->
+**budget 18**; per-fold median temperatures [1.34, 0.96, 1.00, 0.90] ->
+**temperature 0.98** (against the deployed all-fold 14 / 1.1).
+
+- Scored as `torch_refit_recent` (pooled **0.6514**) through the new
+  `--fixed-epochs` / `--temperature` pass-through on `run_walkforward.py`
+  (mutually exclusive with `--fixed-budget-from`; `scripts/run_walkforward.py::resolve_budget`,
+  covered by `tests/test_run_walkforward.py`).
+- vs `torch_refit` (0.6512): delta **+0.0002**, worst fold +0.0029,
+  **`ships: false`**. The fold split is the finding: 2018-2021 all worse
+  (+0.0021 to +0.0029), 2022-2025 all better (-0.0022, -0.0005, -0.0014,
+  -0.0018). The recent-fold recipe pays exactly where the drift predicted and
+  costs where it did not.
+- vs `torch_v1` (0.6510): delta **+0.0004**, worst fold +0.0037 (2019),
+  **`ships: false`**.
+- Decision for SP4: **keep the deployed 14 / 1.1**. The headline metric pools
+  all eight folds, and on that metric the recent-fold recipe is a hair worse;
+  the ~0.0015 mean gain over the four newest folds is real in sign but the
+  same order as seed noise, and adopting it would mean overriding the locked
+  pooled rule on four folds of evidence. Follow-up if this is revisited: the
+  honest test is a recency-weighted headline metric (or more fold years), not
+  a tighter read of the same eight numbers.
+
 **Secondary source (Task 10):** _fights available beyond the Kaggle cutoff: …_
 **Shipped set:** _…_ ; fresh-seed re-score: _…_ ; deployed model hash: _…_
 **Follow-ups:** _…_

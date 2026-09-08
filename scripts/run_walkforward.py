@@ -7,6 +7,7 @@ Examples:
   python scripts/run_walkforward.py --candidate torch --name torch_v1_seeds5 --seeds 5,6,7,8,9
   python scripts/run_walkforward.py --candidate xgb --name xgb_hl4 --half-life 4 --train-start 2005-01-01
   python scripts/run_walkforward.py --candidate torch --name torch_refit --fixed-budget-from models/walkforward/torch_v1.json
+  python scripts/run_walkforward.py --candidate torch --name torch_refit_recent --fixed-epochs 18 --temperature 0.98
 
 Reports land in models/walkforward/<name>.json. Nothing here touches the
 deployed artifacts under models/torch or models/xgb_*.json.
@@ -63,9 +64,45 @@ def fixed_budget_from(report: dict) -> dict:
     return budget
 
 
+def resolve_budget(args: argparse.Namespace) -> dict | None:
+    """The fit budget for this run, or None to early-stop on the inner val.
+
+    Either derived from a reference report (--fixed-budget-from) or stated
+    outright (--fixed-epochs/--temperature, torch only); the two sources are
+    mutually exclusive. A temperature without a budget is a usage error --
+    outside fixed-budget mode the temperature is fit on the inner val.
+    """
+    explicit = args.fixed_epochs is not None or args.temperature is not None
+    if args.fixed_budget_from is not None:
+        if explicit:
+            raise SystemExit(
+                "--fixed-budget-from is mutually exclusive with --fixed-epochs/--temperature"
+            )
+        return fixed_budget_from(json.loads(args.fixed_budget_from.read_text()))
+    if not explicit:
+        return None
+    if args.candidate != "torch":
+        raise SystemExit(
+            f"--fixed-epochs/--temperature apply to the torch candidate only (got {args.candidate!r})"
+        )
+    if args.fixed_epochs is None:
+        raise SystemExit(
+            "--temperature applies to fixed-budget mode only; pass --fixed-epochs too "
+            "(without it the temperature is fit on the inner validation year)"
+        )
+    if args.fixed_epochs < 1:
+        raise SystemExit(f"--fixed-epochs must be at least 1 (got {args.fixed_epochs})")
+    budget = {"fixed_epochs": int(args.fixed_epochs)}
+    if args.temperature is not None:
+        if not args.temperature > 0:
+            raise SystemExit(f"--temperature must be positive (got {args.temperature})")
+        budget["temperature"] = float(args.temperature)
+    return budget
+
+
 def build_candidate(kind: str, name: str, seeds: str, config: dict, budget: dict | None):
-    """``budget`` is None without --fixed-budget-from; otherwise the dict from
-    fixed_budget_from, which must carry the key this learner consumes
+    """``budget`` is None in early-stopping mode; otherwise the dict from
+    resolve_budget, which must carry the key this learner consumes
     (fixed_rounds for xgb, fixed_epochs for torch) -- a budget derived from
     the wrong learner's report, or an elo candidate, is a usage error."""
     if kind == "elo":
@@ -95,6 +132,10 @@ def main() -> None:
     parser.add_argument("--half-life", type=float, default=None, help="recency half-life in years")
     parser.add_argument("--fixed-budget-from", type=Path, default=None,
                         help="reference report; train on train+inner_val with its median budget, no early stopping")
+    parser.add_argument("--fixed-epochs", type=int, default=None,
+                        help="torch fit budget stated outright (mutually exclusive with --fixed-budget-from)")
+    parser.add_argument("--temperature", type=float, default=None,
+                        help="calibration temperature for --fixed-epochs mode (default 1.0)")
     parser.add_argument("--out-dir", type=Path, default=OUT_DIR)
     args = parser.parse_args()
 
@@ -103,7 +144,7 @@ def main() -> None:
         .sort_values("date", kind="stable").reset_index(drop=True)
     )
     config = json.loads(args.config_json) if args.config_json else {}
-    budget = fixed_budget_from(json.loads(args.fixed_budget_from.read_text())) if args.fixed_budget_from else None
+    budget = resolve_budget(args)
     candidate = build_candidate(args.candidate, args.name, args.seeds, config, budget)
     budget = budget or {}  # report shape: always a dict
 
