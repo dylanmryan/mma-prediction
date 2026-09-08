@@ -365,3 +365,108 @@ def test_every_real_fighter_id_passes_the_shape_check():
     ids = pd.read_parquet(PROCESSED / "fighters.parquet")["fighter_id"]
     for fighter_id in ids:
         assert _fighter_id(pd.Series(dtype=float, name=fighter_id), "a") == fighter_id
+
+
+@pytest.mark.skipif(
+    not (PROCESSED / "features.parquet").exists()
+    or not (PROCESSED / "fights.parquet").exists()
+    or not external.DEFAULT_PATH.exists(),
+    reason="data not built",
+)
+def test_no_modelled_column_identifies_the_unmapped_corner(monkeypatch):
+    """The whole-table generalisation of the constant-vector leak check.
+
+    `test_a_half_matched_fight_carries_exactly_one_value_tuple` guards ONE
+    block. The coverage-selection channel it guards is not a property of that
+    block, though -- it is a property of the snapshot's membership, and ANY
+    column derived from that membership carries it. `context` proved the point
+    in SP2: `home_country_a`/`_b` are False when a corner's nationality is
+    unknown, nationality only exists for mapped fighters, and the mapped
+    corner wins ~0.74 of the half-matched rows. Combining blocks multiplies
+    the chances of re-opening the channel somewhere new, so this test asks the
+    question of the whole table rather than of one block at a time.
+
+    It does not guess which columns are membership-derived; it MEASURES them.
+    The table is rebuilt from an external snapshot with the mapped corner of
+    every half-matched fight removed -- so that on exactly those rows the
+    identity of the mapped corner is erased -- and every column whose values
+    move is, by construction, a function of that identity. Each of those
+    columns must then be out of both model matrices.
+
+    Columns that do not move are free to vary: `career_fights_diff` also
+    separates the two groups, because the unmapped corner really is the
+    shorter-career fighter -- but that is a fact about the fighters, knowable
+    on fight morning, not a fact about a snapshot built afterwards.
+    """
+    from mma.feature_blocks import table_blocks
+    from mma.features import build_features
+    from mma.history import build_history
+    from mma.models.xgb import feature_frame
+    from mma.tensors import Preprocessor
+
+    features = pd.read_parquet(PROCESSED / "features.parquet")
+    fights = pd.read_parquet(PROCESSED / "fights.parquet")
+    stats = pd.read_parquet(PROCESSED / "fight_stats.parquet")
+    fighters = pd.read_parquet(PROCESSED / "fighters.parquet")
+    ratings = pd.read_parquet(PROCESSED / "ratings.parquet")
+
+    table = external.load_table()
+    mapped = set(table["fighter_id"])
+    unmapped_a = ~fights["fighter_a_id"].isin(mapped)
+    unmapped_b = ~fights["fighter_b_id"].isin(mapped)
+    half = unmapped_a ^ unmapped_b
+    half_ids = set(fights.loc[half, "fight_id"])
+    rows = features["fight_id"].isin(half_ids).to_numpy()
+    assert rows.sum() > 1000, f"only {rows.sum()} half-matched feature rows"
+
+    # The guard is only worth having because the channel it closes is loud:
+    # on these rows the corner the snapshot DID map wins about three times in
+    # four, so any column that names that corner is a look-ahead feature.
+    unmapped_corner = pd.Series(
+        np.where(unmapped_a[half], "a", "b"),
+        index=fights.loc[half, "fight_id"].to_numpy(),
+    )
+    corner = features.loc[rows, "fight_id"].map(unmapped_corner).to_numpy()
+    swapped = features.loc[rows, "swapped"].to_numpy(dtype=bool)
+    # the feature row's corners are md5-swapped, so the unmapped SIDE of the
+    # row is the swapped image of the unmapped corner of the fight
+    side = np.where(swapped, np.where(corner == "a", "b", "a"), corner)
+    y = features.loc[rows, "y_winner"].to_numpy()
+    mapped_wins = np.where(side == "a", y == 0, y == 1).mean()
+    assert mapped_wins > 0.6, f"fixture assumption: mapped corner wins {mapped_wins:.3f}"
+
+    mapped_corners = (
+        set(fights.loc[half & ~unmapped_a, "fighter_a_id"])
+        | set(fights.loc[half & ~unmapped_b, "fighter_b_id"])
+    )
+    reduced = table[~table["fighter_id"].isin(mapped_corners)].reset_index(drop=True)
+    monkeypatch.setattr(external, "load_table", lambda *a, **k: reduced)
+    rebuilt = build_features(
+        fights, fighters, ratings, build_history(fights, stats, ratings),
+        blocks=table_blocks(),
+    )
+
+    def key(series):
+        return series.astype(object).where(series.notna(), "NaN").tolist()
+
+    membership_derived = [
+        column for column in features.columns
+        if key(features.loc[rows, column]) != key(rebuilt.loc[rows, column])
+    ]
+    modelled = set(feature_frame(features).columns)
+    modelled |= set(Preprocessor.fit(
+        features, train_mask=np.ones(len(features), dtype=bool)
+    ).numeric_columns)
+    leaking = sorted(set(membership_derived) & modelled)
+    assert not leaking, (
+        f"{leaking} change when the snapshot's mapped corner is erased, so they "
+        "name which corner it mapped -- a look-ahead channel. Move them out of "
+        "mma.tensors.DROPPED's matrix (and mma.models.xgb.MODEL_EXCLUDED), "
+        "keeping them in the table"
+    )
+    # And the columns that ARE membership-derived have to be the ones we know
+    # about, so a NEW one shows up as a failure here rather than as a surprise.
+    assert set(membership_derived) <= {"home_country_a", "home_country_b"}, (
+        f"new membership-derived column(s): "
+        f"{sorted(set(membership_derived) - {'home_country_a', 'home_country_b'})}"
+    )

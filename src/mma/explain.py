@@ -42,6 +42,21 @@ def raw_contributions(booster: xgb.Booster, matchup: pd.DataFrame) -> tuple[pd.S
     (see test_explain.py::test_additivity_holds_both_orientations).
     """
     x = feature_frame(matchup)
+    # The served row follows `feature_blocks.table_blocks()`, i.e. whatever
+    # the feature table on disk was built from; the committed booster follows
+    # the blocks it was TRAINED on. Those are the same set after a redeploy
+    # and can differ while a feature experiment is running, so the explainer
+    # takes the booster's own column list -- a missing one is a real contract
+    # break and raises, an extra one is simply not part of this model.
+    trained = list(booster.feature_names or x.columns)
+    missing = [column for column in trained if column not in x.columns]
+    if missing:
+        raise KeyError(
+            f"the committed winner model needs feature(s) the served row does "
+            f"not carry: {missing}; rebuild the feature table for the blocks "
+            "the model was trained on, or retrain the model"
+        )
+    x = x[trained]
     dmatrix = xgb.DMatrix(x, enable_categorical=True)
     contribs = booster.predict(dmatrix, pred_contribs=True)[0]
     values, bias = contribs[:-1], float(contribs[-1])
