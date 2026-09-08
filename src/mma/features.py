@@ -18,12 +18,18 @@ import hashlib
 import numpy as np
 import pandas as pd
 
-from mma import serving
-from mma.feature_blocks import BASE_BLOCK, state_key_blocks, state_keys
+from mma import external, serving
+from mma.feature_blocks import (
+    BASE_BLOCK, EXTERNAL_BLOCK, resolve_blocks, state_key_blocks, state_keys,
+)
 
 # State keys `_side_frame` computes itself rather than merging in from a
-# source table (they need the fight date, the bio row, or another key).
-_DERIVED_STATE_KEYS = ("age", "reach_missing", "dob_missing", "southpaw", "debut")
+# source table (they need the fight date, the bio row, or another key). The
+# `external` block's keys are here because they come from the committed
+# `data/external` table joined by fighter id, not from history/ratings/fighters.
+_DERIVED_STATE_KEYS = (
+    "age", "reach_missing", "dob_missing", "southpaw", "debut",
+) + external.STATE_KEYS
 
 
 def swap_corner(fight_id: str) -> bool:
@@ -86,6 +92,13 @@ def _side_frame(fights, fighters, ratings, history, corner: str,
     side["dob_missing"] = side["dob"].isna()
     side["southpaw"] = (side["stance"] == "Southpaw").fillna(False)
     side["debut"] = serving.debut_flag(side["career_fights"])
+    if EXTERNAL_BLOCK in resolve_blocks(blocks):
+        # Joined here rather than in `mma.snapshots` because this is
+        # fighter-static reference data, not accumulated fight state: there is
+        # nothing to replay, only a lookup by id plus a duration measured from
+        # each fight's own date. `attach` also carries `nationality` through so
+        # `build_features` can derive the fight-level `same_country`.
+        side = external.attach(side)
     return side
 
 
@@ -136,5 +149,10 @@ def build_features(fights, fighters, ratings, history,
         "title_fight": decisive["title_fight"],
         "scheduled_rounds": decisive["scheduled_rounds"],
     }
+    if EXTERNAL_BLOCK in resolve_blocks(blocks):
+        # Both fight-level columns are symmetric in the two corners, so
+        # deriving them from the post-swap frames gives the same values as the
+        # pre-swap ones and keeps them aligned with the row they describe.
+        context.update(external.fight_context(first, second))
     row = serving.feature_row(first, second, context, blocks=blocks)
     return pd.DataFrame({**identifiers, **row})

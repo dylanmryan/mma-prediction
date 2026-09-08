@@ -22,7 +22,7 @@ From the v3 spec §4 SP1/§5 and `models/walkforward/noise_floor.json`:
 - **Fresh-seed re-scoring.** The final shipped feature set is re-run on torch with seeds 5–9 and that number is reported (as SP1 did for the refit recipe).
 - **Negative results are deliverables.** Every block gets a row in the results table in this plan's Completion notes, cleared or not, with its pooled numbers. Code for a block that does not ship is reverted (the elo-v1.1 / model-v2 precedent), but its measurement stays.
 - **Point-in-time.** Every new column must pass `tests/test_processed_features.py::test_no_leakage_truncation_invariance`, which rebuilds the table from pre-2015-truncated fights and compares every column. External joins must filter on a date strictly before the fight.
-- **Missingness.** Every externally-sourced column carries a `*_missing` boolean, and the row-level `external_missing` flag feeds the SP1 slice of the same name.
+- **Missingness.** Every externally-sourced column carries a `*_missing` boolean, and the row-level `external_missing` flag feeds the SP1 slice of the same name. *(Amended during Task 11, which measured the reason: when membership of the external source is itself determined by the future — as it is for `ehan03/jds-mma-data`'s fighter mapping, whose composition tracks how long a fighter's UFC career turned out to be — a **per-corner** missingness flag is a look-ahead feature and must be dropped. The row-level flag is symmetric in the corners and stays. See the Task 11 completion note.)*
 
 ## Block evaluation procedure (invoked by every block task)
 
@@ -785,7 +785,7 @@ EOF
 | trajectory | _…_ | _…_ | _…_ | _…_ | |
 | context | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | recency | 0.6525 (0.6537) | 0.6499 (0.6510) | -0.0011 vs torch_v1 | **no** | best window/half-life: half-life 8y (window barely matters); improves on both scorers but by a third of the 0.003 bar. Incumbent stays `{xgb,torch}_v1`. |
-| external | _…_ | _…_ | _…_ | _…_ | external_missing slice: _…_ |
+| external | 0.6499 (0.6537) | 0.6472 (0.6510) | -0.0038 vs torch_v1 | **yes** | leak-free form only (fight-level missingness, no per-corner flag). external_missing slice: n=779, LL 0.6452 (vs pooled 0.6472); no incumbent slice exists to diff against. Coverage 0.799 of rows. New incumbent: `{xgb,torch}_external_noleak`. |
 | notice | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | rankings | _…_ | _…_ | _…_ | _…_ | match rate: _…_ |
 
@@ -930,6 +930,110 @@ last four folds (2022-2025): per-fold median epochs [19, 25, 10, 16] ->
   pooled rule on four folds of evidence. Follow-up if this is revisited: the
   honest test is a recency-weighted headline metric (or more fold years), not
   a tighter read of the same eight numbers.
+
+**Block `external` (Task 11), measured and SHIPPED in a corrected form; the
+as-specified form was measured and rejected as leaky.** Six differentials over
+pre-UFC career from the MIT `ehan03/jds-mma-data` snapshot (commit
+`ec77f537`, UFC coverage to 2024-12-14), plus two fight-level flags:
+`pre_ufc_wins`, `pre_ufc_losses`, `pre_ufc_finish_rate`,
+`pre_ufc_finish_loss_rate`, `pre_ufc_avg_opp_wins`, `days_since_pro_debut`,
+`external_missing` (row level) and `same_country`. This is the first block
+whose information is not a recombination of the fight table.
+
+*Source paths actually found* (the plan's guesses were close but not exact):
+`data/clean/fighter_mapping.csv` (2,553 rows, not ~3,500),
+`data/clean/Sherdog/fighter_histories.csv` (652k bouts, all promotions, from
+1980), `data/clean/Sherdog/fighters.csv` (nationality plus a `pro_debut_date`
+column that agrees with min(history date) for 100% of matched fighters), and
+`data/clean/Tapology/fighter_gyms.csv` (which does exist, keyed by
+(fighter, bout)). `pre_ufc_avg_opp_wins` was kept: the histories table carries
+both sides of every bout, so an opponent's wins as of the bout date are
+directly countable, and the opponent is present for 99.98% of pre-UFC bouts.
+
+*Gym data is DATED, and is still not used.* `fighter_gyms.csv` is per
+(fighter, bout), 97.7% of its rows map to a ufcstats bout, and 451 of 2,253
+fighters change gym over their career -- so it is a genuine affiliation
+history, not an as-of-scrape snapshot, and a gym win-rate would not be leaky.
+It is excluded for a different reason: it is accumulated per-fight state rather
+than fighter-static data, and the snapshot's UFC coverage stops at 2024-12-14,
+so the affiliation is unknown for every future fight the deployed model
+actually serves. `gym_id` (the gym at the fighter's earliest UFC bout) is
+recorded in the derived table for a later block with a live source.
+
+*Coverage.* 2,553 of our 4,581 fighters are in the mapping (0.5573); 8,976 of
+the 11,238 rows have both corners matched (0.7987). Per column over the 11,238
+rows: `pre_ufc_wins_diff`, `pre_ufc_losses_diff` and `days_since_pro_debut_diff`
+0.799; `pre_ufc_avg_opp_wins_diff` 0.732; `pre_ufc_finish_rate_diff` 0.729;
+`pre_ufc_finish_loss_rate_diff` only 0.302 (both corners need a pre-UFC loss).
+`external_missing` is 0.201 of rows overall but 0.359 of 2025 and 0.534 of 2026
+-- the snapshot ageing, which is exactly what that slice is for.
+
+**The leak, and how it was found.** The block as specified in this plan carries
+`external_missing` per corner as well as at fight level. Measured that way it
+looked spectacular -- XGB 0.6475 (delta -0.0062), torch **0.6367** (delta
+**-0.0143**), debut slice -0.0846 -- and it was wrong. Two diagnostics:
+
+- Where exactly one corner is unmapped (n=1,445), that corner loses 76% of the
+  time; in the debut slice (n=752) it loses 90% of the time. Meanwhile the
+  actual differentials carry almost nothing on their own: with
+  `pre_ufc_wins_diff > +2`, P(A wins) = 0.475, and with `< -2`, 0.519 -- if
+  anything backwards.
+- Membership of the source's cross-source fighter mapping is a function of how
+  long a fighter's UFC career turned out to be. Among fighters debuting
+  2013-2022 (well inside coverage), the mapped share is 0.241 for those with
+  one UFC bout ever, 0.813 at two, 0.940 at three, 0.989 at four-to-five and
+  1.000 at eleven or more; mean UFC bouts 7.41 mapped vs 1.25 unmapped.
+
+So `external_missing_a`/`_b` is a look-ahead feature meaning "this fighter went
+on to have a career". The walk-forward signature confirms it: folds 2018-2023
+improved by -0.026 to -0.046 while **2025 cost +0.0487**, because in 2025
+missingness stops meaning "short career" and starts meaning "debuted after the
+snapshot". `bar_check` -> `clears_delta: true`, `no_fold_regression: false`,
+**`ships: false`**. Reports kept: `xgb_external.json`, `torch_external.json`.
+
+**The corrected block.** Missingness is fight-level only -- the symmetric
+either-corner OR, which keeps the `external_missing` slice that
+`walkforward.slice_masks` reads but cannot say which corner wins. The
+differentials are NaN whenever either corner is unmapped, so no per-corner
+channel survives. Guarded by
+`tests/test_external.py::test_missingness_is_fight_level_only_never_per_corner`.
+
+- XGB screen, `xgb_external_noleak`: pooled **0.6499** vs 0.6537 (delta
+  **-0.0038**), worst fold +0.0031 (2021), `ships: true`.
+- torch decision, `torch_external_noleak`: pooled **0.6472** vs 0.6510 (delta
+  **-0.0038**), fold deltas 2018 -0.0077, 2019 -0.0073, 2020 -0.0069,
+  2021 -0.0059, 2022 -0.0026, 2023 -0.0050, 2024 +0.0009, 2025 +0.0004;
+  worst fold +0.0009. `clears_delta: true`, `no_fold_regression: true`,
+  **`ships: true`**. ECE also improves, 0.0121 vs 0.0139.
+- torch slices vs `torch_v1`: five_round -0.0088, debut -0.0015,
+  womens -0.0011. Nothing regresses.
+- **`external_missing` slice**: n=779, candidate LL **0.6452**, accuracy 0.6367
+  -- marginally better than the candidate's own pooled 0.6472, so the block
+  does not hurt the post-snapshot rows. A slice *delta* is not computable:
+  `torch_v1.json` predates the column and the locked rules forbid regenerating
+  incumbent reports. The fold deltas carry the same information more honestly:
+  the two folds with the most missing rows (2024, 2025) are the two flat ones
+  (+0.0009, +0.0004), while every well-covered fold improves. The contrast with
+  the leaky variant is stark -- there the same slice read 0.5842 with accuracy
+  0.6906, which was the leak showing.
+- **Ablation, `{xgb,torch}_external_diffsonly`**: the six differentials with
+  both fight-level flags withheld. XGB 0.6506 (delta -0.0031), torch **0.6476**
+  (delta **-0.0034**), worst fold +0.0015, `ships: true`. So essentially all of
+  the -0.0038 is the pre-UFC data itself; the symmetric flags add ~-0.0004.
+  This is the check that the corrected block is not just a subtler encoding of
+  the same selection effect.
+- Gates on the shipped table, all passing:
+  `test_no_leakage_truncation_invariance`, both serving-parity tests, and the
+  base-only rebuild stayed byte-identical.
+- **Caveat for SP4:** the benefit decays as the snapshot ages. It is already
+  ~0 on 2024-2025 and `external_missing` reaches 0.534 of 2026 rows. The
+  snapshot is static (last commit December 2025); if this block is to keep
+  paying, `scripts/build_external.py` needs a refreshable source, or the
+  pre-UFC record needs to come from a live scrape.
+
+**Incumbent after this block: `models/walkforward/xgb_external_noleak.json`
+(0.6499) and `models/walkforward/torch_external_noleak.json` (0.6472).** The
+cleared feature set is now `base,external`.
 
 **Secondary source (Task 10):** _fights available beyond the Kaggle cutoff: …_
 **Shipped set:** _…_ ; fresh-seed re-score: _…_ ; deployed model hash: _…_
