@@ -114,10 +114,18 @@ def align_to_booster(x: pd.DataFrame, booster: xgb.Booster) -> pd.DataFrame:
         )
     out = x[trained].copy()
     for column, categories in booster_categories(booster).items():
-        if column in out.columns:
-            out[column] = pd.Categorical(
-                out[column].astype(object), categories=categories
-            )
+        if column not in out.columns:
+            continue
+        # Values outside the model's categories are mapped to None EXPLICITLY.
+        # Handing them to pd.Categorical(..., categories=...) and letting it
+        # coerce is deprecated in pandas and will raise, and the mapping is the
+        # point rather than an implementation detail: an unseen weight class
+        # has to become a missing value, not an error.
+        known = set(categories)
+        out[column] = pd.Categorical(
+            [value if value in known else None for value in out[column].astype(object)],
+            categories=categories,
+        )
     return out
 
 
