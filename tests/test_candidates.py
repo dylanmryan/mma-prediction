@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mma.candidates import EloCandidate, TorchCandidate, XGBCandidate
-from mma.walkforward import make_folds
+from mma.candidates import BlendCandidate, EloCandidate, TorchCandidate, XGBCandidate
+from mma.walkforward import Fold, make_folds
 
 
 def _table(n=600, seed=0):
@@ -122,3 +122,177 @@ def test_sample_weight_reaches_both_learners(table, fold):
     ta, _ = TorchCandidate(seeds=(0,), config={"hidden": (16, 8)}, max_epochs=2).fit_predict(table, fold, None)
     tb, _ = TorchCandidate(seeds=(0,), config={"hidden": (16, 8)}, max_epochs=2).fit_predict(table, fold, w)
     assert not np.allclose(ta["winner"], tb["winner"])
+
+
+# --- XGBoost seed ensembling (SP2.2) ----------------------------------------
+
+
+def test_xgb_seed_ensemble_of_one_matches_the_single_fit(table, fold):
+    """seeds=(0,) must be bit-identical to the single-fit path at random_state 0.
+
+    This is the guard that the ensemble did not change what a plain
+    `--candidate xgb` run means: every committed XGB report was produced by
+    the seeds=None path at BASE_PARAMS' random_state 0.
+    """
+    single, single_info = XGBCandidate(params={"max_depth": 2}).fit_predict(table, fold, None)
+    ensembled, ens_info = XGBCandidate(params={"max_depth": 2}, seeds=(0,)).fit_predict(table, fold, None)
+    assert np.array_equal(single["winner"], ensembled["winner"])
+    assert np.array_equal(single["method"], ensembled["method"])
+    assert np.array_equal(single["round"], ensembled["round"])
+    # fit_info too: a one-seed ensemble reports scalars, not one-element lists,
+    # so a re-run reproduces a committed report's fit_info as well.
+    assert single_info == ens_info
+
+
+def test_xgb_seed_ensemble_averages_predict_proba_across_seeds(table, fold):
+    members = [
+        XGBCandidate(params={"max_depth": 2, "random_state": s}).fit_predict(table, fold, None)[0]
+        for s in (0, 1, 2)
+    ]
+    blend, info = XGBCandidate(params={"max_depth": 2}, seeds=(0, 1, 2)).fit_predict(table, fold, None)
+    for head in ("winner", "method", "round"):
+        assert blend[head] == pytest.approx(np.mean([m[head] for m in members], axis=0))
+    assert not np.allclose(blend["winner"], members[0]["winner"])
+    assert all(len(v) == 3 for v in info["best_iteration"].values())
+
+
+def test_xgb_seed_ensemble_rejects_a_random_state_in_params(table, fold):
+    with pytest.raises(ValueError, match="random_state"):
+        XGBCandidate(params={"max_depth": 2, "random_state": 7}, seeds=(0, 1)).fit_predict(table, fold, None)
+
+
+# --- BlendCandidate (SP2.2) --------------------------------------------------
+
+BLEND_KWARGS = dict(seeds=(0,), params={"max_depth": 2}, config={"hidden": (16, 8)}, max_epochs=3)
+
+
+def test_blend_candidate_shapes_and_row_alignment(table, fold):
+    pred, info = BlendCandidate(**BLEND_KWARGS).fit_predict(table, fold, None)
+    n = int(fold.eval.sum())
+    assert pred["winner"].shape == (n,) and pred["method"].shape == (n, 3) and pred["round"].shape == (n, 4)
+    assert np.all((pred["winner"] > 0) & (pred["winner"] < 1))
+    assert pred["method"].sum(axis=1) == pytest.approx(1.0)
+    assert pred["round"].sum(axis=1) == pytest.approx(1.0)
+    assert info["blend_weight"] == 0.5
+    assert info["n_train"] == int(fold.train.sum())
+    assert set(info) >= {"xgb", "torch", "blend_weight", "temperature", "calibrated"}
+    assert "best_iteration" in info["xgb"] and "best_epoch" in info["torch"]
+
+
+def test_blend_candidate_is_deterministic(table, fold):
+    cand = BlendCandidate(**BLEND_KWARGS)
+    a, info_a = cand.fit_predict(table, fold, None)
+    b, info_b = cand.fit_predict(table, fold, None)
+    for head in ("winner", "method", "round"):
+        assert np.array_equal(a[head], b[head])
+    assert info_a == info_b
+
+
+def _widened(fold):
+    """The fold the blend's members actually see: eval widened to inner_val |
+    eval, so one fit scores both the calibration rows and the evaluation rows.
+    Training and early stopping are untouched (train / inner_val are the same
+    masks), which is what makes the widening free."""
+    return Fold(year=fold.year, train=fold.train, inner_val=fold.inner_val,
+                eval=fold.inner_val | fold.eval), fold.eval[fold.inner_val | fold.eval]
+
+
+def test_blend_weight_one_reproduces_the_xgb_member(table, fold):
+    """The strongest correctness check: a degenerate weight must collapse the
+    blend onto that member exactly (calibration off, which is the only other
+    thing the blend does to the winner head)."""
+    wide, is_eval = _widened(fold)
+    blend, _ = BlendCandidate(weight=1.0, calibrate=False, **BLEND_KWARGS).fit_predict(table, fold, None)
+    xgb, _ = XGBCandidate(params={"max_depth": 2}, seeds=(0,)).fit_predict(table, wide, None)
+    assert np.array_equal(blend["winner"], xgb["winner"][is_eval].astype(float))
+    assert np.array_equal(blend["method"], xgb["method"][is_eval].astype(float))
+    # The round head is the one place the blend does more than average: the
+    # 45 column is masked for three-round fights, which the XGB head alone
+    # does not do. Everything else about it is the member's.
+    three = (table.loc[fold.eval, "scheduled_rounds"].fillna(3) <= 3).to_numpy()
+    assert np.all(blend["round"][three, 3] == 0.0)
+    assert blend["round"][~three] == pytest.approx(xgb["round"][is_eval][~three])
+
+
+def test_blend_weight_zero_reproduces_the_torch_member(table, fold):
+    wide, is_eval = _widened(fold)
+    blend, _ = BlendCandidate(weight=0.0, calibrate=False, **BLEND_KWARGS).fit_predict(table, fold, None)
+    torch_pred, _ = TorchCandidate(seeds=(0,), config={"hidden": (16, 8)}, max_epochs=3).fit_predict(table, wide, None)
+    for head in ("winner", "method", "round"):
+        # the torch member predicts in float32 and the blend averages in
+        # float64; the widening is exact, so equality still has to be exact.
+        assert np.array_equal(blend[head], np.asarray(torch_pred[head], dtype=float)[is_eval])
+        assert blend[head].dtype == np.float64
+
+
+def test_widening_the_eval_mask_does_not_move_the_members(table, fold):
+    """The members are fitted once on `inner_val | eval` rather than twice, so
+    the widening must not itself change what they predict on the eval rows.
+
+    XGBoost is exactly batch-invariant. The torch member is not, quite: its
+    float32 matmuls block differently at 339 rows than at 113, which moves a
+    handful of probabilities by one float32 ulp (~6e-8) -- five orders of
+    magnitude below the 4-dp log-loss the reports carry, and the reason the
+    degenerate-weight tests above compare against the widened fold.
+    """
+    wide, is_eval = _widened(fold)
+    for member in (XGBCandidate(params={"max_depth": 2}, seeds=(0,)),
+                   TorchCandidate(seeds=(0,), config={"hidden": (16, 8)}, max_epochs=3)):
+        plain, _ = member.fit_predict(table, fold, None)
+        widened, _ = member.fit_predict(table, wide, None)
+        for head in ("winner", "method", "round"):
+            moved = np.abs(np.asarray(plain[head], dtype=float)
+                           - np.asarray(widened[head], dtype=float)[is_eval])
+            assert moved.max() < 1e-6
+
+
+def test_blend_temperature_is_fitted_on_inner_val_and_never_on_eval(table, fold, monkeypatch):
+    import mma.candidates as candidates
+
+    seen = {}
+    real = candidates.fit_temperature
+
+    def spy(logits, y):
+        seen["n"] = len(logits)
+        seen["y"] = np.asarray(y).copy()
+        return real(logits, y)
+
+    monkeypatch.setattr(candidates, "fit_temperature", spy)
+    pred, info = BlendCandidate(**BLEND_KWARGS).fit_predict(table, fold, None)
+    assert seen["n"] == int(fold.inner_val.sum())
+    assert np.array_equal(seen["y"], table.loc[fold.inner_val, "y_winner"].to_numpy(dtype=float))
+    assert 0.5 <= info["temperature"] <= 3.0
+
+
+def test_blend_predictions_ignore_the_evaluation_labels(table, fold):
+    """Nothing the blend fits -- neither member nor the temperature -- may
+    read a target on the evaluation rows."""
+    scrambled = table.copy()
+    scrambled.loc[fold.eval, "y_winner"] = 1 - scrambled.loc[fold.eval, "y_winner"]
+    a, info_a = BlendCandidate(**BLEND_KWARGS).fit_predict(table, fold, None)
+    b, info_b = BlendCandidate(**BLEND_KWARGS).fit_predict(scrambled, fold, None)
+    assert np.array_equal(a["winner"], b["winner"])
+    assert info_a["temperature"] == info_b["temperature"]
+
+
+def test_blend_calibration_rescales_the_winner_head(table, fold):
+    raw, raw_info = BlendCandidate(calibrate=False, **BLEND_KWARGS).fit_predict(table, fold, None)
+    cal, cal_info = BlendCandidate(calibrate=True, **BLEND_KWARGS).fit_predict(table, fold, None)
+    t = cal_info["temperature"]
+    assert raw_info["temperature"] == 1.0 and raw_info["calibrated"] is False
+    logits = np.log(np.clip(raw["winner"], 1e-9, 1 - 1e-9) / (1 - np.clip(raw["winner"], 1e-9, 1 - 1e-9)))
+    assert cal["winner"] == pytest.approx(1 / (1 + np.exp(-logits / t)))
+    # the method/round heads are untouched by the winner temperature
+    assert np.array_equal(raw["method"], cal["method"])
+
+
+def test_blend_masks_round_45_for_three_round_fights(table, fold):
+    pred, _ = BlendCandidate(**BLEND_KWARGS).fit_predict(table, fold, None)
+    three = (table.loc[fold.eval, "scheduled_rounds"].fillna(3) <= 3).to_numpy()
+    assert np.all(pred["round"][three, 3] == 0.0)
+    assert pred["round"].sum(axis=1) == pytest.approx(1.0)
+
+
+def test_blend_rejects_a_weight_outside_the_unit_interval(table, fold):
+    with pytest.raises(ValueError, match="blend weight"):
+        BlendCandidate(weight=1.5, **BLEND_KWARGS).fit_predict(table, fold, None)
