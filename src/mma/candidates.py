@@ -22,6 +22,7 @@ import pandas as pd
 import torch
 from sklearn.isotonic import IsotonicRegression
 
+from mma.blend import LOGIT_EPS, apply_temperature, blend_heads, logit, mask_round_45
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import (
     METHOD_CLASSES, ROUND_CLASSES, encode_targets, fit_temperature, predict, train_one,
@@ -228,14 +229,10 @@ class TorchCandidate:
         return pred, info
 
 
-_LOGIT_EPS = 1e-9
-
-
-def _logit(p: np.ndarray) -> np.ndarray:
-    q = np.clip(np.asarray(p, dtype=float), _LOGIT_EPS, 1.0 - _LOGIT_EPS)
-    return np.log(q / (1.0 - q))
-
-
+# The blend's arithmetic -- the weighted average, the round-45 mask and the
+# post-average temperature -- lives in `mma.blend`, so the SERVED blend
+# (`mma.inference.BlendedPredictor`) computes the same number this candidate
+# measured rather than a second implementation of the same three operations.
 CALIBRATORS = ("temperature", "isotonic")
 
 
@@ -251,7 +248,7 @@ def fit_isotonic(p_val: np.ndarray, y_val: np.ndarray):
 
     It sees exactly the data `fit_temperature` sees -- the fold's
     inner-validation year -- and never an evaluation row. Outputs are clipped
-    to `_LOGIT_EPS` because isotonic regression happily predicts exactly 0 or
+    to `LOGIT_EPS` because isotonic regression happily predicts exactly 0 or
     1 on a pure bin, which log-loss reads as infinity; `out_of_bounds="clip"`
     holds evaluation probabilities outside the inner-val range at the end
     values rather than raising.
@@ -260,27 +257,9 @@ def fit_isotonic(p_val: np.ndarray, y_val: np.ndarray):
     model.fit(np.asarray(p_val, dtype=float), np.asarray(y_val, dtype=float))
 
     def apply(p: np.ndarray) -> np.ndarray:
-        return np.clip(model.predict(np.asarray(p, dtype=float)), _LOGIT_EPS, 1.0 - _LOGIT_EPS)
+        return np.clip(model.predict(np.asarray(p, dtype=float)), LOGIT_EPS, 1.0 - LOGIT_EPS)
 
     return apply
-
-
-def _mask_round_45(probs: np.ndarray, three_round: np.ndarray) -> np.ndarray:
-    """Zero the '45' column for three-round fights and renormalise those rows.
-
-    `MultiTaskNet.round_probs` does this inside the torch member (by masking
-    the logit before the softmax) and the XGB member does not do it at all, so
-    an average of the two puts mass on a round that cannot happen. Rows whose
-    45 column is already exactly zero are left completely alone -- renormalising
-    a row that already sums to one still perturbs its last bits, and a blend at
-    weight 0.0 has to be bit-identical to the torch member.
-    """
-    out = np.array(probs, dtype=float, copy=True)
-    changed = np.asarray(three_round, dtype=bool) & (out[:, 3] != 0.0)
-    out[np.asarray(three_round, dtype=bool), 3] = 0.0
-    if changed.any():
-        out[changed] = out[changed] / out[changed].sum(axis=1, keepdims=True)
-    return out
 
 
 @dataclass
@@ -357,13 +336,9 @@ class BlendCandidate:
         xgb_pred, xgb_info = xgb_member.fit_predict(features, wide, sample_weight)
         torch_pred, torch_info = torch_member.fit_predict(features, wide, sample_weight)
 
-        blended = {
-            head: w * np.asarray(xgb_pred[head], dtype=float)
-            + (1.0 - w) * np.asarray(torch_pred[head], dtype=float)
-            for head in ("winner", "method", "round")
-        }
+        blended = blend_heads(xgb_pred, torch_pred, w)
         three_round = (features.loc[scored, "scheduled_rounds"].fillna(3) <= 3).to_numpy(dtype=bool)
-        blended["round"] = _mask_round_45(blended["round"], three_round)
+        blended["round"] = mask_round_45(blended["round"], three_round)
 
         is_val = fold.inner_val[scored]  # positions within `scored`
         is_eval = fold.eval[scored]
@@ -372,8 +347,8 @@ class BlendCandidate:
         if self.calibrate:
             y_val = features.loc[fold.inner_val, "y_winner"].to_numpy(dtype=float)
             if self.calibrator == "temperature":
-                temperature = fit_temperature(_logit(blended["winner"][is_val]), y_val)
-                winner = 1.0 / (1.0 + np.exp(-_logit(winner) / temperature))
+                temperature = fit_temperature(logit(blended["winner"][is_val]), y_val)
+                winner = apply_temperature(winner, temperature)
             else:
                 winner = fit_isotonic(blended["winner"][is_val], y_val)(winner)
         pred = {

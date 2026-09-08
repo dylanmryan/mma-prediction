@@ -1,4 +1,11 @@
-"""Load the committed ensemble and predict hypothetical matchups."""
+"""Load the committed scorer and predict hypothetical matchups.
+
+Since SP2.2 the deployed scorer is a BLEND (`BlendedPredictor`): the
+equal-weight average of the five-seed XGBoost ensemble and the five-seed torch
+ensemble, temperature-scaled after averaging. `Ensemble` is still here and is
+still the torch member -- `BlendedPredictor` holds one -- but on its own it is
+no longer what serves.
+"""
 from __future__ import annotations
 
 import json
@@ -9,15 +16,18 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+import xgboost as xgb
 
 from mma import context as fight_context_module
 from mma import external, glicko, notice, serving
+from mma.blend import apply_temperature, blend_heads, mask_round_45
 from mma.feature_blocks import (
     CONTEXT_BLOCK, EXTERNAL_BLOCK, NOTICE_BLOCK, TRAJECTORY_BLOCK,
     resolve_blocks, state_key_blocks, state_keys, table_blocks,
 )
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
+from mma.models.xgb import align_to_booster, feature_frame
 from mma.tensors import Preprocessor
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +37,24 @@ ROOT = Path(__file__).resolve().parents[2]
 TRAIN_END = "2021-01-01"
 # The deployed torch ensemble's metrics file, which records how it was trained.
 TORCH_METRICS = ROOT / "models" / "torch" / "metrics_val.json"
+
+# --- the deployed blend (SP2.2) --------------------------------------------
+# The walk-forward report the deployed scorer's evidence comes from: B1, the
+# candidate the pre-registration's rules shipped. Its `config` records the
+# weight and its `fit_info` the per-fold temperatures below.
+BLEND_REPORT = ROOT / "models" / "walkforward" / "blend_b1.json"
+# Weight on the XGB member; the torch member gets 1 - weight. FIXED at 0.5 by
+# the pre-registration and never fitted -- see `mma.blend.blend_heads`.
+BLEND_WEIGHT = 0.5
+# The deployed post-average temperature. The harness fits one per fold on that
+# fold's inner-validation year; deployment has no held-out year, so it applies
+# a fixed value derived from those fits, by the same rule the refit recipe uses
+# for the torch member's own temperature (`run_walkforward.fixed_budget_from`:
+# the median across folds, rounded to 2 dp). B1's eight per-fold temperatures
+# are 0.73 0.76 0.93 0.76 1.00 0.78 0.88 0.82, whose median is 0.80.
+# `tests/test_inference.py` recomputes this from the committed report rather
+# than trusting the number here.
+BLEND_TEMPERATURE = 0.80
 
 
 def load_deployed_metrics(path: Path = TORCH_METRICS) -> dict:
@@ -179,26 +207,36 @@ class Ensemble:
         return cls(nets, temperatures, preprocessor)
 
     @torch.no_grad()
-    def predict(self, features: pd.DataFrame) -> dict:
+    def predict_members(self, features: pd.DataFrame) -> list[dict]:
+        """Each seed's calibrated head probabilities, in seed order.
+
+        `predict` is the mean of these. `BlendedPredictor` needs them
+        individually so its reported spread describes the models that actually
+        serve rather than the torch half alone.
+        """
         x, wc = self.preprocessor.transform(features)
         x_t, wc_t = torch.tensor(x), torch.tensor(wc)
         three_round = torch.tensor(
             (features["scheduled_rounds"].fillna(3) <= 3).to_numpy(dtype=bool)
         )
-        winner_probs, method_probs, round_probs = [], [], []
+        members = []
         for net, temperature in zip(self.nets, self.temperatures):
             winner_logits, method_logits, round_logits = net(x_t, wc_t)
-            winner_probs.append(torch.sigmoid(winner_logits / temperature).numpy())
-            method_probs.append(torch.softmax(method_logits, dim=1).numpy())
-            round_probs.append(
-                MultiTaskNet.round_probs(round_logits, three_round).numpy()
-            )
-        winner = np.stack(winner_probs)
+            members.append({
+                "winner": torch.sigmoid(winner_logits / temperature).numpy(),
+                "method": torch.softmax(method_logits, dim=1).numpy(),
+                "round": MultiTaskNet.round_probs(round_logits, three_round).numpy(),
+            })
+        return members
+
+    def predict(self, features: pd.DataFrame) -> dict:
+        members = self.predict_members(features)
+        winner = np.stack([m["winner"] for m in members])
         return {
             "winner_prob": winner.mean(axis=0),
             "winner_spread": winner.max(axis=0) - winner.min(axis=0),
-            "method_probs": np.mean(method_probs, axis=0),
-            "round_probs": np.mean(round_probs, axis=0),
+            "method_probs": np.mean([m["method"] for m in members], axis=0),
+            "round_probs": np.mean([m["round"] for m in members], axis=0),
             "method_classes": METHOD_CLASSES,
             "round_classes": ROUND_CLASSES,
         }
@@ -232,10 +270,160 @@ class Ensemble:
         return np.stack(samples)
 
 
+class BlendedPredictor:
+    """The deployed scorer: XGBoost seed ensemble + torch ensemble, calibrated.
+
+    SP2.2's shipped candidate B1 (docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md,
+    models/walkforward/sp2_2_decision.json). Its `predict` returns exactly the
+    dict `Ensemble.predict` returns, so `predict_symmetrized`, the app, the
+    prospective run and the display-priors build all keep working against one
+    contract -- and, in particular, **the corner-averaging in
+    `predict_symmetrized` is applied to the BLEND**, not to one member and then
+    blended, which would not be the same number.
+
+    The three operations that combine the members come from `mma.blend`, the
+    same module `mma.candidates.BlendCandidate` uses, so the served prediction
+    is the construction the harness measured rather than a re-implementation.
+    Two things necessarily differ from the harness, both because deployment has
+    no held-out year:
+
+    * the members are the REFIT-through-latest fits (fixed budgets, all data)
+      rather than per-fold early-stopped ones, exactly as the torch member
+      alone was before this;
+    * the post-average temperature is the fixed `BLEND_TEMPERATURE` rather than
+      one fitted per fold, derived from the harness report's per-fold
+      temperatures by the median rule `run_walkforward.fixed_budget_from` uses.
+
+    `winner_spread` is the spread of the five PER-SEED blends -- seed i's XGB
+    booster blended with seed i's net, temperature-scaled. Their mean is the
+    headline probability exactly (the blend is linear in each member's mean),
+    so this is a real "how much do the members disagree" number for the ten
+    models that serve, and it is what the app's +- band reports.
+    """
+
+    def __init__(self, ensemble: "Ensemble", boosters: dict, weight: float,
+                 temperature: float):
+        self.ensemble = ensemble
+        self.boosters = boosters  # {"winner"/"method"/"round": [XGBClassifier, ...]}
+        self.weight = float(weight)
+        self.temperature = float(temperature)
+        self.preprocessor = ensemble.preprocessor  # callers introspect the contract
+
+    @classmethod
+    def load(cls, root: Path = ROOT, weight: float = BLEND_WEIGHT,
+             temperature: float = BLEND_TEMPERATURE) -> "BlendedPredictor":
+        """Load both members from the committed artifacts.
+
+        The XGBoost heads are `models/xgb_<head>_seed<seed>.json`, sorted by
+        seed so the per-seed pairing with the torch nets is stable. A head with
+        no artifacts is a loud error: silently serving a four-model blend, or a
+        torch-only one, is exactly the failure the model hash exists to make
+        impossible.
+        """
+        root = Path(root)
+        ensemble = Ensemble.load(root / "models" / "torch")
+        boosters = {}
+        for head in ("winner", "method", "round"):
+            paths = sorted((root / "models").glob(f"xgb_{head}_seed*.json"),
+                           key=lambda q: int(q.stem.rsplit("seed", 1)[1]))
+            if not paths:
+                raise FileNotFoundError(
+                    f"no XGBoost {head} boosters under {root / 'models'} "
+                    f"(expected xgb_{head}_seed*.json); run scripts/train_xgb.py"
+                )
+            models = []
+            for path in paths:
+                model = xgb.XGBClassifier(enable_categorical=True)
+                model.load_model(path)
+                models.append(model)
+            boosters[head] = models
+        return cls(ensemble, boosters, weight, temperature)
+
+    def _xgb_predict(self, features: pd.DataFrame) -> list[dict]:
+        """One dict of head probabilities per XGB seed, row-aligned.
+
+        `align_to_booster` reshapes the served frame to each head's own trained
+        columns and re-categorises `weight_class` with that model's category
+        list, so a division the model never saw becomes a missing value rather
+        than an XGBoostError -- the same graceful degradation the torch
+        member's preprocessor already applies to an unknown weight class.
+        """
+        x = feature_frame(features)
+        per_head = {}
+        for head, models in self.boosters.items():
+            per_head[head] = [
+                model.predict_proba(align_to_booster(x, model.get_booster()))
+                for model in models
+            ]
+        n_seeds = len(per_head["winner"])
+        return [
+            {
+                "winner": per_head["winner"][i][:, 1],
+                "method": per_head["method"][i],
+                "round": per_head["round"][i],
+            }
+            for i in range(n_seeds)
+        ]
+
+    def predict(self, features: pd.DataFrame) -> dict:
+        three_round = (features["scheduled_rounds"].fillna(3) <= 3).to_numpy(dtype=bool)
+        torch_members = self.ensemble.predict_members(features)
+        xgb_members = self._xgb_predict(features)
+
+        torch_mean = {head: np.mean([m[head] for m in torch_members], axis=0)
+                      for head in ("winner", "method", "round")}
+        xgb_mean = {head: np.mean([m[head] for m in xgb_members], axis=0)
+                    for head in ("winner", "method", "round")}
+
+        blended = blend_heads(xgb_mean, torch_mean, self.weight)
+        winner = apply_temperature(blended["winner"], self.temperature)
+        rounds = mask_round_45(blended["round"], three_round)
+
+        # Per-seed blends, for the disagreement band only. Pairing seed i with
+        # seed i is arbitrary but harmless: their mean is the headline
+        # probability regardless of the pairing, because the blend is linear.
+        paired = min(len(torch_members), len(xgb_members))
+        per_seed = np.stack([
+            apply_temperature(
+                self.weight * np.asarray(xgb_members[i]["winner"], dtype=float)
+                + (1.0 - self.weight) * np.asarray(torch_members[i]["winner"], dtype=float),
+                self.temperature,
+            )
+            for i in range(paired)
+        ])
+        return {
+            "winner_prob": winner,
+            "winner_spread": per_seed.max(axis=0) - per_seed.min(axis=0),
+            "method_probs": blended["method"],
+            "round_probs": rounds,
+            "method_classes": METHOD_CLASSES,
+            "round_classes": ROUND_CLASSES,
+        }
+
+    def mc_dropout(self, features: pd.DataFrame, passes: int = 100, seed: int = 0):
+        """MC dropout samples from the TORCH member's seed-0 net.
+
+        The XGBoost member has no dropout and no cheap stochastic analogue, so
+        this describes the torch half's parameter uncertainty only. The app
+        re-centres the samples on the blend's headline probability via
+        `predict_symmetrized`'s `mc_dropout_shift`; treat the resulting spread
+        as the torch member's, drawn around the blend's mean, rather than as
+        the blend's own posterior. It is a display aid, not a reported metric.
+        """
+        return self.ensemble.mc_dropout(features, passes=passes, seed=seed)
+
+
 def predict_symmetrized(
-    ensemble: "Ensemble", matchup_ab: pd.DataFrame, matchup_ba: pd.DataFrame
+    ensemble, matchup_ab: pd.DataFrame, matchup_ba: pd.DataFrame
 ) -> dict:
     """Predict a matchup from both orientations and average them.
+
+    `ensemble` is anything with `Ensemble`'s `predict` contract -- since SP2.2
+    the deployed caller passes a `BlendedPredictor`, so **the thing being
+    symmetrized is the blend**: each orientation is blended and calibrated
+    first, and the two blended probabilities are then corner-averaged. Blending
+    two already-symmetrized members would be a different number, and averaging
+    a member's corners after the blend would be a third.
 
     Phase 5 finding: the model is not perfectly symmetric under fighter
     order -- P(A beats B) + P(B beats A) can be off from 1.0 by ~15
