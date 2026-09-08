@@ -19,17 +19,11 @@ import numpy as np
 import pandas as pd
 
 from mma import serving
-from mma.feature_blocks import BASE_BLOCK
+from mma.feature_blocks import BASE_BLOCK, state_key_blocks, state_keys
 
-# The state keys `serving.feature_row` reads that come from the Elo ratings
-# table and the career-history accumulator respectively.
-_ELO_FEATURES = ["pre_overall", "pre_striking", "pre_grappling", "pre_fights"]
-_HISTORY_FEATURES = [
-    "career_fights", "career_wins", "career_win_rate", "career_finish_rate",
-    "kd_pf", "sub_att_pf", "td_landed_pf", "td_acc", "td_def",
-    "sig_pm", "sig_absorbed_pm", "ctrl_share", "streak", "days_since_last",
-    "last5_win_rate", "last5_avg_opp_elo",
-]
+# State keys `_side_frame` computes itself rather than merging in from a
+# source table (they need the fight date, the bio row, or another key).
+_DERIVED_STATE_KEYS = ("age", "reach_missing", "dob_missing", "southpaw", "debut")
 
 
 def swap_corner(fight_id: str) -> bool:
@@ -37,19 +31,54 @@ def swap_corner(fight_id: str) -> bool:
     return int(hashlib.md5(str(fight_id).encode()).hexdigest(), 16) % 2 == 1
 
 
-def _side_frame(fights, fighters, ratings, history, corner: str) -> pd.DataFrame:
+def _source_columns(blocks, fighters, ratings, history) -> tuple[list[str], list[str]]:
+    """Split the spec's state keys across the tables that provide them.
+
+    Returns the ratings and history merge lists. These used to be two
+    hand-maintained module constants, which meant a block whose state key was
+    added to the registry but not to both lists produced a silent all-NaN
+    column -- and then measured as "no improvement" for the wrong reason. They
+    are now derived from `feature_blocks.state_keys`, and a key no table
+    provides is a loud `ValueError` naming the key and its block.
+    """
+    keys = state_keys(blocks)
+    from_fighters = [k for k in keys if k in fighters.columns]
+    from_ratings = [k for k in keys
+                    if k in ratings.columns and k not in from_fighters]
+    from_history = [k for k in keys
+                    if k in history.columns and k not in from_fighters
+                    and k not in from_ratings]
+    accounted = set(from_fighters) | set(from_ratings) | set(from_history)
+    accounted |= set(_DERIVED_STATE_KEYS)
+    missing = [k for k in keys if k not in accounted]
+    if missing:
+        owners = state_key_blocks(blocks)
+        named = ", ".join(f"{k!r} (block {owners[k]!r})" for k in missing)
+        raise ValueError(
+            f"no source table provides feature state key(s): {named}; "
+            "add the column to history/ratings/fighters, or derive it in "
+            "mma.features._side_frame"
+        )
+    return from_ratings, from_history
+
+
+def _side_frame(fights, fighters, ratings, history, corner: str,
+                blocks=(BASE_BLOCK,)) -> pd.DataFrame:
     """One corner's per-fight state: every key `serving.feature_row` reads."""
+    elo_features, history_features = _source_columns(
+        blocks, fighters, ratings, history
+    )
     fighter_col = f"fighter_{corner}_id"
     side = fights[["fight_id", "date", fighter_col]].rename(
         columns={fighter_col: "fighter_id"}
     )
     side = side.merge(fighters, on="fighter_id", how="left")
     side = side.merge(
-        ratings[ratings["corner"] == corner][["fight_id"] + _ELO_FEATURES],
+        ratings[ratings["corner"] == corner][["fight_id"] + elo_features],
         on="fight_id", how="left",
     )
     side = side.merge(
-        history[history["corner"] == corner][["fight_id"] + _HISTORY_FEATURES],
+        history[history["corner"] == corner][["fight_id"] + history_features],
         on="fight_id", how="left",
     )
     side["age"] = (side["date"] - side["dob"]).dt.days / 365.25
@@ -78,8 +107,8 @@ def build_features(fights, fighters, ratings, history,
     what an unadorned call produces.
     """
     decisive = fights[fights["winner"].isin(["a", "b"])].reset_index(drop=True)
-    side_a = _side_frame(decisive, fighters, ratings, history, "a")
-    side_b = _side_frame(decisive, fighters, ratings, history, "b")
+    side_a = _side_frame(decisive, fighters, ratings, history, "a", blocks)
+    side_b = _side_frame(decisive, fighters, ratings, history, "b", blocks)
 
     swapped = decisive["fight_id"].map(swap_corner).to_numpy(dtype=bool)
     # positional row-swap: both frames share identical columns and index

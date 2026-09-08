@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 
 from mma import serving
+from mma.feature_blocks import BASE_BLOCK, state_key_blocks, state_keys
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
 from mma.tensors import Preprocessor
@@ -273,6 +274,7 @@ def build_matchup(
     bio_a: pd.Series, bio_b: pd.Series,
     weight_class: str, title_fight: bool, scheduled_rounds: int,
     as_of: pd.Timestamp,
+    blocks=(BASE_BLOCK,),
 ) -> pd.DataFrame:
     """One feature row matching the training feature contract (A vs B, no swap).
 
@@ -282,6 +284,12 @@ def build_matchup(
     into the state dict that builder expects. `tests/test_serving_parity.py`
     pins the two paths to identical values.
 
+    *Which* state keys that dict carries comes from
+    `feature_blocks.state_keys(blocks)`, not a tuple maintained here: a key a
+    block declares that neither the derived extras below nor the snapshot nor
+    the bio row can supply raises, rather than silently becoming NaN. `blocks`
+    defaults to the v1 `base` contract, so existing callers are unchanged.
+
     NOTE: elo_fights (via "pre_fights") and career_fights both read
     snapshot["career_fights"] here. In training these come from two separate
     counters -- the ratings table's fight count and the fight-history table's
@@ -290,6 +298,9 @@ def build_matchup(
     single current-state snapshot, so both coincide exactly; the difference
     is negligible after standardization (Preprocessor.transform).
     """
+    keys = state_keys(blocks)
+    owners = state_key_blocks(blocks)
+
     def side(snapshot, bio):
         age = (
             (as_of - bio["dob"]).days / 365.25 if pd.notna(bio["dob"]) else np.nan
@@ -300,7 +311,9 @@ def build_matchup(
             else np.nan
         )
         career_fights = snapshot.get("career_fights")
-        return {
+        # Keys the snapshot does not carry under the name the spec uses, or
+        # does not carry at all (bio fields, the as-of derivations, the flags).
+        extras = {
             "age": age,
             "height_cm": bio["height_cm"],
             "reach_cm": bio["reach_cm"],
@@ -313,16 +326,22 @@ def build_matchup(
             "pre_striking": snapshot["elo_striking"],
             "pre_grappling": snapshot["elo_grappling"],
             "pre_fights": career_fights,
-            **{
-                name: snapshot.get(name)
-                for name in (
-                    "career_fights", "career_wins", "career_win_rate",
-                    "career_finish_rate", "kd_pf", "sub_att_pf", "td_landed_pf",
-                    "td_acc", "td_def", "sig_pm", "sig_absorbed_pm", "ctrl_share",
-                    "streak", "last5_win_rate", "last5_avg_opp_elo",
-                )
-            },
         }
+        state = {}
+        for key in keys:
+            if key in extras:
+                state[key] = extras[key]
+            elif key in snapshot:
+                state[key] = snapshot[key]
+            elif key in bio:
+                state[key] = bio[key]
+            else:
+                raise KeyError(
+                    f"snapshot/bio cannot supply {key!r}, declared by block "
+                    f"{owners[key]!r}; add it to mma.snapshots.build_snapshots "
+                    "or to the derived extras in mma.inference.build_matchup"
+                )
+        return state
 
     row = serving.feature_row(
         side(snapshot_a, bio_a),
@@ -332,6 +351,7 @@ def build_matchup(
             "title_fight": title_fight,
             "scheduled_rounds": scheduled_rounds,
         },
+        blocks=blocks,
     )
     frame = pd.DataFrame([row])
     frame["weight_class"] = frame["weight_class"].astype("string")

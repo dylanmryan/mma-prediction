@@ -8,9 +8,13 @@ registry is what `scripts/build_features.py --blocks` and the serving path
 both read, so a block cannot be half-enabled.
 
 `spec_for` flattens a requested block list into the one assembled spec
-`mma.serving.feature_row` walks, and `columns_for` names the columns that
-walk emits, in the order it emits them -- the registry is the contract, not
-a parallel description of one.
+`mma.serving.feature_row` walks; `columns_for` names the columns that walk
+emits, in the order it emits them, and `state_keys` names the state fields
+it reads -- the registry is the contract, not a parallel description of one.
+Both the training merge (`mma.features._side_frame`) and the serving state
+dict (`mma.inference.build_matchup`) are built from `state_keys`, so a block
+whose state key nothing provides raises instead of quietly producing an
+all-NaN column that then measures as "no improvement".
 """
 from __future__ import annotations
 
@@ -88,22 +92,61 @@ def spec_for(names) -> Spec:
     )
 
 
-def columns_for(names) -> tuple[str, ...]:
-    """Output columns for a requested block list, in emission order.
+def columns_of(block: Block) -> tuple[str, ...]:
+    """One block's own output columns, in the order it emits them.
 
-    Mirrors `mma.serving.feature_row` exactly: every differential, then the
-    per-corner absolutes and booleans (corner a, then corner b), then the
-    derived flags, then the fight-level columns."""
-    spec = spec_for(names)
-    columns = [f"{stem}_diff" for _, stem in spec.differentials]
+    No `base` injection -- this is exactly what `block` contributes, which is
+    what a per-block uniqueness check needs. `mma.serving.feature_row` walks
+    the resolved blocks one at a time and emits each block's columns in this
+    order, so `columns_for` is just these, concatenated."""
+    columns = [f"{stem}_diff" for _, stem in block.differentials]
     columns += [
         f"{stem}_{corner}"
         for corner in ("a", "b")
-        for stem in spec.absolutes + spec.booleans
+        for stem in block.absolutes + block.booleans
     ]
-    columns += [name for name, _ in spec.derived_booleans]
-    columns += list(spec.fight_level)
+    columns += [name for name, _ in block.derived_booleans]
+    columns += list(block.fight_level)
     return tuple(columns)
+
+
+def columns_for(names) -> tuple[str, ...]:
+    """Output columns for a requested block list, in emission order.
+
+    Mirrors `mma.serving.feature_row` exactly: each resolved block's
+    `columns_of`, concatenated in registry order."""
+    return tuple(
+        column
+        for name in resolve_blocks(names)
+        for column in columns_of(BLOCKS[name])
+    )
+
+
+def state_keys(names) -> tuple[str, ...]:
+    """Every state field the resolved blocks read, deduplicated.
+
+    Differential source keys, then absolutes, then booleans, per block in
+    registry order. This is the single source of the *values* a block needs,
+    the way `columns_for` is the single source of the column *names*: the
+    training merge and the serving state dict are both built from it, so a
+    block cannot half-exist as an all-NaN column."""
+    keys: list[str] = []
+    for name in resolve_blocks(names):
+        block = BLOCKS[name]
+        for key in [k for k, _ in block.differentials] + list(block.absolutes) + list(block.booleans):
+            if key not in keys:
+                keys.append(key)
+    return tuple(keys)
+
+
+def state_key_blocks(names) -> dict[str, str]:
+    """state key -> the first resolved block that declares it (for error messages)."""
+    owners: dict[str, str] = {}
+    for name in resolve_blocks(names):
+        block = BLOCKS[name]
+        for key in [k for k, _ in block.differentials] + list(block.absolutes) + list(block.booleans):
+            owners.setdefault(key, name)
+    return owners
 
 
 # --- the v1 feature contract -------------------------------------------------

@@ -16,16 +16,20 @@ same expressions, so there is one contract and one set of semantics, not
 two implementations that happen to agree today.
 
 *Which* columns it builds is not decided here: `mma.feature_blocks` owns the
-registry of named, switchable blocks and `feature_row` walks the spec it
-assembles. Callers that pass nothing get the `base` block -- the v1 feature
+registry of named, switchable blocks and `feature_row` walks them in registry
+order. Callers that pass nothing get the `base` block -- the v1 feature
 contract -- unchanged.
+
+A state key a block declares but the caller's state does not carry is a
+`KeyError`, not a `None`: silently emitting an all-NaN column would make a
+half-wired block measure as "no improvement" for the wrong reason.
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-from mma.feature_blocks import BASE_BLOCK, Spec, spec_for
+from mma.feature_blocks import BASE_BLOCK, BLOCKS, resolve_blocks
 
 
 def minus(a, b):
@@ -58,28 +62,48 @@ def debut_flag(career_fights):
     return float(career_fights) == 0
 
 
+def state_value(state, key: str, block: str):
+    """One declared state field, or a `KeyError` naming the key and its block.
+
+    Membership works the same for every state shape `feature_row` accepts:
+    `in` tests a dict's keys, a Series' index and a DataFrame's columns. The
+    point is that "the block declared it but nothing provides it" is an
+    error, not a NaN column -- see the module docstring.
+    """
+    if key not in state:
+        raise KeyError(
+            f"feature state is missing {key!r}, declared by block {block!r}"
+        )
+    return state[key]
+
+
 def feature_row(state_a, state_b, context: dict | None = None,
                 blocks=(BASE_BLOCK,)) -> dict:
     """One matchup -> {column: value} following the feature contract.
 
-    `state_a` / `state_b` are anything supporting `.get(key)` over the state
-    keys the enabled blocks name -- a plain dict of scalars at serving time,
-    a DataFrame of columns at training time. `context` is the fight context
-    (weight class, title flag, scheduled rounds, plus any fight-level block
-    columns), passed through verbatim ahead of the features. `blocks` is a
-    requested block list (or an already-assembled `Spec`); it defaults to the
-    v1 `base` block, and the column order is exactly `feature_blocks.
-    columns_for(blocks)`.
+    `state_a` / `state_b` are anything supporting `key in state` and
+    `state[key]` over the state keys the enabled blocks name -- a plain dict
+    of scalars at serving time, a DataFrame of columns at training time
+    (`feature_blocks.state_keys(blocks)` is exactly that key set). `context`
+    is the fight context (weight class, title flag, scheduled rounds, plus
+    any fight-level block columns), passed through verbatim ahead of the
+    features. `blocks` is a requested block list; it defaults to the v1
+    `base` block, and the column order is exactly
+    `feature_blocks.columns_for(blocks)` -- one block at a time, in registry
+    order.
     """
-    spec = blocks if isinstance(blocks, Spec) else spec_for(blocks)
     row: dict = dict(context) if context else {}
-    for key, stem in spec.differentials:
-        row[f"{stem}_diff"] = minus(state_a.get(key), state_b.get(key))
-    for corner, state in (("a", state_a), ("b", state_b)):
-        for stem in spec.absolutes:
-            row[f"{stem}_{corner}"] = state.get(stem)
-        for stem in spec.booleans:
-            row[f"{stem}_{corner}"] = as_flag(state.get(stem))
-    for name, stem in spec.derived_booleans:
-        row[name] = row[f"{stem}_a"] ^ row[f"{stem}_b"]
+    for name in resolve_blocks(blocks):
+        block = BLOCKS[name]
+        for key, stem in block.differentials:
+            row[f"{stem}_diff"] = minus(
+                state_value(state_a, key, name), state_value(state_b, key, name)
+            )
+        for corner, state in (("a", state_a), ("b", state_b)):
+            for stem in block.absolutes:
+                row[f"{stem}_{corner}"] = state_value(state, stem, name)
+            for stem in block.booleans:
+                row[f"{stem}_{corner}"] = as_flag(state_value(state, stem, name))
+        for column, stem in block.derived_booleans:
+            row[column] = row[f"{stem}_a"] ^ row[f"{stem}_b"]
     return row

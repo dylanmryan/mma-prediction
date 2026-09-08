@@ -60,8 +60,20 @@ def test_one_fight_fighters_present():
     assert snapshots.loc["z"]["elo_overall"] == 1518.0
 
 
-def test_snapshot_history_columns_match_feature_names():
-    from mma.features import _HISTORY_FEATURES
+def test_snapshots_supply_every_state_key_the_served_row_needs():
+    """`build_matchup` derives its state dict from the block spec and raises on
+    a key nothing supplies, so building a real served row off a snapshot is the
+    guarantee -- stronger than comparing two hand-maintained name lists, which
+    is what this test used to do."""
+    from mma.feature_blocks import BASE_BLOCK, columns_for
+    from mma.inference import build_matchup
+
     snapshots = build_snapshots(_fights(), _stats(), _ratings())
-    missing = set(_HISTORY_FEATURES) - {"days_since_last"} - set(snapshots.columns)
-    assert missing == set()
+    bio = pd.Series({"dob": pd.Timestamp("1990-01-01"), "height_cm": 180.0,
+                     "reach_cm": 183.0, "stance": "Orthodox"})
+    served = build_matchup(
+        snapshots.loc["x"], snapshots.loc["y"], bio, bio,
+        "Lightweight", False, 3, as_of=pd.Timestamp("2025-01-01"),
+    )
+    assert len(served) == 1
+    assert set(columns_for([BASE_BLOCK])) <= set(served.columns)
