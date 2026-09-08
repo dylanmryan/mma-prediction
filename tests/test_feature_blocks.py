@@ -8,7 +8,10 @@ output column.
 import pandas as pd
 import pytest
 
-from mma.feature_blocks import BASE_BLOCK, BLOCKS, Block, columns_for, register, resolve_blocks
+from mma.feature_blocks import (
+    BASE_BLOCK, BLOCKS, Block, columns_for, register, resolve_blocks,
+    state_keys,
+)
 
 
 def test_base_block_is_always_present():
@@ -87,3 +90,48 @@ def test_columns_for_is_the_column_order_feature_row_emits():
     row = serving.feature_row(state, dict(state), {"weight_class": "Lightweight"})
     emitted = [c for c in row if c != "weight_class"]
     assert tuple(emitted) == columns_for([BASE_BLOCK])
+
+
+def test_state_keys_are_cumulative_and_deduplicated(dummy_blocks):
+    first, second = dummy_blocks
+    base_keys = state_keys([BASE_BLOCK])
+    # `age` and `career_fights` are both a differential source and an absolute
+    # in `base`; each state key is named once.
+    assert len(base_keys) == len(set(base_keys))
+    assert "age" in base_keys and "career_fights" in base_keys
+
+    with_dummies = state_keys([first, second])
+    assert set(base_keys) < set(with_dummies)
+    assert set(with_dummies) - set(base_keys) == {"zzz_second_stat", "aaa_first_flag"}
+    # registry order, not requested order
+    assert state_keys([first, second]) == state_keys([second, first])
+    assert with_dummies[:len(base_keys)] == base_keys
+
+
+def test_feature_row_raises_when_a_declared_state_key_is_absent():
+    """A key nothing provides must be a loud error, not an all-NaN column:
+    a half-wired block would otherwise measure as 'no improvement'."""
+    from mma import serving
+
+    full = {key: 1.0 for key in state_keys([BASE_BLOCK])}
+    # dict states (serving): key absent from the mapping
+    partial = {k: v for k, v in full.items() if k != "td_def"}
+    with pytest.raises(KeyError, match="td_def"):
+        serving.feature_row(partial, dict(full))
+    with pytest.raises(KeyError, match=BASE_BLOCK):
+        serving.feature_row(dict(full), partial)
+
+    # frame states (training): column absent from `.columns`
+    frame = pd.DataFrame({k: [1.0] for k in full})
+    with pytest.raises(KeyError, match="southpaw"):
+        serving.feature_row(frame.drop(columns=["southpaw"]), frame)
+
+
+def test_build_features_raises_for_a_state_key_no_source_table_provides(dummy_blocks):
+    """The registry single-sources values, not just names: registering a block
+    whose state key no source table carries fails the build."""
+    from mma.features import build_features
+    from tests.test_features import _tables
+
+    with pytest.raises(ValueError, match="zzz_second_stat"):
+        build_features(*_tables(), blocks=["zzz_second"])
