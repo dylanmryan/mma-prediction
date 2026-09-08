@@ -9,8 +9,8 @@ import pandas as pd
 import pytest
 
 from mma.feature_blocks import (
-    BASE_BLOCK, BLOCKS, Block, columns_for, register, resolve_blocks,
-    state_keys,
+    BASE_BLOCK, BLOCKS, Block, columns_for, columns_of, register, registry,
+    resolve_blocks, state_keys,
 )
 
 
@@ -26,21 +26,58 @@ def test_unknown_block_rejected():
 
 def test_every_block_declares_columns_and_they_are_unique():
     """No two blocks may claim the same output column, and every block must
-    contribute at least one. `columns_for` concatenates the resolved blocks
-    in order, so asking for all of them at once surfaces a collision as a
-    duplicate entry -- including a collision with `base`, which is implicit
-    in every single-block resolve and so cannot be spotted by comparing
-    single-block results against each other.
+    contribute at least one.
+
+    Checked with `columns_of`, which is a single block's own columns.
+    `columns_for([name])` always resolves `base` in alongside it, so
+    comparing those would report the second and every later block as
+    redeclaring all of base's columns -- a spurious failure that appears the
+    moment a second block is registered.
     """
-    names = list(BLOCKS)
-    all_columns = columns_for(names)
-    duplicates = sorted({c for c in all_columns if all_columns.count(c) > 1})
-    assert not duplicates, f"blocks redeclare {duplicates}"
-    seen: set[str] = set()
-    for name in names:
-        own = set(columns_for([name])) - seen
+    claimed: dict[str, str] = {}
+    for name, block in BLOCKS.items():
+        own = columns_of(block)
         assert own, f"block {name} declares no columns of its own"
-        seen |= own
+        collisions = sorted(set(own) & set(claimed))
+        assert not collisions, f"block {name} redeclares {collisions}"
+        claimed.update({column: name for column in own})
+
+
+def test_column_uniqueness_survives_a_second_block(dummy_blocks):
+    """The guard above must still hold with more than one block registered --
+    the case the `columns_for`-based version got wrong."""
+    test_every_block_declares_columns_and_they_are_unique()
+
+
+def test_register_rejects_a_block_that_reclaims_a_column():
+    """The collision check belongs to `register`, so a bad block cannot enter
+    the registry at all and be discovered later by a test."""
+    with registry():
+        with pytest.raises(ValueError, match="career_fights_diff"):
+            register(Block(
+                name="clash",
+                differentials=(("career_fights", "career_fights"),),
+            ))
+        assert "clash" not in BLOCKS
+
+
+def test_resolve_blocks_accepts_a_bare_string(dummy_blocks):
+    """A single name is a common slip and used to iterate its characters,
+    failing with a list of unknown one-letter blocks."""
+    first, _ = dummy_blocks
+    assert resolve_blocks(first) == resolve_blocks([first])
+    assert resolve_blocks(BASE_BLOCK) == (BASE_BLOCK,)
+    with pytest.raises(ValueError, match="unknown feature block"):
+        resolve_blocks("not_a_block")
+
+
+def test_registry_context_manager_restores_the_registry():
+    original = dict(BLOCKS)
+    with pytest.raises(ValueError):
+        with registry():
+            register(Block(name="temp_block", absolutes=("temp_stat",)))
+            raise ValueError("setup blew up after a partial registration")
+    assert BLOCKS == original
 
 
 def test_registry_columns_match_the_committed_feature_table():
@@ -60,15 +97,14 @@ def test_registry_columns_match_the_committed_feature_table():
 
 @pytest.fixture
 def dummy_blocks():
-    """Two throwaway blocks registered after `base`, removed afterwards."""
-    original = dict(BLOCKS)
-    register(Block(name="zzz_second", absolutes=("zzz_second_stat",)))
-    register(Block(name="aaa_first", booleans=("aaa_first_flag",)))
-    try:
+    """Two throwaway blocks registered after `base`, removed afterwards.
+
+    `registry()` wraps the registrations too, so a `register` that raises
+    during setup cannot leak the block that went in before it."""
+    with registry():
+        register(Block(name="zzz_second", absolutes=("zzz_second_stat",)))
+        register(Block(name="aaa_first", booleans=("aaa_first_flag",)))
         yield ("aaa_first", "zzz_second")
-    finally:
-        BLOCKS.clear()
-        BLOCKS.update(original)
 
 
 def test_resolve_blocks_is_order_insensitive_and_follows_registry_order(dummy_blocks):
