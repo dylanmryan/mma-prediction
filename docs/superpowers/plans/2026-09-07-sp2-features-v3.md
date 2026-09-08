@@ -780,7 +780,7 @@ EOF
 
 | Block | XGB | torch | Δ vs incumbent | Ships? | Notes |
 |---|---|---|---|---|---|
-| in_fight | _…_ | _…_ | _…_ | _…_ | |
+| in_fight | 0.6540 (0.6537) | 0.6528 (0.6510) | +0.0018 vs torch_v1 | **no** | worse on both scorers; torch slices: womens +0.0062, debut +0.0034, five_round −0.0035. Incumbent stays `{xgb,torch}_v1`. |
 | opponent_adjusted | _…_ | _…_ | _…_ | _…_ | |
 | trajectory | _…_ | _…_ | _…_ | _…_ | |
 | context | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
@@ -788,6 +788,31 @@ EOF
 | external | _…_ | _…_ | _…_ | _…_ | external_missing slice: _…_ |
 | notice | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | rankings | _…_ | _…_ | _…_ | _…_ | match rate: _…_ |
+
+**Block `in_fight` (Task 5), measured and rejected.** 17 differentials from the
+per-round table and the target/position columns: `head/body/leg_share`,
+`distance/clinch/ground_share`, `kd_absorbed_pf`, `r1_output_share`,
+`late_round_fade`, `finish_r1/r2/r3plus_rate`, `been_finished_rate`,
+`ko_losses`, `sub_losses`, `ko_loss_recency_days`, `median_finish_sec`.
+
+- XGB screen: pooled winner LL **0.6540** vs incumbent 0.6537 (delta **+0.0003**,
+  i.e. very slightly worse). Inside the 0.002 drop threshold, so torch was run.
+- torch decision: pooled winner LL **0.6528** vs incumbent 0.6510
+  (delta **+0.0018**, worse). `bar_check` -> `clears_delta: false`,
+  `no_fold_regression: true`, **`ships: false`**. Worst fold +0.0041 (2018);
+  2021 and 2022 improved (-0.0031, -0.0020) but no fold cleared the bar.
+- torch slices vs `torch_v1`: womens +0.0062, debut +0.0034, five_round -0.0035.
+  The regression is concentrated in the womens slice, where the strike-profile
+  columns are thinnest.
+- Coverage of the new columns (11,238 rows): the six share columns and
+  `r1_output_share` are populated on 7,997 rows, `late_round_fade` 6,930,
+  the three finish-rate columns 6,959, `ko_loss_recency_days` only 1,873
+  (both corners must have been KO'd). That much missingness on top of 17
+  correlated columns is the most likely reason it costs rather than pays.
+- Gates before evaluation, both passing on the in_fight table:
+  `test_no_leakage_truncation_invariance` and both serving-parity tests.
+- Reports kept: `models/walkforward/xgb_in_fight.json`,
+  `models/walkforward/torch_in_fight.json`. Block code reverted.
 
 **Recency grid (Task 9):** _4×4 table_
 **Recent-fold temperature experiment:** _…_

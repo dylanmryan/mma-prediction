@@ -22,24 +22,37 @@ def test_unknown_block_rejected():
 
 
 def test_every_block_declares_columns_and_they_are_unique():
-    seen = set()
-    for name in BLOCKS:
-        cols = columns_for([name])
-        assert cols, f"block {name} declares no columns"
-        overlap = seen & set(cols)
-        assert not overlap, f"block {name} redeclares {overlap}"
-        seen |= set(cols)
+    """No two blocks may claim the same output column, and every block must
+    contribute at least one. `columns_for` concatenates the resolved blocks
+    in order, so asking for all of them at once surfaces a collision as a
+    duplicate entry -- including a collision with `base`, which is implicit
+    in every single-block resolve and so cannot be spotted by comparing
+    single-block results against each other.
+    """
+    names = list(BLOCKS)
+    all_columns = columns_for(names)
+    duplicates = sorted({c for c in all_columns if all_columns.count(c) > 1})
+    assert not duplicates, f"blocks redeclare {duplicates}"
+    seen: set[str] = set()
+    for name in names:
+        own = set(columns_for([name])) - seen
+        assert own, f"block {name} declares no columns of its own"
+        seen |= own
 
 
-def test_base_columns_match_the_committed_feature_table():
+def test_registry_columns_match_the_committed_feature_table():
+    """Whatever blocks the committed table was built from -- recorded in the
+    sidecar -- the registry must name exactly its feature columns."""
+    import json
     from pathlib import Path
-    path = Path(__file__).resolve().parents[1] / "data" / "processed" / "features.parquet"
-    if not path.exists():
+    processed = Path(__file__).resolve().parents[1] / "data" / "processed"
+    if not (processed / "features.parquet").exists():
         pytest.skip("processed data not built")
-    table = pd.read_parquet(path)
+    blocks = json.loads((processed / "features_blocks.json").read_text())["blocks"]
+    table = pd.read_parquet(processed / "features.parquet")
     identifiers = {"fight_id", "date", "swapped", "y_winner", "y_method", "y_finish_round",
                    "weight_class", "title_fight", "scheduled_rounds"}
-    assert set(columns_for([BASE_BLOCK])) == set(table.columns) - identifiers
+    assert set(columns_for(blocks)) == set(table.columns) - identifiers
 
 
 @pytest.fixture
