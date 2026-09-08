@@ -1708,6 +1708,34 @@ modelled, two coverage flags in the table and out of both model matrices) ;
 fresh-seed re-score: **-0.0043** pooled (0.6516 -> 0.6473, seeds 5-9, worst
 fold +0.0006, `ships: true`) ; deployed model hash: **`b617b96dae45`**.
 
+> **FORWARD POINTER, added 2026-09-08 (SP2.2).** Everything above is SP2's
+> record and is left exactly as it was written. Two statements in it are no
+> longer descriptions of the deployed system:
+>
+> * **The shipped feature table is no longer `base,external` (11,238 x 54).**
+>   It is `base,external,trajectory,notice,context,opponent_adjusted`
+>   (11,238 x 87). SP2.2's blend candidate B1 was scored on that table and
+>   shipped, so the four blocks SP2 rejected and SP2.1 rejected again are
+>   registered permanently -- **not** because any of them cleared a bar
+>   (none did, and those verdicts stand unedited), but because the blend that
+>   cleared was scored on the table containing them. B1 against the same
+>   blend on `base,external` is -0.0016, which clears nothing on its own.
+>   Three columns joined the two coverage flags in the "in the table, out of
+>   both model matrices" set: `notice_unknown`, `home_country_a`,
+>   `home_country_b`.
+> * **The deployed scorer is no longer the torch ensemble, and the hash is
+>   no longer `b617b96dae45`.** It is a 0.5/0.5 blend of a 5-seed XGBoost
+>   ensemble and the 5-seed torch ensemble, temperature-scaled after
+>   averaging (T = 0.80), hash **`5aa33460ef40`** -- which now covers the
+>   XGBoost artifacts as well. The deployment budgets in this record
+>   (105/61/75 trees, 10 epochs at T 1.07) belong to the `base,external`
+>   table and were re-derived on the new one (6 epochs at T 1.15;
+>   109/73/71 trees per seed, `models/walkforward/refit_decision_b1.json`).
+>
+> See `docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md` and
+> `models/walkforward/sp2_2_decision.json`. Follow-ups 1, 6 and 7 below are
+> all still live and are carried forward there.
+
 **Follow-ups (carried into SP3/SP4):**
 
 1. **The external snapshot is static and decaying.** `ehan03/jds-mma-data`
@@ -1749,4 +1777,7 @@ fold +0.0006, `ships: true`) ; deployed model hash: **`b617b96dae45`**.
    metric or more fold years, not a tighter read of the same eight numbers.
 7. **`roll_window.py`'s promotion gate** still scores a newest-2-years slice
    that is in-sample for a refit-through-latest incumbent, so `--execute`
-   aborts. SP4 moves it onto the walk-forward harness.
+   aborts. SP4 moves it onto the walk-forward harness. (2026-09-08: SP2.2
+   added a *second*, earlier abort -- the gate compares a torch-only
+   candidate against a torch-only incumbent, which is half the served model
+   now -- so the promotion path is fully inert until SP4 does this.)
