@@ -296,3 +296,82 @@ def test_blend_masks_round_45_for_three_round_fights(table, fold):
 def test_blend_rejects_a_weight_outside_the_unit_interval(table, fold):
     with pytest.raises(ValueError, match="blend weight"):
         BlendCandidate(weight=1.5, **BLEND_KWARGS).fit_predict(table, fold, None)
+
+
+# --- the isotonic post-average calibrator (SP2.2 Task 3, a POST-HOC variant) --
+#
+# It replaces the pre-registration's "temperature-scaled after averaging" step
+# and is a remediation DIAGNOSTIC, never a shipping form. These tests pin the
+# one property that makes it honest -- it sees the same rows the temperature
+# sees and no evaluation row -- plus the shape/clipping contract.
+
+
+def test_blend_isotonic_is_fitted_on_inner_val_and_never_on_eval(table, fold, monkeypatch):
+    import mma.candidates as candidates
+
+    seen = {}
+    real = candidates.fit_isotonic
+
+    def spy(p_val, y_val):
+        seen["n"] = len(p_val)
+        seen["y"] = np.asarray(y_val).copy()
+        return real(p_val, y_val)
+
+    monkeypatch.setattr(candidates, "fit_isotonic", spy)
+    pred, info = BlendCandidate(calibrator="isotonic", **BLEND_KWARGS).fit_predict(table, fold, None)
+    assert seen["n"] == int(fold.inner_val.sum())
+    assert np.array_equal(seen["y"], table.loc[fold.inner_val, "y_winner"].to_numpy(dtype=float))
+    assert info["calibrator"] == "isotonic"
+    # the temperature slot stays at its identity value: no temperature was fitted
+    assert info["temperature"] == 1.0
+    assert pred["winner"].shape == (int(fold.eval.sum()),)
+    assert np.all((pred["winner"] > 0.0) & (pred["winner"] < 1.0))
+
+
+def test_blend_isotonic_ignores_the_evaluation_labels(table, fold):
+    scrambled = table.copy()
+    scrambled.loc[fold.eval, "y_winner"] = 1 - scrambled.loc[fold.eval, "y_winner"]
+    a, _ = BlendCandidate(calibrator="isotonic", **BLEND_KWARGS).fit_predict(table, fold, None)
+    b, _ = BlendCandidate(calibrator="isotonic", **BLEND_KWARGS).fit_predict(scrambled, fold, None)
+    assert np.array_equal(a["winner"], b["winner"])
+
+
+def test_blend_default_calibrator_is_the_pre_registered_temperature(table, fold):
+    """The default path must be untouched: same predictions, and no `calibrator`
+    key in fit_info, so a report produced by it keeps the shape every committed
+    blend report already has."""
+    assert BlendCandidate(**BLEND_KWARGS).calibrator == "temperature"
+    default, info_default = BlendCandidate(**BLEND_KWARGS).fit_predict(table, fold, None)
+    named, info_named = BlendCandidate(calibrator="temperature", **BLEND_KWARGS).fit_predict(
+        table, fold, None)
+    assert np.array_equal(default["winner"], named["winner"])
+    assert "calibrator" not in info_default and info_default == info_named
+
+
+def test_blend_isotonic_leaves_the_method_and_round_heads_alone(table, fold):
+    temp, _ = BlendCandidate(**BLEND_KWARGS).fit_predict(table, fold, None)
+    iso, _ = BlendCandidate(calibrator="isotonic", **BLEND_KWARGS).fit_predict(table, fold, None)
+    assert np.array_equal(temp["method"], iso["method"])
+    assert np.array_equal(temp["round"], iso["round"])
+    assert not np.array_equal(temp["winner"], iso["winner"])
+
+
+def test_blend_rejects_an_unknown_calibrator(table, fold):
+    with pytest.raises(ValueError, match="blend calibrator"):
+        BlendCandidate(calibrator="platt", **BLEND_KWARGS).fit_predict(table, fold, None)
+
+
+def test_fit_isotonic_is_monotone_and_clipped_away_from_zero_and_one():
+    """A pure bin makes plain isotonic regression predict exactly 0 or 1, which
+    log-loss reads as infinity; the calibrator clips, and stays monotone."""
+    from mma.candidates import fit_isotonic
+
+    p = np.linspace(0.05, 0.95, 40)
+    y = (p > 0.5).astype(float)  # perfectly separable -> a step function
+    apply = fit_isotonic(p, y)
+    out = apply(np.linspace(0.0, 1.0, 101))
+    assert np.all(out > 0.0) and np.all(out < 1.0)
+    assert np.all(np.diff(out) >= -1e-12)
+    # out-of-range inputs clip to the end values rather than raising
+    assert apply(np.array([-5.0]))[0] == pytest.approx(out[0])
+    assert apply(np.array([5.0]))[0] == pytest.approx(out[-1])
