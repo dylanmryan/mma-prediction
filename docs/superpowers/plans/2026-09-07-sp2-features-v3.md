@@ -782,7 +782,7 @@ EOF
 |---|---|---|---|---|---|
 | in_fight | 0.6540 (0.6537) | 0.6528 (0.6510) | +0.0018 vs torch_v1 | **no** | worse on both scorers; torch slices: womens +0.0062, debut +0.0034, five_round −0.0035. Incumbent stays `{xgb,torch}_v1`. |
 | opponent_adjusted | 0.6519 (0.6537) | 0.6532 (0.6510) | +0.0022 vs torch_v1 | **no** | XGB liked it (-0.0018), torch did not; every fold worse on torch. Slices: debut +0.0030, womens +0.0020, five_round -0.0018. Coverage 0.63/0.51 of rows. Incumbent stays `{xgb,torch}_v1`. |
-| trajectory | _…_ | _…_ | _…_ | _…_ | |
+| trajectory | 0.6486 (0.6506) | 0.6472 (0.6476) | -0.0004 vs torch_external_diffsonly_extslice | **no** | XGB liked it (-0.0020), torch barely moved. Holding the most Elo-collinear column (`glicko_mu_diff`, r=0.88) out of the model lands in the same place (-0.0005), so collinearity is not the whole story. Kept regardless: `mma.glicko` and the `run_glicko` pass, so `ratings.parquet` carries the Glicko-2 triple. Incumbent stays `{xgb,torch}_external_diffsonly_extslice`. |
 | context | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | recency | 0.6525 (0.6537) | 0.6499 (0.6510) | -0.0011 vs torch_v1 | **no** | best window/half-life: half-life 8y (window barely matters); improves on both scorers but by a third of the 0.003 bar. Incumbent stays `{xgb,torch}_v1`. |
 | external | 0.6506 (0.6537) | 0.6476 (0.6510) | -0.0034 vs torch_v1 | **yes** | shipped as `external_diffsonly`: six pre-UFC differentials, the two fight-level flags kept in the table but excluded from both model matrices. Three variants measured and all three clear the bar; this one is the only one that does not degrade on 2024-2025 (row-weighted -0.00064). external_missing slice n=779, 0.6429 -> 0.6447, +0.0018, against the paired incumbent `torch_v1_extslice`. Coverage 0.799 of rows. New incumbent: `{xgb,torch}_external_diffsonly_extslice`. |
@@ -859,6 +859,75 @@ beaten and lost to).
   against a block-enabled table and fails on shape, and the serving-parity
   test never exercises a new block's snapshot fields at all -- so the two
   "blocking gates" could not actually gate a block.
+
+**Block `trajectory` (Task 7), measured and rejected.** Ten columns of rating
+DYNAMICS on top of the base block's rating LEVELS: `glicko_mu_diff`,
+`glicko_phi_diff`, `glicko_sigma_diff` (Glicko-2 rating, deviation and
+volatility), `elo_delta_3_diff` / `elo_delta_5_diff` (the sum of the last
+three and five post-fight Elo movements), `elo_peak_minus_current_diff`,
+`years_since_ufc_debut_diff`, `age_x_fights_diff` and `age_squared_a`/`_b`.
+
+- **Glicko-2 is verified against the published worked example**, which is the
+  part of this task worth keeping whatever the block did. Glickman's paper
+  walks a 1500/200/0.06 player at tau 0.5 through one rating period against
+  1400/30, 1550/100 and 1700/300 with W/L/L and reports 1464.06 / 151.52 /
+  0.05999; `mma.glicko.update` returns 1464.0507 / 151.5165 / 0.0599960 --
+  agreement to one unit in the paper's last quoted decimal, which is what its
+  own rounded intermediates allow. `tests/test_glicko.py` (7 tests) also pins
+  RD growth under inactivity and its 350 cap, the larger move a high-RD player
+  takes from the same upset, and the empty rating period.
+- **Two MMA-specific choices, both documented in `mma.glicko`.** A rating
+  period is an EVENT DATE, so every bout on a card is scored against the
+  ratings its fighters carried into that card (which is what makes the
+  pre-fight value correct for a fighter with two bouts in one night). Between
+  cards, RD grows with the CALENDAR rather than with the number of cards
+  missed -- `PERIOD_DAYS = 7`, one nominal period per week -- because a
+  per-event-date clock would make a lay-off cost four RD steps a year in 1995
+  and fifty in 2025. The weekly clock is also what lets serving reproduce a
+  trained value exactly: `build_matchup` grows the fighter's post-fight
+  deviation over the days since, and the serving-parity test passed on the
+  Glicko columns unchanged.
+- **The Elo columns are byte-identical.** `run_glicko` produces the same row
+  set and keys as `run_elo`, and `build_ratings.py` joins on
+  (fight_id, corner, fighter_id) with `validate="one_to_one"`, so the six new
+  columns are appended and nothing existing moves. Checked, not assumed:
+  `assert_frame_equal(git show HEAD:ratings.parquet, new[old.columns],
+  check_exact=True, check_dtype=True)` passes over all 22,646 x 11.
+- XGB screen: pooled winner LL **0.6486** vs incumbent 0.6506 (delta
+  **-0.0020**, better but two-thirds of the bar). Six of eight folds improved,
+  worst +0.0029 (2021); best -0.0086 (2023).
+- torch decision: pooled winner LL **0.6472** vs incumbent 0.6476 (delta
+  **-0.0004**). `bar_check` -> `clears_delta: false`,
+  `no_fold_regression: true`, **`ships: false`**. Fold deltas 2018 -0.0004,
+  2019 -0.0015, 2020 -0.0012, 2021 -0.0021, 2022 +0.0024, 2023 -0.0024,
+  2024 +0.0024, 2025 -0.0004; six of eight better, none by anything like the
+  bar.
+- torch slices vs `torch_external_diffsonly_extslice`: debut -0.0008,
+  womens -0.0008, five_round -0.0016, external_missing +0.0009.
+- **The collinearity hypothesis was tested and is not the explanation.**
+  `glicko_mu_diff` correlates 0.88 with `elo_diff`, and the three previous
+  rejected blocks all failed with the "correlated addition costs the MLP"
+  signature, so a second torch run held it out of the model
+  (`torch_trajectory_nomu`): pooled 0.6471, delta **-0.0005** -- the same
+  place. The block is a recombination of rating history the base block already
+  carries, and on this table the deployed scorer already has it.
+- Coverage (11,238 rows, both corners needed): the three Glicko columns and
+  the two momentum sums are 1.000 (Glicko has a defined prior for everyone and
+  momentum is 0.0 for a debutant by design); `elo_peak_minus_current_diff` and
+  `years_since_ufc_debut_diff` 0.726 (both corners must have a prior bout);
+  `age_x_fights_diff` 0.969; `age_squared_a`/`_b` 0.980/0.981 (dob coverage).
+- Gates before evaluation, all passing on the trajectory table (11,238 x 64):
+  `test_no_leakage_truncation_invariance`, both serving-parity tests, and
+  `tests/test_processed_ratings.py`.
+- **Kept after the revert**, because it is reusable and correct: `src/mma/glicko.py`
+  (the engine plus the `run_glicko` chronological pass), `tests/test_glicko.py`,
+  and the `run_glicko` step in `scripts/build_ratings.py` -- so
+  `data/processed/ratings.parquet` carries `{pre,post}_glicko_{mu,phi,sigma}`
+  (22,646 x 17) whether or not any block models them, exactly as the plan's
+  Task 7 Step 3 anticipated. Reports kept: `models/walkforward/xgb_trajectory.json`,
+  `torch_trajectory.json`, `torch_trajectory_nomu.json`. The block's feature
+  wiring is reverted; the commented-out registration in
+  `mma.feature_blocks` records what restoring it would take.
 
 **Block `recency` (Task 9), measured and rejected.** No feature columns: the
 SP1 harness's `--train-start` / `--half-life` capability searched as a block.

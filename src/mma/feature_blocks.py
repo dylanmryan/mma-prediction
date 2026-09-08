@@ -330,3 +330,45 @@ register(Block(
 #         booleans=("is_champion", "is_ranked"),
 #         fight_level=("rank_missing", "ranking_regime_post_2026_06"),
 #     ))
+
+
+# --- SP2 block: trajectory (MEASURED AND REJECTED) ---------------------------
+# Rating DYNAMICS on top of the base block's rating LEVELS: Glicko-2's
+# deviation and volatility, recent Elo momentum, the drawdown from a
+# fighter's own peak, tenure, and two age interactions. Deliberately NOT
+# registered: built, evaluated and reverted in SP2 Task 7.
+#
+# XGB liked it (pooled 0.6486 against the incumbent 0.6506, delta -0.0020) and
+# torch barely moved (0.6472 against 0.6476, delta **-0.0004** -- a seventh of
+# the 0.003 bar). A second variant with the most collinear column held out of
+# the model (`glicko_mu_diff`, r = 0.88 with `elo_diff`) landed in the same
+# place, -0.0005, which rules out collinearity-with-Elo as the whole story:
+# the block is simply a recombination of the rating history the base block
+# already carries, and the deployed scorer has that information.
+#
+# What was kept, because it is reusable and correct: `mma.glicko` -- a
+# tested Glicko-2 implementation pinned to the worked example in Glickman's
+# paper -- and the `run_glicko` pass in `scripts/build_ratings.py`, so
+# `data/processed/ratings.parquet` carries `{pre,post}_glicko_{mu,phi,sigma}`
+# whether or not anything models them. Registering the block again means
+# restoring the lines below plus the four accumulator fields in
+# `mma.history._FighterState` (`elo_delta_3`, `elo_delta_5`,
+# `elo_peak_minus_current`, `years_since_ufc_debut`), the `first_date` and
+# Glicko pass-through in `mma.snapshots`, the two age interactions in
+# `mma.features._side_frame`, and the as-of derivations in
+# `mma.inference.build_matchup`; see the SP2 plan's Task 7 notes.
+#
+#     register(Block(
+#         name="trajectory",
+#         differentials=(
+#             ("pre_glicko_mu", "glicko_mu"),
+#             ("pre_glicko_phi", "glicko_phi"),
+#             ("pre_glicko_sigma", "glicko_sigma"),
+#             ("elo_delta_3", "elo_delta_3"),
+#             ("elo_delta_5", "elo_delta_5"),
+#             ("elo_peak_minus_current", "elo_peak_minus_current"),
+#             ("years_since_ufc_debut", "years_since_ufc_debut"),
+#             ("age_x_fights", "age_x_fights"),
+#         ),
+#         absolutes=("age_squared",),
+#     ))
