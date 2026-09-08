@@ -64,6 +64,63 @@ def feature_frame(features: pd.DataFrame, drop_columns=()) -> pd.DataFrame:
     return x
 
 
+def booster_categories(booster: xgb.Booster) -> dict:
+    """{column: [category values]} for the categorical columns a model trained on.
+
+    XGBoost 3.x matches categoricals BY VALUE (it stores the category strings
+    in the model), which is why a served row does not have to reproduce the
+    training frame's category ORDER. It does have to stay inside the training
+    set: a value the model never saw is a hard XGBoostError, not a missing
+    value. `align_to_booster` uses this list to make that impossible.
+    """
+    exported = booster.get_categories(export_to_arrow=True).to_arrow()
+    return {
+        name: [str(value) for value in values]
+        for name, values in exported
+        if values is not None
+    }
+
+
+def align_to_booster(x: pd.DataFrame, booster: xgb.Booster) -> pd.DataFrame:
+    """A `feature_frame` output reshaped to exactly what one model expects.
+
+    Two things a SERVED row needs that a training-table slice gets for free:
+
+    * **The model's own column list.** The served row follows
+      `feature_blocks.table_blocks()`, i.e. whatever the feature table on disk
+      was built from; the committed model follows the blocks it was TRAINED on.
+      Those are the same set after a redeploy and can differ while a feature
+      experiment is running, so this takes the booster's list -- a missing
+      column is a real contract break and raises, an extra one is simply not
+      part of this model.
+    * **A categorical that stays inside the training set.** `feature_frame`
+      categorises `weight_class` from the values present, which for a one-row
+      matchup is one value. Under XGBoost 3.x that is fine as long as the value
+      was seen in training -- but a division the model never saw (a new weight
+      class, a Wikipedia card that says "Catchweight") raises XGBoostError and
+      would take down the weekly prospective run for the whole card. Rebuilding
+      the column with the model's own categories turns that into a MISSING
+      value instead, which is what the torch member already does with it
+      (`mma.tensors.Preprocessor.transform` maps an unknown weight class to its
+      reserved index 0).
+    """
+    trained = list(booster.feature_names or x.columns)
+    missing = [column for column in trained if column not in x.columns]
+    if missing:
+        raise KeyError(
+            f"the committed model needs feature(s) the served row does not "
+            f"carry: {missing}; rebuild the feature table for the blocks the "
+            "model was trained on, or retrain the model"
+        )
+    out = x[trained].copy()
+    for column, categories in booster_categories(booster).items():
+        if column in out.columns:
+            out[column] = pd.Categorical(
+                out[column].astype(object), categories=categories
+            )
+    return out
+
+
 RESERVED_PARAMS = frozenset({
     "n_estimators", "objective", "early_stopping_rounds", "eval_metric",
     "num_class", "enable_categorical",

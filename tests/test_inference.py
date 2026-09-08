@@ -13,10 +13,26 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+# The XGB member of the deployed blend. Its artifacts and the torch ones are
+# built by separate scripts, so the blend's tests skip independently.
+blended_artifacts = pytest.mark.skipif(
+    not list((ROOT / "models").glob("xgb_winner_seed*.json")),
+    reason="xgb seed ensemble not built (run scripts/train_xgb.py)",
+)
+
+
 @pytest.fixture(scope="module")
 def ensemble():
+    """The TORCH MEMBER. Since SP2.2 this is half of what serves; the served
+    scorer is the `blended` fixture below."""
     from mma.inference import Ensemble
     return Ensemble.load()
+
+
+@pytest.fixture(scope="module")
+def blended():
+    from mma.inference import BlendedPredictor
+    return BlendedPredictor.load()
 
 
 @pytest.fixture(scope="module")
@@ -104,6 +120,94 @@ def test_predict_symmetrized_is_exactly_self_consistent(ensemble, matchup):
     np.testing.assert_allclose(
         result_fwd["round_probs"], result_rev["round_probs"], atol=1e-6
     )
+
+
+# --- the deployed blend ----------------------------------------------------
+
+
+@blended_artifacts
+def test_blend_serves_both_members_on_the_same_served_row(blended, matchup):
+    """Every column both members were trained on has to be on the served row --
+    the torch preprocessor's numeric list and each XGB head's own feature
+    names. A missing one on the XGB side used to be someone else's problem
+    (the explainer's); it is the headline probability's now."""
+    from mma.models.xgb import feature_frame
+
+    frame, _ = matchup
+    assert set(blended.preprocessor.numeric_columns) - set(frame.columns) == set()
+    served = set(feature_frame(frame).columns)
+    for head, models in blended.boosters.items():
+        for model in models:
+            trained = set(model.get_booster().feature_names or ())
+            assert trained - served == set(), head
+
+
+@blended_artifacts
+def test_blend_has_five_seeds_a_side(blended):
+    assert len(blended.ensemble.nets) == 5
+    for head in ("winner", "method", "round"):
+        assert len(blended.boosters[head]) == 5
+
+
+@blended_artifacts
+def test_blend_predict_symmetrized_is_exactly_self_consistent(blended, matchup):
+    """`predict_symmetrized` must corner-average THE BLEND. Blending two
+    already-symmetrized members, or symmetrizing one member and then blending,
+    would each be a different number."""
+    from mma.inference import predict_symmetrized
+
+    forward, reverse = matchup
+    result_fwd = predict_symmetrized(blended, forward, reverse)
+    result_rev = predict_symmetrized(blended, reverse, forward)
+    assert result_fwd["winner_prob"] + result_rev["winner_prob"] == pytest.approx(1.0, abs=1e-9)
+    assert result_fwd["winner_prob"] > 0.5  # the stronger snapshot
+    assert result_fwd["winner_spread"] >= 0.0
+    assert result_fwd["method_probs"].sum() == pytest.approx(1.0, abs=1e-5)
+
+
+@blended_artifacts
+def test_blend_is_the_calibrated_average_of_its_two_members(blended, matchup):
+    """Recomputed member by member: the served probability must be
+    temperature(w * xgb_mean + (1 - w) * torch_mean), not either member and not
+    an uncalibrated average."""
+    from mma.blend import apply_temperature
+
+    frame, _ = matchup
+    torch_mean = np.mean(
+        [m["winner"] for m in blended.ensemble.predict_members(frame)], axis=0
+    )
+    xgb_mean = np.mean(
+        [m["winner"] for m in blended._xgb_predict(frame)], axis=0
+    )
+    expected = apply_temperature(
+        blended.weight * xgb_mean + (1 - blended.weight) * torch_mean,
+        blended.temperature,
+    )
+    np.testing.assert_allclose(blended.predict(frame)["winner_prob"], expected, atol=1e-12)
+
+
+@blended_artifacts
+def test_blend_round_45_is_zero_for_a_three_round_fight(blended, matchup):
+    """The XGB round head does not mask it and the torch one does, so an
+    unmasked average would put mass on a round that cannot happen."""
+    frame, _ = matchup
+    result = blended.predict(frame)
+    assert result["round_probs"][0, 3] == 0.0
+    assert result["round_probs"][0].sum() == pytest.approx(1.0, abs=1e-9)
+    assert result["method_probs"][0].sum() == pytest.approx(1.0, abs=1e-5)
+
+
+@blended_artifacts
+def test_blend_survives_a_weight_class_the_models_never_saw(blended, matchup):
+    """A Wikipedia card can name a division the training table does not carry.
+    The torch member maps it to its reserved unknown index; the XGB member
+    would raise XGBoostError and take down the whole card's predictions, so
+    `align_to_booster` turns it into a missing value instead."""
+    frame, _ = matchup
+    unknown = frame.copy()
+    unknown["weight_class"] = pd.Series(["Superheavyweight"], dtype="string")
+    result = blended.predict(unknown)
+    assert 0.0 < float(result["winner_prob"][0]) < 1.0
 
 
 def test_apply_prior_correction_matches_hand_computed_example():
