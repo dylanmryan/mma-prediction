@@ -458,6 +458,12 @@ def write_readme(path: Path, table: pd.DataFrame, commit: str,
     notice_hi = float(notice["notice_days"].max())
     path.write_text(f"""# `data/external/` — derived open-snapshot aggregates
 
+This file covers the two tables derived from the `ehan03/jds-mma-data`
+snapshot: `fighter_external.parquet` and `fight_notice.parquet`. The third
+table in this directory, `rankings.parquet`, comes from a different source
+under a different licence and is documented in
+[`RANKINGS.md`](RANKINGS.md) (built by `scripts/build_rankings.py`).
+
 | | |
 |---|---|
 | Source | <{SOURCE_URL}> |

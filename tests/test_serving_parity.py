@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from mma.feature_blocks import spec_for
+from mma.feature_blocks import columns_for, spec_for
 from mma.features import build_features
 from mma.history import build_history
 from mma.inference import build_matchup
@@ -47,6 +47,24 @@ def _prior_bouts(fights: pd.DataFrame) -> "callable":
     return lambda fighter_id, date: bisect.bisect_left(dates[fighter_id], date)
 
 
+def _fully_populated_fights() -> set:
+    """Fights whose committed row has no NaN in any enabled block's columns.
+
+    The value comparison skips a column that is NaN on BOTH sides, so a target
+    fight that happens to be missing one block's data compares fewer columns
+    than the spec declares -- and the `compared == expected` assertion then
+    fails on a count instead of naming the column. Every block whose coverage
+    is partial hits this: `external` populates `pre_ufc_finish_loss_rate_diff`
+    on only 30% of rows, and `rankings` populates `rank_diff` only when both
+    corners were ranked the week before. Requiring the target to be complete
+    keeps the assertion meaning "every declared column was actually checked".
+    """
+    trained = pd.read_parquet(PROCESSED / "features.parquet")
+    declared = [c for c in columns_for(table_blocks()) if c in trained.columns]
+    complete = trained[declared].notna().all(axis=1)
+    return set(trained.loc[complete, "fight_id"])
+
+
 def _target_fight(fights: pd.DataFrame) -> pd.Series:
     """The 2024+ fight whose two fighters have the deepest records so far.
 
@@ -55,12 +73,14 @@ def _target_fight(fights: pd.DataFrame) -> pd.Series:
     had not happened yet, and picked a matchup with 2 and 1 prior bouts --
     most per-corner columns were then NaN on both sides and silently skipped
     by the value comparison. Maximising min(prior_a, prior_b) picks a pair
-    with real history on both sides.
+    with real history on both sides. `_fully_populated_fights` adds the
+    second constraint the blocks need: every declared column populated.
     """
     prior = _prior_bouts(fights)
     candidates = fights[
         (fights["date"] >= "2024-01-01") & fights["winner"].isin(["a", "b"])
     ].sort_values(["date", "fight_id"], kind="stable")
+    candidates = candidates[candidates["fight_id"].isin(_fully_populated_fights())]
     assert len(candidates), "no 2024+ decisive fight found"
     depth = candidates.apply(
         lambda f: min(prior(f["fighter_a_id"], f["date"]),
