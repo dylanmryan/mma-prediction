@@ -183,3 +183,42 @@ def test_no_negative_durations_over_the_real_fights_table():
     days = side["days_since_pro_debut"].dropna()
     assert len(days) > 0
     assert (days >= 0).all()
+
+
+def test_the_fight_level_flags_are_produced_but_never_modelled():
+    """The shipped shape of this block: flags in the TABLE, out of the MODEL.
+
+    `external_missing` has to reach the table for
+    `mma.walkforward.slice_masks` to report its slice, and both flags have to
+    reach the served row for `tests/test_serving_parity.py` to stay meaningful
+    -- but neither is a feature. Modelling them makes the block decay as the
+    snapshot ages (SP2 Task 11 shipping note: +0.0006 row-weighted on the
+    2024-2025 folds with the flags, -0.0006 without), because the flags track
+    the snapshot's coverage rather than the fight.
+    """
+    from mma.feature_blocks import BLOCKS, EXTERNAL_BLOCK
+    from mma.models.xgb import NON_FEATURES
+    from mma.tensors import DROPPED
+
+    flags = {"external_missing", "same_country"}
+    assert flags <= set(BLOCKS[EXTERNAL_BLOCK].fight_level), "must still be produced"
+    assert flags <= NON_FEATURES, "xgb must not model them"
+    assert flags <= set(DROPPED), "torch must not model them"
+
+
+@pytest.mark.skipif(
+    not (PROCESSED / "features.parquet").exists(), reason="processed data not built"
+)
+def test_the_flags_survive_into_the_table_and_out_of_both_model_matrices():
+    """The same property end to end, on the committed feature table."""
+    from mma.models.xgb import feature_frame
+    from mma.tensors import Preprocessor
+    from mma.walkforward import slice_masks
+
+    features = pd.read_parquet(PROCESSED / "features.parquet")
+    flags = {"external_missing", "same_country"}
+    assert flags <= set(features.columns)
+    assert "external_missing" in slice_masks(features)
+    assert not flags & set(feature_frame(features).columns)
+    prep = Preprocessor.fit(features, train_mask=np.ones(len(features), dtype=bool))
+    assert not flags & set(prep.numeric_columns)

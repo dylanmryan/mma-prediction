@@ -13,7 +13,17 @@ import pandas as pd
 import xgboost as xgb
 
 TARGETS = ("y_winner", "y_method", "y_finish_round")
-NON_FEATURES = {"fight_id", "date", "swapped", *TARGETS}
+# Kept in the feature table, held out of the model matrix: the `external`
+# block's two fight-level flags. `external_missing` has to stay in the table
+# for `mma.walkforward.slice_masks` to report its slice, but modelling it (or
+# `same_country`, which is False whenever a nationality is unknown and so
+# encodes the same coverage artifact) makes the block decay as the snapshot
+# ages -- +0.0006 row-weighted on the 2024-2025 folds with the flags, -0.0006
+# without. The twin exclusion for the torch path is `mma.tensors.DROPPED`,
+# which carries the full argument; see also the SP2 plan's Task 11 shipping
+# note (docs/superpowers/plans/2026-09-07-sp2-features-v3.md).
+MODEL_EXCLUDED = ("external_missing", "same_country")
+NON_FEATURES = {"fight_id", "date", "swapped", *TARGETS, *MODEL_EXCLUDED}
 
 BASE_PARAMS = {
     "max_depth": 4,

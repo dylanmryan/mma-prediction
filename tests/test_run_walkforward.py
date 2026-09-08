@@ -128,8 +128,8 @@ def _ablation_frame() -> pd.DataFrame:
         "y_finish_round": ["1", None, "2", None],
         "weight_class": ["Lightweight"] * 4,
         "elo_diff": [10.0, -20.0, 30.0, -40.0],
-        "external_missing": [False, True, False, True],
-        "same_country": [True, False, True, False],
+        "age_diff": [1.5, -2.5, 3.5, -4.5],
+        "career_fights_diff": [2.0, -1.0, 0.0, 3.0],
     })
 
 
@@ -139,24 +139,24 @@ def test_a_dropped_column_is_absent_from_both_learners_model_matrices():
     from mma.tensors import Preprocessor
 
     features = _ablation_frame()
-    dropped = ("external_missing", "same_country")
+    dropped = ("age_diff", "career_fights_diff")
     train = np.array([True, True, False, False])
 
     kept = feature_frame(features)
-    assert {"elo_diff", "external_missing", "same_country"} <= set(kept.columns)
+    assert {"elo_diff", *dropped} <= set(kept.columns)
     ablated = feature_frame(features, dropped)
     assert set(ablated.columns) == set(kept.columns) - set(dropped)
     assert "elo_diff" in ablated.columns
 
     full = Preprocessor.fit(features, train_mask=train)
-    assert {"elo_diff", "external_missing", "same_country"} <= set(full.numeric_columns)
+    assert {"elo_diff", *dropped} <= set(full.numeric_columns)
     thin = Preprocessor.fit(features, train_mask=train, drop_columns=dropped)
     assert set(thin.numeric_columns) == set(full.numeric_columns) - set(dropped)
     assert thin.transform(features)[0].shape[1] == len(thin.numeric_columns)
 
 
 def test_drop_columns_reaches_the_candidates_the_cli_builds():
-    xgb = rwf.build_candidate("xgb", "x", "0", {}, None, ("external_missing",))
-    torch_candidate = rwf.build_candidate("torch", "t", "0,1", {}, None, ("external_missing",))
-    assert xgb.drop_columns == ("external_missing",)
-    assert torch_candidate.drop_columns == ("external_missing",)
+    xgb = rwf.build_candidate("xgb", "x", "0", {}, None, ("age_diff",))
+    torch_candidate = rwf.build_candidate("torch", "t", "0,1", {}, None, ("age_diff",))
+    assert xgb.drop_columns == ("age_diff",)
+    assert torch_candidate.drop_columns == ("age_diff",)

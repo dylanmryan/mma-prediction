@@ -785,7 +785,7 @@ EOF
 | trajectory | _…_ | _…_ | _…_ | _…_ | |
 | context | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | recency | 0.6525 (0.6537) | 0.6499 (0.6510) | -0.0011 vs torch_v1 | **no** | best window/half-life: half-life 8y (window barely matters); improves on both scorers but by a third of the 0.003 bar. Incumbent stays `{xgb,torch}_v1`. |
-| external | 0.6499 (0.6537) | 0.6472 (0.6510) | -0.0038 vs torch_v1 | **yes** | leak-free form only (fight-level missingness, no per-corner flag). external_missing slice: n=779, 0.6429 -> 0.6452, **+0.0023 worse**, against the paired incumbent `torch_v1_extslice` (see below). Coverage 0.799 of rows. Shipped variant and new incumbent chosen in the follow-up below. |
+| external | 0.6506 (0.6537) | 0.6476 (0.6510) | -0.0034 vs torch_v1 | **yes** | shipped as `external_diffsonly`: six pre-UFC differentials, the two fight-level flags kept in the table but excluded from both model matrices. Three variants measured and all three clear the bar; this one is the only one that does not degrade on 2024-2025 (row-weighted -0.00064). external_missing slice n=779, 0.6429 -> 0.6447, +0.0018, against the paired incumbent `torch_v1_extslice`. Coverage 0.799 of rows. New incumbent: `{xgb,torch}_external_diffsonly_extslice`. |
 | notice | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | rankings | _…_ | _…_ | _…_ | _…_ | match rate: _…_ |
 
@@ -1038,24 +1038,97 @@ channel survives. Guarded by
   The contrast with the leaky variant is still stark: there the same slice read
   0.5842 with accuracy 0.6906, i.e. *better* than the well-covered rows, which
   was the leak showing.
-- **Ablation, `{xgb,torch}_external_diffsonly`**: the six differentials with
-  both fight-level flags withheld. XGB 0.6506 (delta -0.0031), torch **0.6476**
-  (delta **-0.0034**), worst fold +0.0015, `ships: true`. So essentially all of
-  the -0.0038 is the pre-UFC data itself; the symmetric flags add ~-0.0004.
-  This is the check that the corrected block is not just a subtler encoding of
-  the same selection effect.
+**The pooled gain is entirely historical.** The eight fold deltas above split
+cleanly in two: 2018-2023 average **-0.0058** row-weighted (n=3,276) while
+2024-2025 average **+0.0006** (n=1,528). Over the same span `external_missing`
+climbs 0.086 (2018) -> 0.138 (2024) -> 0.359 (2025) -> 0.534 (2026). The block
+pays where the snapshot has seen the fighters and does nothing -- very
+slightly worse than nothing -- where it has not, and the share of rows it has
+not seen only grows.
+
+**Three shipping variants, and the rule that chose between them.** The six
+pre-UFC differentials are the same in all three; they differ only in which of
+the two fight-level flags the MODEL sees. All three keep both flags in the
+TABLE, so `walkforward.slice_masks` reports the `external_missing` slice for
+each. Torch decides; every number below is against `torch_v1` (pooled/folds)
+and against the paired `torch_v1_extslice` (slice).
+
+| variant | flags modelled | XGB | torch | Δ pooled | worst fold | ships? | 2018-23 rw | **2024-25 rw** | `external_missing` slice |
+|---|---|---|---|---|---|---|---|---|---|
+| `external_noleak` | both | 0.6499 | 0.6472 | **-0.0038** | +0.0009 | yes | -0.0058 | **+0.00059** | 0.6452 (+0.0023), ECE 0.0515 |
+| `external_diffsonly` | neither | 0.6506 | 0.6476 | -0.0034 | +0.0015 | yes | -0.0047 | **-0.00064** | 0.6447 (+0.0018), ECE 0.0457 |
+| `external_nomissflag` | `same_country` only | 0.6513 | 0.6478 | -0.0032 | +0.0032 | yes | -0.0052 | **+0.00106** | 0.6469 (+0.0040), ECE 0.0581 |
+
+Per-fold torch deltas vs `torch_v1`:
+
+| variant | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 |
+|---|---|---|---|---|---|---|---|---|
+| `external_noleak` | -0.0077 | -0.0073 | -0.0069 | -0.0059 | -0.0026 | -0.0050 | +0.0009 | +0.0004 |
+| `external_diffsonly` | -0.0071 | -0.0097 | -0.0052 | -0.0015 | -0.0045 | -0.0005 | +0.0015 | **-0.0020** |
+| `external_nomissflag` | -0.0086 | -0.0090 | -0.0055 | -0.0033 | -0.0038 | -0.0012 | +0.0032 | -0.0003 |
+
+`external_nomissflag` is the new measurement (XGB delta -0.0024, inside the
+0.002 screen threshold, so torch was run; torch `bar_check` -> `clears_delta:
+true`, `no_fold_regression: true`, **`ships: true`**). It answers whether
+`same_country` alone is the useful flag: it is not -- keeping it costs on 2024
+(+0.0032, the worst recent fold of the three) and degrades the
+`external_missing` slice most (+0.0040). `same_country` is False whenever
+either nationality is unknown, so it carries the coverage artifact in a second
+channel rather than avoiding it.
+
+**The shipping rule (pre-registered here, applied below):**
+
+> The pre-registered bar decides **whether** the block ships. Among variants
+> that clear it, prefer the one that does not degrade on the most recent
+> folds, because coverage decay is a known, mechanistic, forward-looking risk
+> rather than a post-hoc preference. Record all variants and their numbers.
+
+**Applied: `external_diffsonly` ships** -- the six differentials, neither flag
+modelled. It is the only one of the three whose 2024-2025 row-weighted delta
+is negative (-0.00064 against +0.00059 and +0.00106), it has the best
+`external_missing` slice of the three (+0.0018 against +0.0023 and +0.0040)
+and the best pooled ECE (0.0088 against 0.0121 and 0.0115). It gives up
+0.0004 of pooled log-loss to `external_noleak` -- an eighth of the bar, and
+roughly one sigma_seed -- to buy the fold profile that does not decay. The
+flags add ~-0.0004 pooled, and they buy it entirely on folds whose coverage we
+will never have again.
+
+- Reports for the shipped variant: `models/walkforward/xgb_external_diffsonly_extslice.json`
+  and `models/walkforward/torch_external_diffsonly_extslice.json`. These are
+  the `--drop-columns external_missing,same_country` runs on the full
+  54-column table; both reproduce the earlier `{xgb,torch}_external_diffsonly`
+  reports (built on a table that lacked the flag columns) **bit-exactly** on
+  pooled, all folds and all three shared slices, and additionally carry the
+  `external_missing` slice, which the old pair could not report.
+- **Shipping mechanism.** The columns stay in the table and in the served row;
+  the two learners exclude them -- `mma.tensors.DROPPED` for torch (which
+  already existed for exactly this, holding the four era-proxy flags dropped
+  after the Phase 3 ablation) and `mma.models.xgb.MODEL_EXCLUDED` /
+  `NON_FEATURES` for XGB. Both carry the reason and a pointer back here.
+  Guarded by `tests/test_external.py::test_the_fight_level_flags_are_produced_but_never_modelled`
+  and `::test_the_flags_survive_into_the_table_and_out_of_both_model_matrices`.
+  This is why the flags could not simply be deleted from the block: without
+  `external_missing` in the table there is no `external_missing` slice, and
+  the coverage decay this whole section is about becomes unmeasurable.
+- **`external_diffsonly` also measures the flags' marginal value**: the six
+  differentials carry essentially all of the gain (-0.0034 of the -0.0038),
+  and the two flags add ~-0.0004 pooled.
 - Gates on the shipped table, all passing:
   `test_no_leakage_truncation_invariance`, both serving-parity tests, and the
   base-only rebuild stayed byte-identical.
-- **Caveat for SP4:** the benefit decays as the snapshot ages. It is already
-  ~0 on 2024-2025 and `external_missing` reaches 0.534 of 2026 rows. The
+- **Caveat for SP4:** the benefit decays as the snapshot ages. Even in the
+  shipped variant it is only -0.0006 row-weighted on 2024-2025 against -0.0047
+  on 2018-2023, and `external_missing` reaches 0.534 of 2026 rows. The
   snapshot is static (last commit December 2025); if this block is to keep
   paying, `scripts/build_external.py` needs a refreshable source, or the
   pre-UFC record needs to come from a live scrape.
 
-**Incumbent after this block: `models/walkforward/xgb_external_noleak.json`
-(0.6499) and `models/walkforward/torch_external_noleak.json` (0.6472).** The
-cleared feature set is now `base,external`.
+**Incumbent after this block: `models/walkforward/xgb_external_diffsonly_extslice.json`
+(0.6506) and `models/walkforward/torch_external_diffsonly_extslice.json`
+(0.6476)** -- the SHIPPED variant's reports, not the best-pooled one's. The
+cleared feature set is `base,external`, with `external_missing` and
+`same_country` present in the table and excluded from both model matrices.
+Later blocks are judged against these.
 
 **Secondary source (Task 10):** _fights available beyond the Kaggle cutoff: …_
 **Shipped set:** _…_ ; fresh-seed re-score: _…_ ; deployed model hash: _…_

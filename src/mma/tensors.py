@@ -9,8 +9,29 @@ import pandas as pd
 
 TARGETS = ("y_winner", "y_method", "y_finish_round")
 IDENTIFIERS = ("fight_id", "date", "swapped")
-# Era-proxy flags dropped per Phase 3 final-review ablation (hurt validation).
-DROPPED = ("reach_missing_a", "reach_missing_b", "dob_missing_a", "dob_missing_b")
+# Columns that stay in the feature TABLE but are held out of every model
+# matrix. Both entries are measured ablations, not style choices, and both
+# keep their column so something else can still read it.
+#
+#   * the four era-proxy flags: dropped per the Phase 3 final-review ablation
+#     (they hurt validation);
+#   * `external_missing` and `same_country`: the `external` block's two
+#     fight-level flags. `external_missing` is a coverage artifact -- it says
+#     the jds-mma-data snapshot has not seen a corner, and its meaning drifts
+#     from "short career" on the historical folds to "debuted after 2024-12"
+#     on the recent ones -- and `same_country` is False whenever a nationality
+#     is unknown, so it carries the same artifact in a second channel. Keeping
+#     them in the table is what lets `mma.walkforward.slice_masks` report the
+#     `external_missing` slice; keeping them out of the model is what stops the
+#     block decaying as the snapshot ages. Measured: with the flags modelled
+#     the block is +0.0006 row-weighted on 2024-2025, without them -0.0006.
+#     See the SP2 plan's Task 11 shipping note
+#     (docs/superpowers/plans/2026-09-07-sp2-features-v3.md) and the twin
+#     exclusion in `mma.models.xgb.NON_FEATURES`.
+DROPPED = (
+    "reach_missing_a", "reach_missing_b", "dob_missing_a", "dob_missing_b",
+    "external_missing", "same_country",
+)
 CATEGORICAL = "weight_class"
 
 
