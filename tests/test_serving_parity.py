@@ -13,11 +13,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from mma.feature_blocks import BASE_BLOCK, spec_for
+from mma.feature_blocks import spec_for
 from mma.features import build_features
 from mma.history import build_history
 from mma.inference import build_matchup
 from mma.snapshots import build_snapshots
+
+from tests.conftest import table_blocks
 
 PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
 
@@ -96,11 +98,12 @@ def test_served_row_equals_training_row(tables):
         snapshots.loc[target["fighter_a_id"]], snapshots.loc[target["fighter_b_id"]],
         indexed.loc[target["fighter_a_id"]], indexed.loc[target["fighter_b_id"]],
         target["weight_class"], bool(target["title_fight"]),
-        int(target["scheduled_rounds"]), target["date"],
+        int(target["scheduled_rounds"]), target["date"], blocks=table_blocks(),
     )
 
     history = build_history(fights, stats, ratings)
-    trained = build_features(fights, fighters, ratings, history)
+    trained = build_features(fights, fighters, ratings, history,
+                             blocks=table_blocks())
     row = trained[trained["fight_id"] == target["fight_id"]]
     assert len(row) == 1
     row = row.iloc[0]
@@ -111,7 +114,7 @@ def test_served_row_equals_training_row(tables):
     sign = -1.0 if bool(row["swapped"]) else 1.0
     sa, sb = ("b", "a") if bool(row["swapped"]) else ("a", "b")
 
-    spec = spec_for([BASE_BLOCK])
+    spec = spec_for(table_blocks())
     diff_columns = [f"{stem}_diff" for _, stem in spec.differentials]
     corner_pairs = [
         (f"{stem}_a", f"{stem}_{sa}") for stem in spec.absolutes + spec.booleans
@@ -177,7 +180,7 @@ def test_training_table_and_served_row_have_the_same_columns(tables):
         snapshots.loc[target["fighter_a_id"]], snapshots.loc[target["fighter_b_id"]],
         indexed.loc[target["fighter_a_id"]], indexed.loc[target["fighter_b_id"]],
         target["weight_class"], bool(target["title_fight"]),
-        int(target["scheduled_rounds"]), target["date"],
+        int(target["scheduled_rounds"]), target["date"], blocks=table_blocks(),
     )
     trained = pd.read_parquet(PROCESSED / "features.parquet")
     identifiers = {"fight_id", "date", "swapped", "y_winner", "y_method", "y_finish_round"}

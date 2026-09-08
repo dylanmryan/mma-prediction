@@ -781,7 +781,7 @@ EOF
 | Block | XGB | torch | Δ vs incumbent | Ships? | Notes |
 |---|---|---|---|---|---|
 | in_fight | 0.6540 (0.6537) | 0.6528 (0.6510) | +0.0018 vs torch_v1 | **no** | worse on both scorers; torch slices: womens +0.0062, debut +0.0034, five_round −0.0035. Incumbent stays `{xgb,torch}_v1`. |
-| opponent_adjusted | _…_ | _…_ | _…_ | _…_ | |
+| opponent_adjusted | 0.6519 (0.6537) | 0.6532 (0.6510) | +0.0022 vs torch_v1 | **no** | XGB liked it (-0.0018), torch did not; every fold worse on torch. Slices: debut +0.0030, womens +0.0020, five_round -0.0018. Coverage 0.63/0.51 of rows. Incumbent stays `{xgb,torch}_v1`. |
 | trajectory | _…_ | _…_ | _…_ | _…_ | |
 | context | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | recency | _…_ | _…_ | _…_ | _…_ | best window/half-life: _…_ |
@@ -813,6 +813,52 @@ per-round table and the target/position columns: `head/body/leg_share`,
   `test_no_leakage_truncation_invariance` and both serving-parity tests.
 - Reports kept: `models/walkforward/xgb_in_fight.json`,
   `models/walkforward/torch_in_fight.json`. Block code reverted.
+
+**Block `opponent_adjusted` (Task 6), measured and rejected.** Seven
+differentials that price a fighter's rates against the opposition they were
+produced against: `sig_pm_vs_exp`, `sig_absorbed_pm_vs_exp`,
+`td_landed_pf_vs_exp`, `td_def_vs_exp`, `ctrl_share_vs_exp` (career mean of
+own-minus-the-opponent's-pre-fight-allowed for each rate), plus
+`avg_opp_elo_wins` / `avg_opp_elo_losses` (mean pre-fight Elo of the opponents
+beaten and lost to).
+
+- XGB screen: pooled winner LL **0.6519** vs incumbent 0.6537 (delta
+  **-0.0018**, i.e. better, though short of the 0.003 bar). Five of eight folds
+  improved; 2021 was the worst at +0.0086, so `no_fold_regression` held but
+  `clears_delta` did not.
+- torch decision: pooled winner LL **0.6532** vs incumbent 0.6510 (delta
+  **+0.0022**, worse). `bar_check` -> `clears_delta: false`,
+  `no_fold_regression: true`, **`ships: false`**. The regression is uniform
+  rather than concentrated: seven of eight folds worsened (2019 flat at
+  -0.0001), worst +0.0059 (2021).
+- The scorers disagree in sign, which is the interesting part of this result.
+  The seven columns are strong but heavily collinear with the base rates they
+  are derived from (`sig_pm`, `td_landed_pf`, `td_def`, `ctrl_share` are all
+  already in the table); a tree ensemble can pick the better-conditioned of a
+  correlated pair per split, while the MLP has to spend capacity on all of
+  them. Same lesson as `in_fight`: correlated additions cost the deployed
+  scorer even when they help the screen.
+- torch slices vs `torch_v1`: debut +0.0030, womens +0.0020,
+  five_round -0.0018.
+- Coverage of the new differential columns (11,238 rows, both corners needed):
+  `sig_pm_vs_exp`, `sig_absorbed_pm_vs_exp`, `td_landed_pf_vs_exp` and
+  `ctrl_share_vs_exp` on 7,046 rows (0.627); `avg_opp_elo_wins` 6,931 (0.617);
+  `td_def_vs_exp` 5,775 (0.514, both fighters need a prior fight in which the
+  opponent shot a takedown); `avg_opp_elo_losses` 5,573 (0.496, both fighters
+  need a prior loss). Better than `in_fight`'s thinnest columns but still about
+  a third to a half of the table missing.
+- Gates before evaluation, both passing on the opponent_adjusted table:
+  `test_no_leakage_truncation_invariance` and both serving-parity tests. The
+  base-only rebuild stayed byte-identical.
+- Reports kept: `models/walkforward/xgb_opponent_adjusted.json`,
+  `models/walkforward/torch_opponent_adjusted.json`. Block code reverted.
+- Kept from this task regardless of the decision: the two table-level gates now
+  build with the block set recorded in `features_blocks.json`
+  (`tests/conftest.py::table_blocks`) instead of hard-coding `base`. Without
+  it, `test_no_leakage_truncation_invariance` compares a base-only rebuild
+  against a block-enabled table and fails on shape, and the serving-parity
+  test never exercises a new block's snapshot fields at all -- so the two
+  "blocking gates" could not actually gate a block.
 
 **Recency grid (Task 9):** _4×4 table_
 **Recent-fold temperature experiment:** _…_

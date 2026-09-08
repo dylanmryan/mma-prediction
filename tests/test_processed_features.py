@@ -28,6 +28,8 @@ def test_no_leakage_truncation_invariance():
     from mma.features import build_features
     from mma.history import build_history
 
+    from tests.conftest import table_blocks
+
     fights = pd.read_parquet(PROCESSED / "fights.parquet")
     stats = pd.read_parquet(PROCESSED / "fight_stats.parquet")
     fighters = pd.read_parquet(PROCESSED / "fighters.parquet")
@@ -36,7 +38,8 @@ def test_no_leakage_truncation_invariance():
     cutoff = "2015-01-01"
     old_fights = fights[fights["date"] < cutoff]
     truncated = build_features(
-        old_fights, fighters, ratings, build_history(old_fights, stats, ratings)
+        old_fights, fighters, ratings, build_history(old_fights, stats, ratings),
+        blocks=table_blocks(),
     )
     full = pd.read_parquet(PROCESSED / "features.parquet")
     full_old = full[full["fight_id"].isin(truncated["fight_id"])]
