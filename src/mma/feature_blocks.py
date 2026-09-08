@@ -226,3 +226,44 @@ register(Block(
         ("stance_mismatch", "southpaw"),
     ),
 ))
+
+
+# --- SP2 block: external -----------------------------------------------------
+# Pre-UFC career and origin, from the MIT `ehan03/jds-mma-data` snapshot via
+# `data/external/fighter_external.parquet`. This is the first block whose
+# information is not a recombination of the fight table: it describes what a
+# fighter did BEFORE the UFC, which our sources do not record at all.
+#
+# The state comes from `mma.external` (joined by fighter id only, never by
+# name) in both directions -- `mma.features._side_frame` for training,
+# `mma.inference.build_matchup` for serving.
+#
+# MISSINGNESS IS FIGHT-LEVEL ONLY, and that is a measured correction rather
+# than a style choice. The SP1 rule asks every externally-sourced column to
+# carry a `*_missing` boolean, but a PER-CORNER pair leaks: membership of the
+# snapshot's cross-source fighter mapping is a function of how long a
+# fighter's UFC career turned out to be (among 2013-2022 debutants, 24% of
+# one-and-done fighters are in it against 100% of those with 11+ bouts), so
+# `external_missing_a` / `_b` would tell the model which corner went on to
+# have a career -- the unmapped corner loses 76% of the time overall and 90%
+# of the time in the debut slice. The row-level OR keeps the missingness
+# visible (and is what `mma.walkforward.slice_masks` reads for the
+# `external_missing` slice) while being symmetric in the two corners, so it
+# cannot say which of them wins. See the SP2 plan's Task 11 notes.
+#
+# `nationality` and `gym_id` are not features (high-cardinality strings); the
+# only thing derived from them is the fight-level `same_country` flag.
+EXTERNAL_BLOCK = "external"
+
+register(Block(
+    name=EXTERNAL_BLOCK,
+    differentials=(
+        ("pre_ufc_wins", "pre_ufc_wins"),
+        ("pre_ufc_losses", "pre_ufc_losses"),
+        ("pre_ufc_finish_rate", "pre_ufc_finish_rate"),
+        ("pre_ufc_finish_loss_rate", "pre_ufc_finish_loss_rate"),
+        ("pre_ufc_avg_opp_wins", "pre_ufc_avg_opp_wins"),
+        ("days_since_pro_debut", "days_since_pro_debut"),
+    ),
+    fight_level=("external_missing", "same_country"),
+))

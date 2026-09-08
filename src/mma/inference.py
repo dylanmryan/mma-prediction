@@ -9,8 +9,10 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from mma import serving
-from mma.feature_blocks import BASE_BLOCK, state_key_blocks, state_keys
+from mma import external, serving
+from mma.feature_blocks import (
+    BASE_BLOCK, EXTERNAL_BLOCK, resolve_blocks, state_key_blocks, state_keys,
+)
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
 from mma.tensors import Preprocessor
@@ -269,6 +271,23 @@ def predict_symmetrized(
     }
 
 
+def _fighter_id(bio: pd.Series, corner: str) -> str:
+    """The ufcstats id of a bio row: its index label, as every caller passes it.
+
+    The `external` block joins by id and never by name, so an unlabelled bio
+    row has to be an error -- returning "unmatched" instead would serve a
+    silently all-NaN external corner for a fighter the table may well have.
+    """
+    fighter_id = getattr(bio, "name", None)
+    if not isinstance(fighter_id, str):
+        raise KeyError(
+            f"the {EXTERNAL_BLOCK!r} block joins by ufcstats fighter id, but the "
+            f"corner-{corner} bio row is not labelled with one (got "
+            f"{fighter_id!r}); pass fighters.set_index('fighter_id').loc[id]"
+        )
+    return fighter_id
+
+
 def build_matchup(
     snapshot_a: pd.Series, snapshot_b: pd.Series,
     bio_a: pd.Series, bio_b: pd.Series,
@@ -290,6 +309,13 @@ def build_matchup(
     the bio row can supply raises, rather than silently becoming NaN. `blocks`
     defaults to the v1 `base` contract, so existing callers are unchanged.
 
+    The `external` block is the one place this function needs a fighter's
+    IDENTITY rather than just their state: its table is joined by ufcstats
+    `fighter_id`. That id is taken from the bio row's index label, which is
+    what every caller already passes (`fighters.set_index("fighter_id").loc[id]`);
+    a bio row without one raises rather than silently serving an unmatched,
+    all-NaN external corner.
+
     NOTE: elo_fights (via "pre_fights") and career_fights both read
     snapshot["career_fights"] here. In training these come from two separate
     counters -- the ratings table's fight count and the fight-history table's
@@ -301,7 +327,13 @@ def build_matchup(
     keys = state_keys(blocks)
     owners = state_key_blocks(blocks)
 
-    def side(snapshot, bio):
+    ext_a = ext_b = None
+    if EXTERNAL_BLOCK in resolve_blocks(blocks):
+        table = external.load_table()
+        ext_a = external.state_for(_fighter_id(bio_a, "a"), as_of, table)
+        ext_b = external.state_for(_fighter_id(bio_b, "b"), as_of, table)
+
+    def side(snapshot, bio, ext):
         age = (
             (as_of - bio["dob"]).days / 365.25 if pd.notna(bio["dob"]) else np.nan
         )
@@ -327,6 +359,8 @@ def build_matchup(
             "pre_grappling": snapshot["elo_grappling"],
             "pre_fights": career_fights,
         }
+        if ext is not None:
+            extras.update(ext)
         state = {}
         for key in keys:
             if key in extras:
@@ -343,14 +377,17 @@ def build_matchup(
                 )
         return state
 
+    context = {
+        "weight_class": weight_class,
+        "title_fight": title_fight,
+        "scheduled_rounds": scheduled_rounds,
+    }
+    if ext_a is not None:
+        context.update(external.fight_context(ext_a, ext_b))
     row = serving.feature_row(
-        side(snapshot_a, bio_a),
-        side(snapshot_b, bio_b),
-        {
-            "weight_class": weight_class,
-            "title_fight": title_fight,
-            "scheduled_rounds": scheduled_rounds,
-        },
+        side(snapshot_a, bio_a, ext_a),
+        side(snapshot_b, bio_b, ext_b),
+        context,
         blocks=blocks,
     )
     frame = pd.DataFrame([row])
