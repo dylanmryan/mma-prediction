@@ -215,18 +215,22 @@ def test_the_home_country_pair_stays_excluded_even_though_the_block_is_not():
     boolean is False when the corner's nationality is unknown and nationality
     exists only for fighters the `external` snapshot mapped.
 
-    The block is not registered -- rejected in SP2 and again inside SP2.1's
-    combined treatment arm -- so the pair is not in the table today. The
-    exclusions outlive the registration on purpose: this is a leak guard, not
-    a tuning choice, and whoever uncomments the block next must not have to
-    rediscover it. The property itself is asserted one level lower, on
-    `mma.context` over the real tables, in the test named above.
+    The exclusions outlive the registration on purpose: this is a leak guard,
+    not a tuning choice, and whoever uncomments the block next must not have to
+    rediscover it. So the exclusion is asserted unconditionally -- SP2 and SP2.1
+    left the block unregistered, SP2.2 registers it again for the S1 table its
+    blend candidate B1 is scored on, and neither state may model the pair. When
+    the block IS registered the columns are in the table and still held out of
+    both matrices, which is the `context_nohome` shipping form itself. The
+    property behind the exclusion is asserted one level lower, on `mma.context`
+    over the real tables, in the test named above.
     """
-    from mma.feature_blocks import BLOCKS, CONTEXT_BLOCK
+    from mma.feature_blocks import BLOCKS, CONTEXT_BLOCK, columns_for
     from mma.models.xgb import NON_FEATURES
     from mma.tensors import DROPPED
 
     pair = {"home_country_a", "home_country_b"}
-    assert CONTEXT_BLOCK not in BLOCKS, "rejected in SP2 and again in SP2.1"
     assert pair <= NON_FEATURES, "xgb must not model them"
     assert pair <= set(DROPPED), "torch must not model them"
+    if CONTEXT_BLOCK in BLOCKS:  # registered: produced, and still not modelled
+        assert pair <= set(columns_for([CONTEXT_BLOCK]))

@@ -346,13 +346,18 @@ register(Block(
 # Re-registering the block is uncommenting the four lines below.
 NOTICE_BLOCK = "notice"
 
-#     register(Block(
-#         name=NOTICE_BLOCK,
-#         differentials=(("notice_shortfall_days", "notice_shortfall_days"),
-#                        ("missed_weight_over_lbs", "missed_weight_over_lbs")),
-#         booleans=("short_notice_7", "short_notice_30", "missed_weight"),
-#         fight_level=("notice_unknown",),
-#     ))
+# SP2.2 (2026-09-08): REGISTERED AGAIN, to build the S1 table the
+# pre-registered blend candidate B1 is scored on. SP2.1 killed these blocks
+# against the MLP alone; B1 asks whether they are alive through the XGBoost
+# member of a calibrated two-model blend. See
+# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md.
+register(Block(
+    name=NOTICE_BLOCK,
+    differentials=(("notice_shortfall_days", "notice_shortfall_days"),
+                   ("missed_weight_over_lbs", "missed_weight_over_lbs")),
+    booleans=("short_notice_7", "short_notice_30", "missed_weight"),
+    fight_level=("notice_unknown",),
+))
 
 
 
@@ -442,20 +447,25 @@ NOTICE_BLOCK = "notice"
 # re-registering the block is uncommenting the lines below and nothing else.
 TRAJECTORY_BLOCK = "trajectory"
 
-#     register(Block(
-#         name=TRAJECTORY_BLOCK,
-#         differentials=(
-#             ("pre_glicko_mu", "glicko_mu"),
-#             ("pre_glicko_phi", "glicko_phi"),
-#             ("pre_glicko_sigma", "glicko_sigma"),
-#             ("elo_delta_3", "elo_delta_3"),
-#             ("elo_delta_5", "elo_delta_5"),
-#             ("elo_peak_minus_current", "elo_peak_minus_current"),
-#             ("years_since_ufc_debut", "years_since_ufc_debut"),
-#             ("age_x_fights", "age_x_fights"),
-#         ),
-#         absolutes=("age_squared",),
-#     ))
+# SP2.2 (2026-09-08): REGISTERED AGAIN, to build the S1 table the
+# pre-registered blend candidate B1 is scored on. SP2.1 killed these blocks
+# against the MLP alone; B1 asks whether they are alive through the XGBoost
+# member of a calibrated two-model blend. See
+# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md.
+register(Block(
+    name=TRAJECTORY_BLOCK,
+    differentials=(
+        ("pre_glicko_mu", "glicko_mu"),
+        ("pre_glicko_phi", "glicko_phi"),
+        ("pre_glicko_sigma", "glicko_sigma"),
+        ("elo_delta_3", "elo_delta_3"),
+        ("elo_delta_5", "elo_delta_5"),
+        ("elo_peak_minus_current", "elo_peak_minus_current"),
+        ("years_since_ufc_debut", "years_since_ufc_debut"),
+        ("age_x_fights", "age_x_fights"),
+    ),
+    absolutes=("age_squared",),
+))
 
 
 # --- SP2 block: context (REJECTED IN SP2, AND AGAIN IN SP2.1) ---------------
@@ -525,13 +535,18 @@ TRAJECTORY_BLOCK = "trajectory"
 # assertion.
 CONTEXT_BLOCK = "context"
 
-#     register(Block(
-#         name=CONTEXT_BLOCK,
-#         differentials=(("bonus_rate", "bonus_rate"),),
-#         booleans=("home_country",),
-#         fight_level=("referee_finish_rate", "referee_decision_rate",
-#                      "referee_missing", "home_country_unknown"),
-#     ))
+# SP2.2 (2026-09-08): REGISTERED AGAIN, to build the S1 table the
+# pre-registered blend candidate B1 is scored on. SP2.1 killed these blocks
+# against the MLP alone; B1 asks whether they are alive through the XGBoost
+# member of a calibrated two-model blend. See
+# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md.
+register(Block(
+    name=CONTEXT_BLOCK,
+    differentials=(("bonus_rate", "bonus_rate"),),
+    booleans=("home_country",),
+    fight_level=("referee_finish_rate", "referee_decision_rate",
+                 "referee_missing", "home_country_unknown"),
+))
 
 
 # --- SP2 block: opponent_adjusted (REJECTED IN SP2, AND AGAIN IN SP2.1) -----
@@ -583,15 +598,20 @@ CONTEXT_BLOCK = "context"
 # lines below are commented out.
 OPPONENT_ADJUSTED_BLOCK = "opponent_adjusted"
 
-#     register(Block(
-#         name=OPPONENT_ADJUSTED_BLOCK,
-#         differentials=(
-#             ("sig_pm_vs_exp", "sig_pm_vs_exp"),
-#             ("sig_absorbed_pm_vs_exp", "sig_absorbed_pm_vs_exp"),
-#             ("td_landed_pf_vs_exp", "td_landed_pf_vs_exp"),
-#             ("td_def_vs_exp", "td_def_vs_exp"),
-#             ("ctrl_share_vs_exp", "ctrl_share_vs_exp"),
-#             ("avg_opp_elo_wins", "avg_opp_elo_wins"),
-#             ("avg_opp_elo_losses", "avg_opp_elo_losses"),
-#         ),
-#     ))
+# SP2.2 (2026-09-08): REGISTERED AGAIN, to build the S1 table the
+# pre-registered blend candidate B1 is scored on. SP2.1 killed these blocks
+# against the MLP alone; B1 asks whether they are alive through the XGBoost
+# member of a calibrated two-model blend. See
+# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md.
+register(Block(
+    name=OPPONENT_ADJUSTED_BLOCK,
+    differentials=(
+        ("sig_pm_vs_exp", "sig_pm_vs_exp"),
+        ("sig_absorbed_pm_vs_exp", "sig_absorbed_pm_vs_exp"),
+        ("td_landed_pf_vs_exp", "td_landed_pf_vs_exp"),
+        ("td_def_vs_exp", "td_def_vs_exp"),
+        ("ctrl_share_vs_exp", "ctrl_share_vs_exp"),
+        ("avg_opp_elo_wins", "avg_opp_elo_wins"),
+        ("avg_opp_elo_losses", "avg_opp_elo_losses"),
+    ),
+))
