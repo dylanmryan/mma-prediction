@@ -13,7 +13,7 @@ METRICS = ROOT / "models" / "xgb_metrics_val.json"
 # refit_decision_b1.json the SP2.2 S1 table's five-seed ensemble -- so this
 # tracks whichever set the train scripts default to (their REPORT is that
 # set's B report).
-REFIT_DECISION = ROOT / "models" / "walkforward" / "refit_decision_v3.json"
+REFIT_DECISION = ROOT / "models" / "walkforward" / "refit_decision_b1.json"
 
 pytestmark = pytest.mark.skipif(
     not METRICS.exists(),

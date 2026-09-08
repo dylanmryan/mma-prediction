@@ -2,9 +2,9 @@
   "mode": "refit_through",
   "train_through": "2026-08-08",
   "n_train": 11238,
-  "budget": 10,
-  "temperature": 1.07,
-  "harness_report": "models/walkforward/torch_v3_refit.json",
+  "budget": 6,
+  "temperature": 1.15,
+  "harness_report": "models/walkforward/torch_a1_combined_refit.json",
   "harness_features_max_date": "2026-08-08",
   "harness_fold_years": [
     2018,
@@ -18,65 +18,65 @@
   ],
   "walkforward_pooled": {
     "n": 4804,
-    "winner_log_loss": 0.647,
+    "winner_log_loss": 0.6473,
     "accuracy": 0.623,
     "brier": 0.228,
-    "ece": 0.013,
-    "joint_log_loss": 2.3145,
-    "method_macro_f1": 0.3835,
-    "round_macro_f1": 0.3169,
+    "ece": 0.0165,
+    "joint_log_loss": 2.3179,
+    "method_macro_f1": 0.3683,
+    "round_macro_f1": 0.3051,
     "n_method": 4792,
     "n_round": 2446
   },
   "winner_ensemble": {
     "n_val": 4804,
     "accuracy": 0.623,
-    "log_loss": 0.647,
+    "log_loss": 0.6473,
     "brier": 0.228,
     "mean_seed_spread": null,
-    "source": "walk-forward pooled (models/walkforward/torch_v3_refit.json); mean_seed_spread has no walk-forward equivalent (null)"
+    "source": "walk-forward pooled (models/walkforward/torch_a1_combined_refit.json); mean_seed_spread has no walk-forward equivalent (null)"
   },
   "per_seed": [
     {
       "seed": 0,
-      "best_epoch": 9,
+      "best_epoch": 5,
       "best_val_log_loss": null,
-      "temperature": 1.07,
-      "epochs_run": 10
+      "temperature": 1.15,
+      "epochs_run": 6
     },
     {
       "seed": 1,
-      "best_epoch": 9,
+      "best_epoch": 5,
       "best_val_log_loss": null,
-      "temperature": 1.07,
-      "epochs_run": 10
+      "temperature": 1.15,
+      "epochs_run": 6
     },
     {
       "seed": 2,
-      "best_epoch": 9,
+      "best_epoch": 5,
       "best_val_log_loss": null,
-      "temperature": 1.07,
-      "epochs_run": 10
+      "temperature": 1.15,
+      "epochs_run": 6
     },
     {
       "seed": 3,
-      "best_epoch": 9,
+      "best_epoch": 5,
       "best_val_log_loss": null,
-      "temperature": 1.07,
-      "epochs_run": 10
+      "temperature": 1.15,
+      "epochs_run": 6
     },
     {
       "seed": 4,
-      "best_epoch": 9,
+      "best_epoch": 5,
       "best_val_log_loss": null,
-      "temperature": 1.07,
-      "epochs_run": 10
+      "temperature": 1.15,
+      "epochs_run": 6
     }
   ],
   "method_ensemble": {
     "n_val": 4792,
     "accuracy": null,
-    "macro_f1": 0.3835,
-    "source": "walk-forward pooled (models/walkforward/torch_v3_refit.json); accuracy has no walk-forward equivalent (null)"
+    "macro_f1": 0.3683,
+    "source": "walk-forward pooled (models/walkforward/torch_a1_combined_refit.json); accuracy has no walk-forward equivalent (null)"
   }
 }
