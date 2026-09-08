@@ -18,6 +18,7 @@ all-NaN column that then measures as "no improvement".
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 BASE_BLOCK = "base"
@@ -62,17 +63,48 @@ BLOCKS: dict[str, Block] = {}
 
 
 def register(block: Block) -> Block:
+    """Add a block to the registry, rejecting a name or column already taken.
+
+    The column check lives here rather than in a test so a colliding block
+    cannot enter the registry at all: whichever of the two blocks lost the
+    race would otherwise have its column silently overwritten in the built
+    table, which is the same class of bug as a state key nothing provides."""
     if block.name in BLOCKS:
         raise ValueError(f"duplicate feature block {block.name}")
+    claimed = {column: name for name, other in BLOCKS.items()
+               for column in columns_of(other)}
+    collisions = sorted(set(columns_of(block)) & set(claimed))
+    if collisions:
+        named = ", ".join(f"{c} (already {claimed[c]})" for c in collisions)
+        raise ValueError(f"feature block {block.name} redeclares column(s): {named}")
     BLOCKS[block.name] = block
     return block
+
+
+@contextmanager
+def registry():
+    """Snapshot `BLOCKS` and restore it on exit.
+
+    For tests that register throwaway blocks: wrapping the registrations
+    themselves means a `register` that raises part-way through setup cannot
+    leak the blocks that went in before it into the real registry."""
+    original = dict(BLOCKS)
+    try:
+        yield BLOCKS
+    finally:
+        BLOCKS.clear()
+        BLOCKS.update(original)
 
 
 def resolve_blocks(names) -> tuple[str, ...]:
     """Normalise a requested block list: base first, then registry order.
 
     Order-insensitive by construction, so two runs asking for the same set
-    of blocks in different orders build the identical table."""
+    of blocks in different orders build the identical table. A bare string is
+    accepted as a single name -- it would otherwise iterate its characters
+    and report a list of unknown one-letter blocks."""
+    if isinstance(names, str):
+        names = (names,)
     requested = set(names) | {BASE_BLOCK}
     unknown = sorted(requested - set(BLOCKS))
     if unknown:
