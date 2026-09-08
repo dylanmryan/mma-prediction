@@ -171,3 +171,29 @@ def test_build_features_raises_for_a_state_key_no_source_table_provides(dummy_bl
 
     with pytest.raises(ValueError, match="zzz_second_stat"):
         build_features(*_tables(), blocks=["zzz_second"])
+
+
+def test_columns_for_order_holds_for_a_block_with_fight_level_columns():
+    """`columns_for` places fight-level columns at their block's registry
+    position, but they arrive in `context` and so land at the front of the
+    row. `feature_row` re-emits them in position; without that the documented
+    "columns_for order == feature_row order" contract is false for any block
+    declaring fight_level."""
+    from mma import serving
+
+    with registry():
+        register(Block(
+            name="ctx_block",
+            absolutes=("ctx_stat",),
+            fight_level=("ctx_level", "ctx_other"),
+        ))
+        state = {key: 1.0 for key in state_keys(["ctx_block"])}
+        context = {"weight_class": "Lightweight", "ctx_level": 7, "ctx_other": 2}
+        row = serving.feature_row(state, dict(state), context, blocks=["ctx_block"])
+        emitted = [c for c in row if c != "weight_class"]
+        assert tuple(emitted) == columns_for(["ctx_block"])
+        assert row["ctx_level"] == 7 and row["ctx_other"] == 2
+
+        with pytest.raises(KeyError, match="ctx_other"):
+            serving.feature_row(state, dict(state),
+                                {"ctx_level": 7}, blocks=["ctx_block"])

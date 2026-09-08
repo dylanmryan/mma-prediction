@@ -62,7 +62,7 @@ def debut_flag(career_fights):
     return float(career_fights) == 0
 
 
-def state_value(state, key: str, block: str):
+def state_value(state, key: str, block: str, what: str = "feature state"):
     """One declared state field, or a `KeyError` naming the key and its block.
 
     Membership works the same for every state shape `feature_row` accepts:
@@ -71,9 +71,7 @@ def state_value(state, key: str, block: str):
     error, not a NaN column -- see the module docstring.
     """
     if key not in state:
-        raise KeyError(
-            f"feature state is missing {key!r}, declared by block {block!r}"
-        )
+        raise KeyError(f"{what} is missing {key!r}, declared by block {block!r}")
     return state[key]
 
 
@@ -91,8 +89,18 @@ def feature_row(state_a, state_b, context: dict | None = None,
     `base` block, and the column order is exactly
     `feature_blocks.columns_for(blocks)` -- one block at a time, in registry
     order.
+
+    A block's `fight_level` columns arrive in `context`, so they land at the
+    front of the row with the rest of it; each is re-emitted at its registry
+    position (after that block's derived flags) once its block is reached, so
+    the two orders agree. Re-emitting was the choice over listing fight-level
+    columns first in `columns_for`, because the leading part of the row is
+    then exactly the context keys no block declares -- weight_class,
+    title_fight, scheduled_rounds -- and every declared column, corner-level
+    or fight-level, sits in registry order behind them.
     """
-    row: dict = dict(context) if context else {}
+    context = context or {}
+    row: dict = dict(context)
     for name in resolve_blocks(blocks):
         block = BLOCKS[name]
         for key, stem in block.differentials:
@@ -106,4 +114,8 @@ def feature_row(state_a, state_b, context: dict | None = None,
                 row[f"{stem}_{corner}"] = as_flag(state_value(state, stem, name))
         for column, stem in block.derived_booleans:
             row[column] = row[f"{stem}_a"] ^ row[f"{stem}_b"]
+        for column in block.fight_level:
+            value = state_value(context, column, name, what="fight context")
+            row.pop(column, None)  # re-insert at this block's registry position
+            row[column] = value
     return row
