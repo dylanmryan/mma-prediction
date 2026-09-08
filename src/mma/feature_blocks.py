@@ -296,7 +296,7 @@ register(Block(
 
 
 
-# --- SP2 block: notice (MEASURED AND REJECTED IN SP2, AND AGAIN IN SP2.1) ---
+# --- SP2 block: notice (REJECTED IN SP2 AND SP2.1; SHIPS IN SP2.2 AS PART OF S1)
 # Short notice and missed weight, from the Bet MMA tables in the same
 # `ehan03/jds-mma-data` snapshot. Deliberately NOT registered: it was
 # built, evaluated and reverted in SP2 Task 12, where it did not clear the bar
@@ -338,19 +338,32 @@ register(Block(
 # docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md and
 # models/walkforward/sp2_1_decision.json.
 #
-# UNREGISTERED BUT LIVE: the name constant below is still defined and the
-# block's wiring is still in place and inert -- `notice.attach` and
-# `notice.fight_context` in `mma.features._side_frame` / `build_features`, and
-# the `notice_a` / `notice_b` arguments to `mma.inference.build_matchup`, each
-# behind an `if NOTICE_BLOCK in resolved` guard that is now always False.
-# Re-registering the block is uncommenting the four lines below.
+# The wiring the block needs -- `notice.attach` and `notice.fight_context` in
+# `mma.features._side_frame` / `build_features`, and the `notice_a` /
+# `notice_b` arguments to `mma.inference.build_matchup` -- sits behind
+# `if NOTICE_BLOCK in resolved` guards, which are live again now that the
+# registration below is permanent. `notice_unknown` stays in the table (the
+# `notice` slice needs it) and out of both model matrices.
 NOTICE_BLOCK = "notice"
 
-# SP2.2 (2026-09-08): REGISTERED AGAIN, to build the S1 table the
-# pre-registered blend candidate B1 is scored on. SP2.1 killed these blocks
-# against the MLP alone; B1 asks whether they are alive through the XGBoost
-# member of a calibrated two-model blend. See
-# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md.
+# SP2.2 RESULT (2026-09-08): **REGISTERED PERMANENTLY -- THIS BLOCK SHIPS.**
+# Not as a block that finally cleared a bar on its own: it never did, and the
+# SP2.1 verdict above stands unedited. It ships as one sixth of S1
+# (`base,external,trajectory,notice,context,opponent_adjusted`, 11,238 x 87),
+# the feature table SP2.2's candidate B1 was scored on. B1 -- the equal-weight,
+# temperature-scaled blend of a 5-seed XGBoost ensemble and the 5-seed torch
+# ensemble -- cleared the 0.003 bar at seeds 0-4 (-0.0039 against I) and again
+# at seeds 5-9 (-0.0037 against its own fresh-seed paired incumbent), and the
+# amended ECE gate passes. What SP2.1 could not see is that these blocks are
+# alive THROUGH THE XGBOOST MEMBER: the XGB arm on S1 is 0.6462 against 0.6490
+# on S0, while the torch arm is 0.6475 either way. The blocks are dead to the
+# MLP and were never dead to the trees. See
+# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md and
+# models/walkforward/sp2_2_decision.json.
+#
+# Re-verified before it was relied on: rebuilt on the feature set the committed
+# SP2 report's own config names, this registration reproduces that report
+# EXACTLY -- pooled, all eight folds, all slices and every per-fold fit budget.
 register(Block(
     name=NOTICE_BLOCK,
     differentials=(("notice_shortfall_days", "notice_shortfall_days"),
@@ -393,7 +406,7 @@ register(Block(
 #     ))
 
 
-# --- SP2 block: trajectory (REJECTED IN SP2, AND AGAIN IN SP2.1) ------------
+# --- SP2 block: trajectory (REJECTED IN SP2 AND SP2.1; SHIPS IN SP2.2 IN S1) -
 # Rating DYNAMICS on top of the base block's rating LEVELS: Glicko-2's
 # deviation and volatility, recent Elo momentum, the drawdown from a
 # fighter's own peak, tenure, and two age interactions. Built, evaluated and
@@ -440,18 +453,32 @@ register(Block(
 # docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md and
 # models/walkforward/sp2_1_decision.json.
 #
-# UNREGISTERED BUT LIVE: all of the wiring named above stayed in the tree
-# after SP2.1 -- the accumulators are computed unconditionally in
-# `mma.history`, and the `features` / `inference` derivations sit behind an
-# `if TRAJECTORY_BLOCK in resolved` guard that is now always False -- so
-# re-registering the block is uncommenting the lines below and nothing else.
+# All of the wiring named above is in the tree: the accumulators are computed
+# unconditionally in `mma.history`, and the `features` / `inference`
+# derivations sit behind `if TRAJECTORY_BLOCK in resolved` guards, live again
+# now that the registration below is permanent. The serving path grows the
+# Glicko deviation over the lay-off exactly as the training pass does
+# (`mma.inference.build_matchup`), so a served row is not a stale one.
 TRAJECTORY_BLOCK = "trajectory"
 
-# SP2.2 (2026-09-08): REGISTERED AGAIN, to build the S1 table the
-# pre-registered blend candidate B1 is scored on. SP2.1 killed these blocks
-# against the MLP alone; B1 asks whether they are alive through the XGBoost
-# member of a calibrated two-model blend. See
-# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md.
+# SP2.2 RESULT (2026-09-08): **REGISTERED PERMANENTLY -- THIS BLOCK SHIPS.**
+# Not as a block that finally cleared a bar on its own: it never did, and the
+# SP2.1 verdict above stands unedited. It ships as one sixth of S1
+# (`base,external,trajectory,notice,context,opponent_adjusted`, 11,238 x 87),
+# the feature table SP2.2's candidate B1 was scored on. B1 -- the equal-weight,
+# temperature-scaled blend of a 5-seed XGBoost ensemble and the 5-seed torch
+# ensemble -- cleared the 0.003 bar at seeds 0-4 (-0.0039 against I) and again
+# at seeds 5-9 (-0.0037 against its own fresh-seed paired incumbent), and the
+# amended ECE gate passes. What SP2.1 could not see is that these blocks are
+# alive THROUGH THE XGBOOST MEMBER: the XGB arm on S1 is 0.6462 against 0.6490
+# on S0, while the torch arm is 0.6475 either way. The blocks are dead to the
+# MLP and were never dead to the trees. See
+# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md and
+# models/walkforward/sp2_2_decision.json.
+#
+# Re-verified before it was relied on: rebuilt on the feature set the committed
+# SP2 report's own config names, this registration reproduces that report
+# EXACTLY -- pooled, all eight folds, all slices and every per-fold fit budget.
 register(Block(
     name=TRAJECTORY_BLOCK,
     differentials=(
@@ -468,7 +495,7 @@ register(Block(
 ))
 
 
-# --- SP2 block: context (REJECTED IN SP2, AND AGAIN IN SP2.1) ---------------
+# --- SP2 block: context (REJECTED IN SP2 AND SP2.1; SHIPS IN SP2.2 IN S1) ---
 # The fight's SETTING rather than either fighter's record: referee tendency,
 # home advantage, and how often a fighter's wins carried a post-fight bonus.
 # Built, evaluated and reverted in SP2 Task 8; restored in its best-measured
@@ -528,18 +555,32 @@ register(Block(
 # docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md and
 # models/walkforward/sp2_1_decision.json.
 #
-# UNREGISTERED BUT LIVE: `mma.context` and the wiring named above stayed in
-# the tree, behind an `if CONTEXT_BLOCK in resolved` guard that is now always
-# False. `tests/test_context.py` exercises `mma.context` directly and so keeps
-# passing on the reverted table, including the per-corner coverage-channel
-# assertion.
+# `mma.context` and the wiring named above sit behind `if CONTEXT_BLOCK in
+# resolved` guards, live again now that the registration below is permanent.
+# `home_country_a` / `home_country_b` stay in the table and out of both model
+# matrices: the pair FAILS the constant-vector leak check outright -- it is the
+# `external` coverage-selection artifact in a second channel -- and the shipping
+# form of this block is therefore the `context_nohome` one.
 CONTEXT_BLOCK = "context"
 
-# SP2.2 (2026-09-08): REGISTERED AGAIN, to build the S1 table the
-# pre-registered blend candidate B1 is scored on. SP2.1 killed these blocks
-# against the MLP alone; B1 asks whether they are alive through the XGBoost
-# member of a calibrated two-model blend. See
-# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md.
+# SP2.2 RESULT (2026-09-08): **REGISTERED PERMANENTLY -- THIS BLOCK SHIPS.**
+# Not as a block that finally cleared a bar on its own: it never did, and the
+# SP2.1 verdict above stands unedited. It ships as one sixth of S1
+# (`base,external,trajectory,notice,context,opponent_adjusted`, 11,238 x 87),
+# the feature table SP2.2's candidate B1 was scored on. B1 -- the equal-weight,
+# temperature-scaled blend of a 5-seed XGBoost ensemble and the 5-seed torch
+# ensemble -- cleared the 0.003 bar at seeds 0-4 (-0.0039 against I) and again
+# at seeds 5-9 (-0.0037 against its own fresh-seed paired incumbent), and the
+# amended ECE gate passes. What SP2.1 could not see is that these blocks are
+# alive THROUGH THE XGBOOST MEMBER: the XGB arm on S1 is 0.6462 against 0.6490
+# on S0, while the torch arm is 0.6475 either way. The blocks are dead to the
+# MLP and were never dead to the trees. See
+# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md and
+# models/walkforward/sp2_2_decision.json.
+#
+# Re-verified before it was relied on: rebuilt on the feature set the committed
+# SP2 report's own config names, this registration reproduces that report
+# EXACTLY -- pooled, all eight folds, all slices and every per-fold fit budget.
 register(Block(
     name=CONTEXT_BLOCK,
     differentials=(("bonus_rate", "bonus_rate"),),
@@ -549,7 +590,7 @@ register(Block(
 ))
 
 
-# --- SP2 block: opponent_adjusted (REJECTED IN SP2, AND AGAIN IN SP2.1) -----
+# --- SP2 block: opponent_adjusted (REJECTED IN SP2/SP2.1; SHIPS IN SP2.2) ---
 # Each core rate priced against the opposition it was produced against: the
 # career mean of (own value in a fight) minus (what that fight's opponent had
 # historically ALLOWED before it), plus the mean pre-fight Elo of the
@@ -585,24 +626,36 @@ register(Block(
 # docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md and
 # models/walkforward/sp2_1_decision.json.
 #
-# UNREGISTERED BUT LIVE, and deliberately so. SP2's revert of this block was
-# total: the accumulators survive in NO git tree, and SP2.1 Task 1 had to
-# reconstruct them from the plan's written contract rather than recover them
-# with `git show`. They are not being deleted a second time. The
-# implementation stays in `mma.history` (`VS_EXPECTATION_RATES`,
-# `_FighterState.allowed` and the `*_vs_exp` / `avg_opp_elo_*` accumulators)
-# and in `mma.snapshots`, where it is computed unconditionally like every base
-# rate, and it is covered by unit tests in `tests/test_history.py` and
-# `tests/test_snapshots.py` that call `build_history` / `build_snapshots`
-# directly and therefore stand alone without the registration. Only the eight
-# lines below are commented out.
+# SP2's revert of this block was TOTAL: the accumulators survived in no git
+# tree, and SP2.1 Task 1 had to reconstruct them from the plan's written
+# contract rather than recover them with `git show`. That is why they were kept
+# live through SP2.1's second revert, and it is why the block could be scored
+# at all in SP2.2. The implementation lives in `mma.history`
+# (`VS_EXPECTATION_RATES`, `_FighterState.allowed` and the `*_vs_exp` /
+# `avg_opp_elo_*` accumulators) and in `mma.snapshots`, computed
+# unconditionally like every base rate, with unit tests in
+# `tests/test_history.py` and `tests/test_snapshots.py` that call
+# `build_history` / `build_snapshots` directly.
 OPPONENT_ADJUSTED_BLOCK = "opponent_adjusted"
 
-# SP2.2 (2026-09-08): REGISTERED AGAIN, to build the S1 table the
-# pre-registered blend candidate B1 is scored on. SP2.1 killed these blocks
-# against the MLP alone; B1 asks whether they are alive through the XGBoost
-# member of a calibrated two-model blend. See
-# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md.
+# SP2.2 RESULT (2026-09-08): **REGISTERED PERMANENTLY -- THIS BLOCK SHIPS.**
+# Not as a block that finally cleared a bar on its own: it never did, and the
+# SP2.1 verdict above stands unedited. It ships as one sixth of S1
+# (`base,external,trajectory,notice,context,opponent_adjusted`, 11,238 x 87),
+# the feature table SP2.2's candidate B1 was scored on. B1 -- the equal-weight,
+# temperature-scaled blend of a 5-seed XGBoost ensemble and the 5-seed torch
+# ensemble -- cleared the 0.003 bar at seeds 0-4 (-0.0039 against I) and again
+# at seeds 5-9 (-0.0037 against its own fresh-seed paired incumbent), and the
+# amended ECE gate passes. What SP2.1 could not see is that these blocks are
+# alive THROUGH THE XGBOOST MEMBER: the XGB arm on S1 is 0.6462 against 0.6490
+# on S0, while the torch arm is 0.6475 either way. The blocks are dead to the
+# MLP and were never dead to the trees. See
+# docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md and
+# models/walkforward/sp2_2_decision.json.
+#
+# Re-verified before it was relied on: rebuilt on the feature set the committed
+# SP2 report's own config names, this registration reproduces that report
+# EXACTLY -- pooled, all eight folds, all slices and every per-fold fit budget.
 register(Block(
     name=OPPONENT_ADJUSTED_BLOCK,
     differentials=(
