@@ -290,6 +290,41 @@ def test_bar_check_rejects_a_non_finite_pooled_metric():
             bar_check(good, report, sigma_seed=0.001)
 
 
+def test_bar_check_rejects_a_non_finite_fold_metric():
+    """A NaN *fold* metric must be caught the same way a NaN pooled metric
+    is -- otherwise it flows through untouched into `worst_fold_delta` and
+    `ships: false`, reading as a candidate that failed the bar rather than
+    as a broken report, and `json.dumps` would emit an invalid bare NaN."""
+    good = {"pooled": {"winner_log_loss": 0.65, "n": 10},
+            "folds": {"2018": {"winner_log_loss": 0.65}, "2019": {"winner_log_loss": 0.64}}}
+    for broken_value in (None, float("nan")):
+        broken = {"pooled": {"winner_log_loss": 0.64, "n": 10},
+                  "folds": {"2018": {"winner_log_loss": broken_value}, "2019": {"winner_log_loss": 0.63}}}
+        with pytest.raises(ValueError, match="fold 2018 winner_log_loss"):
+            bar_check(broken, good, sigma_seed=0.001)
+        with pytest.raises(ValueError, match="fold 2018 winner_log_loss"):
+            bar_check(good, broken, sigma_seed=0.001)
+    # a NaN fold metric outside the shared fold-year intersection is fine --
+    # bar_check never looks at it
+    broken_but_unshared = {"pooled": {"winner_log_loss": 0.64, "n": 10},
+                            "folds": {"2020": {"winner_log_loss": float("nan")}}}
+    out = bar_check(broken_but_unshared, good, sigma_seed=0.001)
+    assert out["fold_deltas"] == {}
+
+
+def test_paired_delta_rejects_a_non_finite_pooled_metric():
+    """`paired_delta` is the path that writes `refit_decision.json`, so a
+    non-finite pooled metric on either side must raise rather than produce
+    an unserializable/misleading artifact."""
+    good = {"pooled": {"winner_log_loss": 0.65}, "folds": {}}
+    for broken_value in (None, float("nan")):
+        broken = {"pooled": {"winner_log_loss": broken_value}, "folds": {}}
+        with pytest.raises(ValueError, match="report_a pooled winner_log_loss"):
+            paired_delta(broken, good, sigma_seed=0.001)
+        with pytest.raises(ValueError, match="report_b pooled winner_log_loss"):
+            paired_delta(good, broken, sigma_seed=0.001)
+
+
 def test_slice_comparison_handles_reports_without_slices():
     assert slice_comparison({}, {}) == []
 

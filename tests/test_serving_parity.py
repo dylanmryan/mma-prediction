@@ -145,10 +145,17 @@ def test_served_row_equals_training_row(tables):
     for column in diff_columns:
         compare(column, column,
                 lambda v: pytest.approx(sign * float(v), abs=1e-6))
+    def _expect_bool(v):
+        # `compare` already skips the case where both sides are NaN; if we
+        # get here with a NaN `want`, `got` is a real bool and must not
+        # match it -- `bool(nan)` is True, which let a NaN-vs-True served
+        # value silently "match" before this fix.
+        return float("nan") if pd.isna(v) else bool(v)
+
     for served_column, trained_column in corner_pairs:
         stem = served_column.rsplit("_", 1)[0]
         if stem in boolean_stems:
-            compare(served_column, trained_column, lambda v: bool(v))
+            compare(served_column, trained_column, _expect_bool)
         else:
             compare(served_column, trained_column,
                     lambda v: pytest.approx(float(v), abs=1e-6))
@@ -156,10 +163,13 @@ def test_served_row_equals_training_row(tables):
         compare(column, column, lambda v: bool(v))
 
     # A column that collapses to NaN on both sides is skipped above, which is
-    # exactly how a silently-unpopulated feature would hide here: require all
-    # but a couple of the spec's columns to have actually been compared.
+    # exactly how a silently-unpopulated feature would hide here: require
+    # every one of the spec's columns to have actually been compared. The
+    # target matchup is picked by test_the_target_matchup_has_real_history_
+    # on_both_sides (>=5 prior bouts per corner) precisely so this holds
+    # without slack.
     expected_columns = len(diff_columns) + len(corner_pairs) + len(flag_columns)
-    assert compared >= expected_columns - 2, (
+    assert compared == expected_columns, (
         f"only {compared} of {expected_columns} spec columns compared"
     )
     assert not mismatches, f"served != trained for: {mismatches}"
@@ -185,3 +195,8 @@ def test_training_table_and_served_row_have_the_same_columns(tables):
     trained = pd.read_parquet(PROCESSED / "features.parquet")
     identifiers = {"fight_id", "date", "swapped", "y_winner", "y_method", "y_finish_round"}
     assert set(served.columns) == set(trained.columns) - identifiers
+    # Column SETS matching is not enough -- a registry reorder would
+    # silently change the committed parquet's physical column order with a
+    # green suite. Pin the order too.
+    non_identifier_columns = [c for c in trained.columns if c not in identifiers]
+    assert non_identifier_columns == list(served.columns)
