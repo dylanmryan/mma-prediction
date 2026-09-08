@@ -3,11 +3,13 @@
 Fetches "List of UFC events" from Wikipedia, keeps events within the
 horizon, fetches each event's own page, parses its fight card, matches
 fighter names against fighters.parquet, and predicts each matched fight
-with the committed ensemble. Writes one JSON record per event under
+with the committed blended scorer (`mma.inference.BlendedPredictor`: the
+XGBoost seed ensemble and the torch ensemble, averaged and temperature-scaled).
+Writes one JSON record per event under
 predictions/ (idempotent -- see mma.prospective.write_event_prediction).
 Each record is stamped with `model_version`, a hash of the deployed
-artifacts (see `mma.versioning`), so the track record splits by model,
-not by commit.
+artifacts of BOTH members (see `mma.versioning`), so the track record splits by
+model, not by commit -- and a retrain of either half opens a new section.
 
 `select_upcoming_events`, `ensure_scheduled_events_parsed`, and
 `warn_if_empty_fight_card` are pure/printing functions (unit-tested); the
@@ -78,7 +80,7 @@ def warn_if_empty_fight_card(event_name: str, wiki_fights: list[dict]) -> bool:
 
 
 def main() -> None:
-    from mma.inference import Ensemble
+    from mma.inference import BlendedPredictor
     from mma.prospective import (
         build_name_index, predict_event, write_event_prediction,
     )
@@ -98,7 +100,7 @@ def main() -> None:
     snapshots = build_snapshots(fights_df, stats_df, ratings_df)
     fighters_indexed = fighters_df.set_index("fighter_id")
     name_index = build_name_index(fighters_df)
-    ensemble = Ensemble.load()
+    predictor = BlendedPredictor.load(ROOT)
     model_version = artifact_model_version(ROOT)
 
     print(f"Fetching scheduled events list (model_version={model_version})...")
@@ -120,7 +122,7 @@ def main() -> None:
         print(f"  {len(wiki_fights)} fight(s) on the card")
 
         predictions = predict_event(
-            event, wiki_fights, name_index, snapshots, fighters_indexed, ensemble
+            event, wiki_fights, name_index, snapshots, fighters_indexed, predictor
         )
         predicted_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         _, record, n_new = write_event_prediction(

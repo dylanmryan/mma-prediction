@@ -4,18 +4,24 @@ import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-XGB_WINNER = ROOT / "models" / "xgb_winner.json"
 
 pytestmark = pytest.mark.skipif(
-    not XGB_WINNER.exists(), reason="xgb_winner artifact not built"
+    not list((ROOT / "models").glob("xgb_winner_seed*.json")),
+    reason="xgb winner seed ensemble not built (run scripts/train_xgb.py)",
 )
 
 
 @pytest.fixture(scope="module")
-def booster():
-    from mma.explain import load_booster
+def boosters():
+    """Every seed of the deployed winner head -- the model the blend averages."""
+    from mma.explain import load_boosters
 
-    return load_booster()
+    return load_boosters()
+
+
+@pytest.fixture(scope="module")
+def booster(boosters):
+    return boosters[0]
 
 
 @pytest.fixture(scope="module")
@@ -83,7 +89,7 @@ def test_contributions_excludes_bias_and_sorted_by_magnitude(booster, matchup):
     from mma.explain import contributions
 
     matchup_ab, matchup_ba = matchup
-    result = contributions(matchup_ab, matchup_ba, booster=booster)
+    result = contributions(matchup_ab, matchup_ba, boosters=booster)
     assert "bias" not in result.index
     magnitudes = result.abs().to_numpy()
     assert (magnitudes[:-1] >= magnitudes[1:]).all()
@@ -93,8 +99,8 @@ def test_symmetry_flips_sign_and_preserves_magnitude(booster, matchup):
     from mma.explain import contributions
 
     matchup_ab, matchup_ba = matchup
-    forward = contributions(matchup_ab, matchup_ba, booster=booster)
-    reverse = contributions(matchup_ba, matchup_ab, booster=booster)
+    forward = contributions(matchup_ab, matchup_ba, boosters=booster)
+    reverse = contributions(matchup_ba, matchup_ab, boosters=booster)
     # Same features, opposite sign, identical magnitude.
     forward_sorted = forward.sort_index()
     reverse_sorted = reverse.sort_index()
@@ -110,23 +116,62 @@ def test_the_favored_fighter_has_a_positive_net_contribution(booster, matchup):
     from mma.explain import contributions
 
     matchup_ab, matchup_ba = matchup
-    result = contributions(matchup_ab, matchup_ba, booster=booster)
+    result = contributions(matchup_ab, matchup_ba, boosters=booster)
     # Fighter A (the stronger snapshot) should be net-favored by the model.
     assert result.sum() > 0
 
 
-def test_humanize_coverage_matches_booster_feature_names(booster):
+def test_humanize_coverage_matches_booster_feature_names(boosters):
     from mma.explain import FEATURE_LABELS
 
-    missing = set(booster.feature_names) - set(FEATURE_LABELS)
-    assert missing == set(), f"no label for features: {missing}"
+    for booster in boosters:
+        missing = set(booster.feature_names) - set(FEATURE_LABELS)
+        assert missing == set(), f"no label for features: {missing}"
+
+
+def test_load_boosters_returns_the_whole_seed_ensemble_in_seed_order(boosters):
+    """The blend averages five boosters, so explaining one of them would be
+    explaining a model that does not exist."""
+    from mma.explain import winner_paths
+    from scripts.train_xgb import SEEDS
+
+    assert len(boosters) == len(SEEDS) == 5
+    assert [int(p.stem.rsplit("seed", 1)[1]) for p in winner_paths()] == list(SEEDS)
+
+
+def test_load_boosters_raises_rather_than_explaining_a_subset(tmp_path):
+    from mma.explain import load_boosters
+
+    with pytest.raises(FileNotFoundError, match="xgb_winner_seed"):
+        load_boosters(tmp_path)
+
+
+def test_contributions_average_over_seeds_not_over_one_member(matchup, boosters):
+    """The default explanation is the mean over the ensemble; asking for one
+    booster gives that booster's own, and the two differ."""
+    from mma.explain import contributions
+
+    matchup_ab, matchup_ba = matchup
+    ensemble = contributions(matchup_ab, matchup_ba)
+    per_seed = [contributions(matchup_ab, matchup_ba, boosters=b) for b in boosters]
+    stacked = pd.concat(per_seed, axis=1)
+    expected = stacked.mean(axis=1).reindex(ensemble.index)
+    pd.testing.assert_series_equal(ensemble, expected, check_exact=False, atol=1e-12)
+    assert not ensemble.equals(per_seed[0].reindex(ensemble.index))
+
+
+def test_symmetrized_ensemble_contributions_sum_toward_the_favored_fighter(matchup):
+    from mma.explain import contributions
+
+    matchup_ab, matchup_ba = matchup
+    assert contributions(matchup_ab, matchup_ba).sum() > 0
 
 
 def test_humanize_returns_top_n_rows_with_expected_shape(booster, matchup):
     from mma.explain import contributions, humanize
 
     matchup_ab, matchup_ba = matchup
-    contribs = contributions(matchup_ab, matchup_ba, booster=booster)
+    contribs = contributions(matchup_ab, matchup_ba, boosters=booster)
     rows = humanize(contribs, "Fighter A", "Fighter B", top_n=6)
     assert len(rows) == 6
     for row in rows:

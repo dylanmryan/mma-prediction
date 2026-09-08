@@ -1,9 +1,15 @@
 """Assemble and persist prospective prediction records for upcoming UFC events.
 
 Ties together `mma.wiki_cards` (event/card parsing), `mma.snapshots`
-(current fighter state), and `mma.inference` (the committed ensemble)
-into one JSON record per event under `predictions/`, written idempotently
-so a re-run never rewrites an already-timestamped prediction.
+(current fighter state), and `mma.inference` (the committed scorer) into one
+JSON record per event under `predictions/`, written idempotently so a re-run
+never rewrites an already-timestamped prediction.
+
+The scorer is passed in and only has to satisfy `Ensemble.predict`'s contract,
+so nothing here changed when the deployed model became a blend
+(`mma.inference.BlendedPredictor`) -- but it is the blend that
+`scripts/predict_upcoming.py` passes, and `predict_symmetrized` therefore
+corner-averages the blend rather than one of its members.
 """
 from __future__ import annotations
 
@@ -110,7 +116,8 @@ def predict_fight(
 
     `ensemble` only needs to work with `mma.inference.build_matchup` /
     `predict_symmetrized` -- pass a fake in unit tests to avoid loading the
-    real torch checkpoints.
+    real artifacts. The weekly run passes a `BlendedPredictor`, so the
+    `p_a_wins` written here is the symmetrized BLEND.
     """
     name_a = wiki_fight["fighter_a_name"]
     name_b = wiki_fight["fighter_b_name"]
