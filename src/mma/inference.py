@@ -9,6 +9,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
+from mma import serving
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
 from mma.tensors import Preprocessor
@@ -273,7 +274,22 @@ def build_matchup(
     weight_class: str, title_fight: bool, scheduled_rounds: int,
     as_of: pd.Timestamp,
 ) -> pd.DataFrame:
-    """One feature row matching the training feature contract (A vs B, no swap)."""
+    """One feature row matching the training feature contract (A vs B, no swap).
+
+    The row itself is built by `mma.serving.feature_row`, the same function
+    `mma.features.build_features` uses for the training table -- this
+    function's only job is to turn a current-state snapshot plus a bio row
+    into the state dict that builder expects. `tests/test_serving_parity.py`
+    pins the two paths to identical values.
+
+    NOTE: elo_fights (via "pre_fights") and career_fights both read
+    snapshot["career_fights"] here. In training these come from two separate
+    counters -- the ratings table's fight count and the fight-history table's
+    count -- which can differ slightly for a fighter if a bout was recorded
+    in one table but not the other. At inference time there is only the
+    single current-state snapshot, so both coincide exactly; the difference
+    is negligible after standardization (Preprocessor.transform).
+    """
     def side(snapshot, bio):
         age = (
             (as_of - bio["dob"]).days / 365.25 if pd.notna(bio["dob"]) else np.nan
@@ -283,6 +299,7 @@ def build_matchup(
             if pd.notna(snapshot.get("last_date"))
             else np.nan
         )
+        career_fights = snapshot.get("career_fights")
         return {
             "age": age,
             "height_cm": bio["height_cm"],
@@ -290,11 +307,12 @@ def build_matchup(
             "reach_missing": pd.isna(bio["reach_cm"]),
             "dob_missing": pd.isna(bio["dob"]),
             "southpaw": bio["stance"] == "Southpaw",
+            "debut": serving.debut_flag(career_fights),
             "days_since_last": days,
             "pre_overall": snapshot["elo_overall"],
             "pre_striking": snapshot["elo_striking"],
             "pre_grappling": snapshot["elo_grappling"],
-            "pre_fights": snapshot["career_fights"],
+            "pre_fights": career_fights,
             **{
                 name: snapshot.get(name)
                 for name in (
@@ -306,50 +324,15 @@ def build_matchup(
             },
         }
 
-    first, second = side(snapshot_a, bio_a), side(snapshot_b, bio_b)
-    row: dict = {
-        "weight_class": weight_class,
-        "title_fight": title_fight,
-        "scheduled_rounds": scheduled_rounds,
-    }
-    # NOTE: elo_fights_diff (via "pre_fights") and career_fights_diff (via
-    # history_names below) both read side(...)["career_fights"], i.e. the
-    # same snapshot["career_fights"] value. In training these came from two
-    # separate counters -- the ratings-table fight count and the fight-history
-    # table's count -- which could differ slightly for a fighter if a bout
-    # was recorded in one table but not the other. At inference time we only
-    # have the single current-state snapshot, so both diffs coincide exactly;
-    # this is negligible after standardization (Preprocessor.transform).
-    diff_names = {
-        "pre_overall": "elo", "pre_striking": "striking_elo",
-        "pre_grappling": "grappling_elo", "pre_fights": "elo_fights",
-        "height_cm": "height", "reach_cm": "reach", "age": "age",
-    }
-    history_names = (
-        "career_fights", "career_wins", "career_win_rate", "career_finish_rate",
-        "kd_pf", "sub_att_pf", "td_landed_pf", "td_acc", "td_def",
-        "sig_pm", "sig_absorbed_pm", "ctrl_share", "streak", "days_since_last",
-        "last5_win_rate", "last5_avg_opp_elo",
+    row = serving.feature_row(
+        side(snapshot_a, bio_a),
+        side(snapshot_b, bio_b),
+        {
+            "weight_class": weight_class,
+            "title_fight": title_fight,
+            "scheduled_rounds": scheduled_rounds,
+        },
     )
-    for name in history_names:
-        row[f"{name}_diff"] = _minus(first.get(name), second.get(name))
-    for source, out in diff_names.items():
-        row[f"{out}_diff"] = _minus(first.get(source), second.get(source))
-    for label, data in (("a", first), ("b", second)):
-        row[f"age_{label}"] = data["age"]
-        row[f"career_fights_{label}"] = data["career_fights"]
-        row[f"reach_missing_{label}"] = bool(data["reach_missing"])
-        row[f"dob_missing_{label}"] = bool(data["dob_missing"])
-        row[f"southpaw_{label}"] = bool(data["southpaw"])
-        row[f"debut_{label}"] = (data["career_fights"] or 0) == 0
-    row["debut_matchup"] = row["debut_a"] ^ row["debut_b"]
-    row["stance_mismatch"] = row["southpaw_a"] ^ row["southpaw_b"]
     frame = pd.DataFrame([row])
     frame["weight_class"] = frame["weight_class"].astype("string")
     return frame
-
-
-def _minus(a, b):
-    if a is None or b is None or pd.isna(a) or pd.isna(b):
-        return np.nan
-    return float(a) - float(b)
