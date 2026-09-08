@@ -136,10 +136,240 @@ Run B0 three times with disjoint seed sets ({0–4}, {5–9}, {10–14}) and com
 
 ## Completion notes (filled in during execution)
 
-- σ_blend and the bar: _…_
-- B0: pooled _…_, ECE _…_, per-fold _…_, slices _…_, fresh-seed _…_
-- B1: pooled _…_, ECE _…_, per-fold _…_, slices _…_, fresh-seed _…_
-- Diagnostics (uncalibrated, weight sensitivity, member numbers): _…_
-- Rule branch applied and decision: _…_
-- Deployed hash after: _…_
-- Follow-ups: _…_
+**σ_blend and the bar.** B0 built three times from disjoint seed sets on
+*both* members -- {0-4}, {5-9}, {10-14} -- gives pooled winner log-loss
+**0.6453 / 0.6451 / 0.6452**, so **σ_blend = 0.0001**
+(`models/walkforward/noise_floor_blend.json`). The bar is
+`max(0.003, 2·σ_blend)` = **0.003**, measured before any candidate was scored
+against it. For context this is the quietest scorer measured in this repo:
+the 5-seed torch ensemble is 0.000346 (`noise_floor.json`) and a single
+XGBoost fit 0.00087 (`noise_floor_xgb.json`, 0.001246 on the A1 recipe in
+`sp2_1_decision.json`). Averaging two independent families cancels seed noise
+from both, so the 0.003 bar is ~30σ for this candidate.
+
+**B0 -- the primary candidate, on S0 (`base,external`). Does not ship.**
+Seeds 0-4 (`blend_b0_seeds0.json`): pooled **0.6453**, accuracy 0.6182,
+Brier 0.2272, **ECE 0.0091**, joint 2.2027, method macro-F1 0.3442, round
+macro-F1 0.2758. Against `I` (`torch_external_diffsonly_extslice.json`,
+0.6476): **Δ -0.0023**, inside the 0.003 bar -- `clears_delta: false`,
+`ships: false`. Folds: 2018 0.6358, 2019 0.6726, 2020 0.6530, 2021 0.6703,
+2022 0.6472, 2023 0.6395, 2024 0.6343, 2025 0.6254; fold deltas -0.0177,
++0.0048, -0.0054, +0.0024, +0.0053, -0.0037, -0.0011, -0.0033, worst
++0.0053 (`no_fold_regression: true` against the 0.01 tolerance). Slice
+deltas: debut -0.0111, womens -0.0059, five_round +0.0007,
+external_missing -0.0148. Fresh seeds 5-9 (`blend_b0_seeds5.json`): pooled
+**0.6451**, ECE 0.0060, **Δ -0.0022** against the fresh-seed paired
+incumbent `torch_external_diffsonly_seeds5.json` -- also short of the bar.
+Rule 2 therefore fails at both seed sets: B0 is a real but sub-bar gain, and
+recording it as anything else would be the failure mode this project exists
+to avoid.
+
+**B1 -- the secondary candidate, on S1
+(`base,external,trajectory,notice,context,opponent_adjusted`, 11,238 x 87,
+with `external_missing`, `same_country`, `notice_unknown`, `home_country_a`
+and `home_country_b` dropped from both model matrices). SHIPS.**
+Seeds 0-4 (`blend_b1.json`): pooled **0.6437**, accuracy 0.6216, Brier
+0.2264, **ECE 0.0124**, joint 2.2013, method macro-F1 0.3385, round macro-F1
+0.2793. Against `I` (0.6476): **Δ -0.0039**, `clears_delta: true`,
+`no_fold_regression: true`, **`ships: true`**. Folds: 2018 0.6367, 2019
+0.6660, 2020 0.6519, 2021 0.6740, 2022 0.6455, 2023 0.6377, 2024 0.6326,
+2025 0.6218; fold deltas -0.0168, -0.0018, -0.0065, +0.0061, +0.0036,
+-0.0055, -0.0028, -0.0069, worst **+0.0061** against the 0.01 tolerance.
+**All four slices improve**: debut -0.0127, womens -0.0092, five_round
+-0.0016, external_missing -0.0150. Against the paired *S1 torch* arm
+(`torch_a1_combined.json`, 0.6475) rather than `I` it is Δ -0.0038, worst
+fold +0.0036 -- i.e. the gain is the blend, not the table.
+Fresh seeds 5-9 (`blend_b1_seeds5.json`): pooled **0.6434**, accuracy 0.6191,
+Brier 0.2263, ECE 0.0144. Against its own fresh-seed paired incumbent
+`torch_a1_combined_seeds5.json` (0.6471): **Δ -0.0037**, worst fold +0.0064,
+`ships: true`. Folds 0.6375 / 0.6653 / 0.6501 / 0.6744 / 0.6445 / 0.6392 /
+0.6321 / 0.6215. Slice deltas: debut -0.0114, womens -0.0040, five_round
+**+0.0012**, external_missing -0.0154 -- three of four improve on fresh
+seeds; five_round (n=420) turns very slightly negative, which is worth
+stating rather than rounding away. Rule 2 satisfied at both seed sets.
+
+**Diagnostics** (reported, never a ship route):
+- *Uncalibrated blend* (`blend_b0_uncal.json`, S0 seeds 0-4): pooled 0.6455,
+  **ECE 0.0162**, against the calibrated 0.6453 / 0.0091. The post-average
+  temperature is worth almost nothing on log-loss and roughly halves ECE,
+  which is what it was added for -- averaging two differently-calibrated
+  streams is not itself calibrated.
+- *Weight sensitivity* (S0, seeds 0-4): w=0.3 **0.6456** (ECE 0.0103),
+  w=0.5 **0.6453** (0.0091), w=0.7 **0.6462** (0.0082). The surface is flat
+  near 0.5 and 0.5 is also the best cell, which is convenient but irrelevant:
+  the shipped weight is 0.5 because the pre-registration fixed it, not
+  because this sweep picked it.
+- *Member attribution.* On S1: XGB 5-seed **0.6462** (`xgb_ens5_s1.json`),
+  torch 5-seed **0.6475** (`torch_a1_combined.json`), blend **0.6437** --
+  better than either member. On S0: XGB 5-seed **0.6490**
+  (`xgb_ens5_s0.json`), torch **0.6476**, blend 0.6453. The XGB member moves
+  -0.0028 between the two tables while the torch member moves -0.0001, i.e.
+  nothing: the
+  four SP2.1 blocks are alive to the trees and dead to the MLP, exactly as
+  SP2.1's own arm numbers implied and could not act on.
+- *Method/round heads.* The blend's non-winner heads sit between its members
+  (method macro-F1 0.3385 against torch 0.3728 / XGB 0.3314; round 0.2793
+  against 0.3068 / 0.1872), and joint log-loss improves (2.2013 against the
+  torch member's 2.3132). Winner log-loss is the pre-registered headline
+  metric; the head trade-off is recorded, not hidden.
+
+**ECE noise floors** (`noise_floor_ece.json`), the measurement rule 4 never
+had. Three disjoint seed sets per arm:
+
+| arm | pooled ECE (0-4 / 5-9 / 10-14) | mean | sd |
+|---|---|---|---|
+| incumbent torch, S0 | 0.0088 / 0.0160 / 0.0101 | 0.01163 | 0.00384 |
+| B1 blend, S1 | 0.0124 / 0.0144 / 0.0133 | 0.01337 | 0.00100 |
+| B0 blend, S0 | 0.0091 / 0.0060 / 0.0119 | 0.00900 | 0.00295 |
+
+The 0.0088 rule 4 named is the incumbent's **best** of three, and the 0.0036
+gap the gate turned on is smaller than one sd of the incumbent's own metric.
+
+**Binning sensitivity** (gap = B1 - incumbent, positive = candidate worse):
+5 bins **-0.0023**, 10 bins **+0.0037**, 15 bins **-0.0064**, 20 bins
+**-0.0049**. The sign reverses at three of four bin counts; 10 is only
+`expected_calibration_error`'s default and nothing in the pre-registration
+justified it.
+
+**Reliability curves** (`ece_gate.reliability_curves`, over the committed
+per-fight predictions in `models/walkforward/preds/`). Neither model has a
+systematic slope. The incumbent's largest contributor is the 0.4-0.5 bin
+(n=1,178, predicted 0.452 against 0.434 realised). B1's are the 0.6-0.7 bin
+(n=769, 0.647 against 0.618, over-confident) and the 0.7-0.8 bin (n=352,
+0.742 against 0.767, *under*-confident) -- errors in opposite directions in
+adjacent bins, i.e. a couple of bins each way rather than a miscalibrated
+model.
+
+**Isotonic remediation** (`blend_b1_isotonic.json`) -- a post-hoc variant,
+never a candidate. Replacing the post-average temperature with an isotonic
+regression fitted on the same fold inner-validation year, on the reasoning
+that one scalar cannot fix a *shape* mismatch: pooled **0.7049** against
+B1's 0.6437 (+0.0612) and against `I` (+0.0573), **ECE 0.0289** against
+0.0124. All eight folds worse, five beyond the 0.01 tolerance (2019 +0.1948,
+2023 +0.1299). It fails decisively on both axes, has no fresh-seed
+confirmation of its own, and does not ship in any form. Its value is
+evidential: temperature scaling was not the binding constraint.
+
+**Rule branches applied, and the decision.**
+- *Rule 1 (paired incumbents):* satisfied. `torch_external_diffsonly_extslice`
+  / `torch_external_diffsonly_seeds5` on S0 and `torch_a1_combined` /
+  `torch_a1_combined_seeds5` on S1, each the deployed recipe with the
+  candidate's own drop-columns. The S0 incumbent re-run under this branch's
+  code reproduces its committed report in every pooled metric, every fold,
+  every slice and every per-fold fit budget; the only JSON difference is a
+  `config.model_seed: null` key SP2.1 added to the schema, which no learner
+  reads.
+- *Rule 2 (clears at 0-4 **and** 5-9):* **B1 only.** B0 fails at both.
+- *Rule 3 (choice between candidates):* **does not apply** -- it chooses
+  between two candidates that both clear rule 2, and only B1 does. Recorded
+  for completeness: B1 - B0 = **-0.0016**, which would *not* have met the
+  0.003 margin rule 3 requires, so had B0 also cleared, B0 would have
+  shipped. The four blocks ride along on a blend that cleared; they do not
+  clear anything of their own.
+- *Rule 4 (ECE gate):* **fails as written** (B1 0.0124 against the single
+  incumbent value 0.0088) and the rule reserved that case for a human call.
+  The call, taken 2026-09-08, **amended the gate** -- see the AMENDMENT block
+  above, which is quoted verbatim into `sp2_2_decision.json`. Under the
+  replacement form (mean pooled ECE across three disjoint seed sets, 2σ of
+  the pooled spread) B1 is 0.01337 ± 0.00100 against the incumbent's
+  0.01163 ± 0.00384: difference **+0.0017** against a tolerance of
+  **≈0.00561** -- passes.
+- *Rule 5 (nothing clears):* does not apply.
+- **Decision: B1 ships.** The isotonic remediation does not ship. B0 does not
+  ship.
+
+**The weakness this experiment carries, stated plainly.** A pre-registered
+gate was re-specified after the numbers were seen. That is precisely what
+this project's protocol exists to prevent, and it is the first time a
+positive result here has required admitting one. The mitigations are
+mitigations and not a defence: the amendment is written down, dated, and
+labelled post-hoc inside the pre-registration itself; rule 4's original
+wording is preserved verbatim above and in `ece_gate.rule_as_written`; the
+replacement is the standard measured-difference-against-2σ form every other
+bar in this project uses, not a threshold chosen to fit; the replacement is
+stricter in what it demands (three seed sets rather than one); and the
+log-loss bar B1 actually cleared was never touched. A reader who thinks the
+gate should have stood as written has every number needed to say so.
+
+**Deployed hash after: `5aa33460ef40`** (was `b617b96dae45`). The hash now
+covers the XGBoost artifacts as well as the torch ones
+(`versioning.MODEL_ARTIFACT_GLOBS`), which it did not before -- correct while
+XGBoost was an explainer, and half of what serves now. Verified sensitive to
+both sides: mutating one booster gives `53803c720fff`, mutating one
+checkpoint `07f37501f0dd`. Both trainers are deterministic into scratch
+directories (15 boosters, 5 checkpoints, preprocessor and both metrics files,
+sha256 for sha256); `make_dataset.py` and `build_features.py` (named blocks
+and bare) leave `data/processed` byte-identical at 11,238 x 87. Deployment
+budgets re-derived on S1 (`refit_decision_b1.json`): torch 6 epochs at
+temperature 1.15, XGB 109/73/71 trees on each of five seeds; blend weight
+0.5, blend temperature **0.80**. Suite 700 passed, 1 skipped.
+
+**Two bugs found while deploying, both silent.**
+1. `scripts/build_features.py` defaulted to `base` only while the weekly
+   Action invokes it bare, so the next data refresh would have rebuilt the
+   *shipped* table with five blocks missing and the next retrain would have
+   trained on it. Nothing would have crashed -- the preprocessor and the
+   XGBoost matrix are both fitted on whatever columns exist. The default is
+   now `feature_blocks.table_blocks()`, the sidecar beside the committed
+   table; a named `--blocks` still wins.
+2. A served matchup in a weight class the models never saw raised
+   `XGBoostError` (XGBoost 3.x matches categoricals by value, and a one-row
+   served frame is categorised from the single value present), and
+   `prospective.predict_fight` did not catch it -- one "Catchweight" off a
+   Wikipedia card would have taken down an entire card's predictions.
+   `mma.models.xgb.align_to_booster` now rebuilds a served frame's
+   categoricals from each booster's own category list, so an unseen value
+   becomes missing, which is what the torch member already did with it. The
+   xgboost floor moved to `>=3.0`: under 2.x categoricals match by *code*,
+   which is a silently wrong weight class rather than an error.
+
+**Follow-ups (carried into SP3/SP4):**
+
+1. **The deployed blend temperature T = 0.80 is an extrapolation the
+   walk-forward never validated.** The harness fits one temperature per fold
+   on that fold's inner-validation year (B1's eight are 0.73, 0.76, 0.93,
+   0.76, 1.00, 0.78, 0.88, 0.82); deployment has no held-out year and applies
+   their median as a fixed constant, by the same rule the refit recipe uses
+   for the torch member's own temperature. A refit-mode blend report cannot
+   exist by construction -- protocol B trains on the year the temperature
+   would be fitted on -- so **nothing has measured what a fixed 0.80 costs
+   against per-fold fitting**. The fitted values also trend upward across
+   folds (0.73 in 2018 to 0.82-1.00 in the recent ones), which is the same
+   temperature drift SP2 recorded as its follow-up 6. This needs its own
+   check before anyone treats the blend's calibration as settled.
+2. **The static-snapshot coverage decay now touches three shipped blocks,
+   not one.** `ehan03/jds-mma-data` ends 2024-12-14. `external_missing` is
+   0.201 of all rows, 0.359 of 2025 and **0.534 of 2026**; `notice`'s columns
+   are unknown on **100%** of 2025-2026 rows by construction; and `context`'s
+   `home_country` half comes from the same snapshot's nationality table.
+   (`trajectory` and `opponent_adjusted` are fight-history recombinations and
+   do not decay.) SP4 still needs a refreshable source, and the SP2.2 blend
+   raises the stake rather than lowering it.
+3. **`scripts/roll_window.py`'s promotion gate now guards against a blended
+   incumbent rather than handling one.** `--execute` detects a blend from the
+   artifacts and aborts before retraining or scoring, because the gate scores
+   a torch-only candidate against a torch-only incumbent and that is no
+   longer the served model. Combined with the pre-existing in-sample abort
+   for refit-through-latest incumbents, the promotion path is now fully
+   inert. **SP4 must resolve this** -- either by moving the gate onto the
+   blend or, as the spec already prefers, onto the walk-forward harness.
+4. **XGBoost screening must use >=3 model seeds.** Its measured single-fit
+   σ is 0.00087-0.00125 against the 5-seed torch ensemble's 0.000346 -- and
+   this experiment adds the reason it matters here specifically: the
+   deployed scorer now *contains* an XGBoost ensemble, so any future screen
+   that reads a single boosted fit is reading a third of the bar in noise.
+   `--model-seed` and `scripts/noise_floor.py --candidate xgb` exist for it.
+5. **`mma.explain` attributes half the scorer.** TreeSHAP is averaged over
+   all five boosters and both orientations, so it explains the whole XGBoost
+   member -- but the neural half is not decomposed and the post-average
+   temperature rescales the blended logit. The module docstring and the app
+   caption both say so rather than overclaiming; an honest whole-blend
+   attribution is unsolved.
+6. **The blend's method and round heads are worse than the torch member's**
+   (macro-F1 0.3385 against 0.3728, and 0.2793 against 0.3068), because
+   averaging pulls the class-weighted neural heads toward the trees'
+   majority-class behaviour. Joint log-loss still improves and winner
+   log-loss is the pre-registered headline, but a head-specific weight (or
+   keeping the torch heads unblended) is an obvious question this
+   pre-registration deliberately did not open, and SP3's simulator will make
+   it live again.
