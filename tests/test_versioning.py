@@ -8,10 +8,15 @@ from scripts.migrate_model_versions import rekey_record
 
 
 def _make_models(root, seed_bytes=b"seed0"):
-    torch_dir = root / "models" / "torch"
+    """Both halves of the deployed scorer: the torch ensemble and the XGBoost
+    seed ensemble the blend averages with it."""
+    models = root / "models"
+    torch_dir = models / "torch"
     torch_dir.mkdir(parents=True)
     (torch_dir / "net_seed0.pt").write_bytes(seed_bytes)
     (torch_dir / "preprocess.json").write_text(json.dumps({"medians": {}}))
+    for head in ("winner", "method", "round"):
+        (models / f"xgb_{head}_seed0.json").write_text(json.dumps({"head": head}))
 
 
 def test_version_is_12_hex_and_stable(tmp_path):
@@ -28,13 +33,41 @@ def test_version_changes_when_a_weight_file_changes(tmp_path):
     assert model_version(tmp_path) != before
 
 
+def test_version_changes_when_an_xgboost_booster_changes(tmp_path):
+    """The XGBoost seed ensemble is half of what scores since SP2.2, so a
+    retrain that moves only the boosters must open a new track-record
+    section -- before SP2.2 this hash would not have noticed at all."""
+    _make_models(tmp_path)
+    before = model_version(tmp_path)
+    (tmp_path / "models" / "xgb_winner_seed0.json").write_text('{"head": "retrained"}')
+    assert model_version(tmp_path) != before
+
+
+def test_version_changes_when_an_xgboost_seed_is_added(tmp_path):
+    _make_models(tmp_path)
+    before = model_version(tmp_path)
+    (tmp_path / "models" / "xgb_winner_seed1.json").write_text('{"head": "winner"}')
+    assert model_version(tmp_path) != before
+
+
+def test_version_covers_every_head_of_the_xgb_member(tmp_path):
+    """The method and round boosters feed the app's displayed method/round
+    splits through the blend, so they are part of the scorer too."""
+    for head in ("winner", "method", "round"):
+        _make_models(tmp_path / head)
+        before = model_version(tmp_path / head)
+        (tmp_path / head / "models" / f"xgb_{head}_seed0.json").write_text('{"x": 1}')
+        assert model_version(tmp_path / head) != before, head
+
+
 def test_version_ignores_non_artifact_files(tmp_path):
     _make_models(tmp_path)
     before = model_version(tmp_path)
     (tmp_path / "models" / "torch" / "display_priors.json").write_text("{}")
     (tmp_path / "models" / "torch" / "metrics_val.json").write_text('{"acc": 1}')
-    (tmp_path / "models" / "xgb_winner.json").write_text("{}")
+    (tmp_path / "models" / "xgb_metrics_val.json").write_text("{}")
     (tmp_path / "models" / "market_benchmark.json").write_text("{}")
+    (tmp_path / "models" / "final_test_metrics.json").write_text("{}")
     assert model_version(tmp_path) == before
 
 
@@ -52,13 +85,17 @@ def test_version_changes_when_preprocess_changes(tmp_path):
     assert model_version(tmp_path) != before
 
 
-def test_globs_match_what_ensemble_loads():
-    # mma.inference.Ensemble.load reads exactly net_seed*.pt and
-    # preprocess.json from the torch directory -- nothing else feeds the
-    # recorded probabilities, so the glob set must match those two exactly.
+def test_globs_match_what_the_deployed_predictor_loads():
+    # mma.inference.BlendedPredictor.load reads exactly these: the torch
+    # ensemble's per-seed checkpoints and preprocessor, and the XGBoost
+    # member's per-seed boosters for all three heads. Nothing else feeds the
+    # recorded probabilities, so the glob set must match them exactly.
     assert MODEL_ARTIFACT_GLOBS == (
         "models/torch/net_seed*.pt",
         "models/torch/preprocess.json",
+        "models/xgb_winner_seed*.json",
+        "models/xgb_method_seed*.json",
+        "models/xgb_round_seed*.json",
     )
 
 
