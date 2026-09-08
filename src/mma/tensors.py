@@ -23,8 +23,15 @@ class Preprocessor:
         self.weight_classes = list(weight_classes)  # index 0 reserved for unknown
 
     @classmethod
-    def fit(cls, features: pd.DataFrame, train_mask: np.ndarray) -> "Preprocessor":
-        excluded = set(TARGETS) | set(IDENTIFIERS) | set(DROPPED) | {CATEGORICAL}
+    def fit(cls, features: pd.DataFrame, train_mask: np.ndarray,
+            drop_columns=()) -> "Preprocessor":
+        """Fit on the training rows. `drop_columns` names further feature
+        columns to keep out of the matrix *for this fit only* -- the ablation
+        path behind `scripts/run_walkforward.py --drop-columns`, which measures
+        a candidate against a paired incumbent computed on the same table.
+        Permanently excluded columns belong in `DROPPED`, not here."""
+        excluded = (set(TARGETS) | set(IDENTIFIERS) | set(DROPPED)
+                    | set(drop_columns) | {CATEGORICAL})
         numeric_columns = [
             column for column in features.columns if column not in excluded
         ]
