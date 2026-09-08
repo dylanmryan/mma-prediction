@@ -218,8 +218,19 @@ def bar_check(candidate: dict, incumbent: dict, sigma_seed: float) -> dict:
     same pooled `n`; a non-comparable pair never ships."""
     if sigma_seed is None or not np.isfinite(sigma_seed):
         raise ValueError("sigma_seed must be a finite number; run scripts/noise_floor.py first")
+    cand_ll = candidate["pooled"]["winner_log_loss"]
+    inc_ll = incumbent["pooled"]["winner_log_loss"]
+    if any(v is None or not np.isfinite(float(v)) for v in (cand_ll, inc_ll)):
+        # A NaN delta is not valid JSON and every downstream comparison
+        # against it is False, so the report would read as "ships: false"
+        # -- a candidate that failed the bar -- rather than as broken.
+        raise ValueError(
+            "pooled winner_log_loss must be finite on both reports "
+            f"(candidate={cand_ll!r}, incumbent={inc_ll!r}); rerun the "
+            "walk-forward that produced it"
+        )
     bar = round(max(MIN_BAR, 2.0 * float(sigma_seed)), 6)
-    delta = round(candidate["pooled"]["winner_log_loss"] - incumbent["pooled"]["winner_log_loss"], 6)
+    delta = round(cand_ll - inc_ll, 6)
     cand_years, inc_years = set(candidate["folds"]), set(incumbent["folds"])
     missing_folds = sorted(cand_years ^ inc_years)
     comparable = (not missing_folds
@@ -251,7 +262,11 @@ def slice_comparison(candidate: dict, incumbent: dict) -> list[dict]:
     and gets `None` for the other and for `delta`, rather than being
     dropped: a slice the candidate alone can score is itself worth seeing.
     `delta` is candidate - incumbent, negative = candidate better, matching
-    `bar_check`."""
+    `bar_check`.
+
+    Each side reports its own `n`. A single `n` read off the candidate hid
+    the case that matters here -- a slice whose membership differs between
+    the two reports, where the delta compares two different row sets."""
     cand_slices = candidate.get("slices") or {}
     inc_slices = incumbent.get("slices") or {}
     rows = []
@@ -261,7 +276,8 @@ def slice_comparison(candidate: dict, incumbent: dict) -> list[dict]:
         inc_ll = inc["winner_log_loss"] if inc else None
         rows.append({
             "slice": name,
-            "n": (cand or inc).get("n"),
+            "candidate_n": cand.get("n") if cand else None,
+            "incumbent_n": inc.get("n") if inc else None,
             "candidate_winner_log_loss": cand_ll,
             "incumbent_winner_log_loss": inc_ll,
             "delta": round(cand_ll - inc_ll, 4) if cand and inc else None,

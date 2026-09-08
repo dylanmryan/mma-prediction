@@ -6,13 +6,15 @@
 `--blocks` names blocks from `mma.feature_blocks`; `base` is always on and
 does not need naming. The sidecar `features_blocks.json` records which
 blocks the table was built from, so a walk-forward report can be traced
-back to the table it was computed on.
+back to the table it was computed on. It records nothing time-varying: it
+is committed alongside the table, and a rebuild that changes no feature
+must leave `git status` clean, which is how the byte-identity check on
+features.parquet is read.
 """
 from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -57,7 +59,6 @@ def main(argv=None) -> None:
         "blocks": list(blocks),
         "n_rows": int(len(features)),
         "n_columns": int(features.shape[1]),
-        "built_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }, indent=2) + "\n")
 
     print(f"blocks: {', '.join(blocks)} -> {args.out}")

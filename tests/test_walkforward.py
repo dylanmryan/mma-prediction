@@ -238,27 +238,56 @@ def test_slice_comparison_pairs_slices_and_flags_missing_ones():
     assert set(rows) == {"debut", "external_missing", "womens"}
 
     shared = rows["debut"]
-    assert shared["n"] == 100
+    assert shared["candidate_n"] == 100
+    assert shared["incumbent_n"] == 100
     assert shared["candidate_winner_log_loss"] == pytest.approx(0.640)
     assert shared["incumbent_winner_log_loss"] == pytest.approx(0.650)
     assert shared["delta"] == pytest.approx(-0.010)
 
     # candidate-only slice: no incumbent number, so no delta
     only_cand = rows["external_missing"]
-    assert only_cand["n"] == 20
+    assert only_cand["candidate_n"] == 20
+    assert only_cand["incumbent_n"] is None
     assert only_cand["candidate_winner_log_loss"] == pytest.approx(0.700)
     assert only_cand["incumbent_winner_log_loss"] is None
     assert only_cand["delta"] is None
 
     # incumbent-only slice is still reported, from the other side
     only_inc = rows["womens"]
-    assert only_inc["n"] == 50
+    assert only_inc["candidate_n"] is None
+    assert only_inc["incumbent_n"] == 50
     assert only_inc["candidate_winner_log_loss"] is None
     assert only_inc["delta"] is None
+
 
     # candidate slices come first, in the candidate report's own order
     assert [r["slice"] for r in slice_comparison(cand, inc)] == [
         "debut", "external_missing", "womens"]
+
+
+def test_slice_comparison_reports_each_side_own_n():
+    """A single `n` taken from the candidate hid a slice whose membership
+    changed between the two reports -- the delta would then be comparing
+    different row sets without saying so."""
+    cand = {"slices": {"debut": {"n": 120, "winner_log_loss": 0.64}}}
+    inc = {"slices": {"debut": {"n": 100, "winner_log_loss": 0.65}}}
+    row = slice_comparison(cand, inc)[0]
+    assert row["candidate_n"] == 120
+    assert row["incumbent_n"] == 100
+
+
+def test_bar_check_rejects_a_non_finite_pooled_metric():
+    """A report whose pooled winner log-loss is null/NaN yields a NaN delta,
+    which is invalid JSON and reads downstream as `ships: false` -- i.e. as a
+    candidate that failed the bar rather than a broken report."""
+    good = {"pooled": {"winner_log_loss": 0.65, "n": 10}, "folds": {"2019": {"winner_log_loss": 0.65}}}
+    for broken in ({"winner_log_loss": None, "n": 10},
+                   {"winner_log_loss": float("nan"), "n": 10}):
+        report = {"pooled": broken, "folds": {"2019": {"winner_log_loss": 0.65}}}
+        with pytest.raises(ValueError, match="pooled winner_log_loss"):
+            bar_check(report, good, sigma_seed=0.001)
+        with pytest.raises(ValueError, match="pooled winner_log_loss"):
+            bar_check(good, report, sigma_seed=0.001)
 
 
 def test_slice_comparison_handles_reports_without_slices():

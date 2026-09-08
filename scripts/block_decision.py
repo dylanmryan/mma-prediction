@@ -9,8 +9,10 @@ the decision is recorded by a human in the SP2 plan's results table, and a
 block's code is reverted when it does not ship.
 
 sigma_seed comes from models/walkforward/noise_floor.json (the cached seed
-noise floor from scripts/noise_floor.py); --sigma overrides it. Exit code is
-always 0 -- this is a report, not a gate.
+noise floor from scripts/noise_floor.py); --sigma overrides it. This is a
+report, not a gate: it exits 0 whatever the decision, and non-zero only when
+it cannot produce one (no cached noise floor, or a report with a non-finite
+pooled metric).
 """
 from __future__ import annotations
 
@@ -46,6 +48,13 @@ def main(argv=None) -> None:
     args = parse_args(argv)
     sigma = args.sigma
     if sigma is None:
+        if not args.noise_floor.exists():
+            print(
+                f"no cached seed noise floor at {args.noise_floor} -- run "
+                "scripts/noise_floor.py first, or pass --sigma",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
         sigma = json.loads(args.noise_floor.read_text())["sigma_seed"]
 
     candidate = json.loads(args.candidate.read_text())
