@@ -72,6 +72,37 @@ CONVENTION -- `pre_ufc_avg_opp_wins` scores an unrecorded opponent as 0 wins:
   future snapshot in which the conflation actually matters fails loudly here
   instead of quietly biasing the column downwards.
 
+SECOND OUTPUT -- `data/external/fight_notice.parquet` (SP2 Task 12):
+
+  Keyed by (our `fight_id`, our `fighter_id`), one row per CORNER of every
+  bout the Bet MMA tables actually cover:
+
+    notice_days             days of notice for a late replacement, NaN if the
+                            fighter was not one (an OBSERVED full camp)
+    missed_weight           whether the source records a missed weigh-in
+    missed_weight_over_lbs  pounds over the divisional limit, NaN when the
+                            magnitude is not quantifiable (see below)
+
+  `missed_weight` is a separate column from the overage rather than "the
+  overage is not null", because three of the 223 recorded misses cannot be
+  quantified: two are at `Catch Weight`, which has no limit, and one records
+  273 lb at a bantamweight bout -- a source transcription error that would
+  otherwise enter the feature table as 138 pounds over. The fact of the miss
+  is what the source asserts and is kept; the magnitude is NaN when it is not
+  believable, bounded by `MAX_MISSED_WEIGHT_OVER_LBS`.
+
+  The point of emitting both corners of a covered bout and nothing at all for
+  the rest is that `late_replacements.csv` lists only fighters who WERE
+  replacements, so "no row" is otherwise ambiguous between "full camp" and
+  "nobody looked". Bet MMA's own bout list is what resolves it: inside it,
+  absence is an observation; outside it, absence is ignorance. `mma.notice`
+  carries the resulting three-state rule.
+
+  Both facts precede the bout, so the block is point-in-time by construction.
+  Corner assignment never uses names: `bout_mapping.csv` gives our `fight_id`
+  and both Bet MMA fighter ids resolve to ufcstats ids, and the derivation
+  asserts the resulting pair is exactly the pair our own fights table records.
+
 GYM DATA: `Tapology/fighter_gyms.csv` is keyed by (fighter, bout), so gym
 affiliation IS dated in this source -- it is not an as-of-scrape snapshot, and
 451 of 2,253 fighters change gym over their career in it. It is therefore not
@@ -101,6 +132,21 @@ from mma.external import drop_source_errors  # noqa: E402
 PROCESSED = ROOT / "data" / "processed"
 OUT_DIR = ROOT / "data" / "external"
 SOURCE_URL = "https://github.com/ehan03/jds-mma-data"
+# Divisional weigh-in limits in pounds. Non-title bouts allow one extra pound,
+# but a fighter listed in `missed_weights.csv` missed by the source's own
+# reckoning either way, so the base limit is what the overage is measured
+# against. `Catch Weight` and `Open Weight` have no limit and are left NaN.
+# A recorded weigh-in more than this far over the divisional limit is a source
+# transcription error, not a miss: the worst genuine UFC misses are around ten
+# pounds. One row in the ec77f537 snapshot reads 273 lb at a bantamweight bout.
+MAX_MISSED_WEIGHT_OVER_LBS = 25.0
+WEIGHT_LIMIT_LBS = {
+    "Flyweight": 125, "Bantamweight": 135, "Featherweight": 145,
+    "Lightweight": 155, "Welterweight": 170, "Middleweight": 185,
+    "Light Heavyweight": 205, "Heavyweight": 265,
+    "Women's Strawweight": 115, "Women's Flyweight": 125,
+    "Women's Bantamweight": 135, "Women's Featherweight": 145,
+}
 FINISH_METHODS = ("KO/TKO", "Submission")
 # See the CONVENTION note in the module docstring: an opponent with no history
 # rows at all is scored as 0 wins, which is only tolerable while it is
@@ -263,8 +309,122 @@ def gym_at_ufc_debut(clean: Path, mapping: pd.DataFrame, fights: pd.DataFrame) -
     return dated.drop_duplicates("our_id", keep="first").set_index("our_id")["gym_id"].to_dict()
 
 
+def betmma_fighter_map(clean: Path) -> dict[str, str]:
+    """Bet MMA fighter id -> our ufcstats id, from the two sources that carry it.
+
+    `Bet MMA/fighters.csv` has a `ufcstats_id` column and `fighter_mapping.csv`
+    has a `betmma_id` column; they agree on all 1,765 ids they share, and the
+    union covers 1,874. Using both matters: with only the first, 14 of the
+    covered bouts' replacement/miss rows have an unresolvable fighter, and a
+    covered bout with one unresolvable corner would have to be dropped -- which
+    is exactly the per-corner asymmetry `mma.notice` is built to avoid.
+    """
+    mapping = pd.read_csv(clean / "fighter_mapping.csv", dtype=str)
+    betmma = pd.read_csv(clean / "Bet MMA" / "fighters.csv", dtype=str)
+    resolved = mapping.dropna(subset=["betmma_id"]).set_index("betmma_id")[
+        "ufcstats_id"].to_dict()
+    resolved.update(
+        betmma.dropna(subset=["ufcstats_id"]).set_index("id")["ufcstats_id"].to_dict()
+    )
+    return resolved
+
+
+def derive_notice(snapshot: Path, fights: pd.DataFrame) -> pd.DataFrame:
+    """One row per corner of every UFC bout the Bet MMA tables cover.
+
+    See the SECOND OUTPUT note in the module docstring for why the covered
+    bouts, rather than the replacement rows, are the unit here.
+    """
+    clean = snapshot / "data" / "clean"
+    bout_mapping = pd.read_csv(clean / "bout_mapping.csv", dtype=str)
+    bouts = pd.read_csv(clean / "Bet MMA" / "bouts.csv", dtype=str)
+    replacements = pd.read_csv(
+        clean / "Bet MMA" / "late_replacements.csv",
+        dtype={"fighter_id": str, "bout_id": str},
+    )
+    misses = pd.read_csv(
+        clean / "Bet MMA" / "missed_weights.csv",
+        dtype={"fighter_id": str, "bout_id": str},
+    )
+    to_fighter = betmma_fighter_map(clean)
+    to_fight = (
+        bout_mapping.dropna(subset=["betmma_id"])
+        .set_index("betmma_id")["ufcstats_id"].to_dict()
+    )
+    ours = fights.set_index("fight_id")[
+        ["fighter_a_id", "fighter_b_id", "weight_class"]
+    ]
+
+    covered = bouts[bouts["id"].isin(to_fight)].copy()
+    covered["fight_id"] = covered["id"].map(to_fight)
+    covered = covered[covered["fight_id"].isin(ours.index)]
+
+    rows = []
+    for bout in covered.itertuples(index=False):
+        corners = [to_fighter.get(bout.fighter_1_id), to_fighter.get(bout.fighter_2_id)]
+        ours_row = ours.loc[bout.fight_id]
+        if set(corners) != {ours_row["fighter_a_id"], ours_row["fighter_b_id"]}:
+            # Either corner unresolvable, or the source disagrees with us about
+            # who fought. Both corners are dropped together: half a bout is not
+            # an observation (see `mma.notice`).
+            continue
+        limit = WEIGHT_LIMIT_LBS.get(ours_row["weight_class"])
+        for betmma_id, fighter_id in zip(
+            (bout.fighter_1_id, bout.fighter_2_id), corners
+        ):
+            rows.append({
+                "fight_id": bout.fight_id,
+                "fighter_id": fighter_id,
+                "_bout_id": bout.id,
+                "_betmma_fighter_id": betmma_id,
+                "_limit": limit,
+            })
+
+    table = pd.DataFrame(rows)
+    table = table.merge(
+        replacements.rename(columns={
+            "bout_id": "_bout_id", "fighter_id": "_betmma_fighter_id",
+            "notice_time_days": "notice_days",
+        }),
+        on=["_bout_id", "_betmma_fighter_id"], how="left", validate="one_to_one",
+    )
+    table = table.merge(
+        misses.rename(columns={
+            "bout_id": "_bout_id", "fighter_id": "_betmma_fighter_id",
+        }),
+        on=["_bout_id", "_betmma_fighter_id"], how="left", validate="one_to_one",
+    )
+    table["missed_weight"] = table["weight_lbs"].notna()
+    over = (
+        table["weight_lbs"].astype(float) - table["_limit"].astype(float)
+    ).clip(lower=0.0)
+    # A recorded miss whose overage is not positive means our `weight_class` is
+    # the bout's RENEGOTIATED class, not the one the fighter missed; the miss
+    # still happened, so it stays at 0 pounds over. An overage past the
+    # plausibility bound, or a class with no limit, leaves the MAGNITUDE
+    # unknown -- NaN -- while the boolean still records the miss.
+    over[over > MAX_MISSED_WEIGHT_OVER_LBS] = np.nan
+    table["missed_weight_over_lbs"] = over.where(table["missed_weight"], np.nan)
+    unquantified = int((table["missed_weight"] & over.isna()).sum())
+    print(f"missed weight: {int(table['missed_weight'].sum())} recorded, "
+          f"{unquantified} without a believable overage")
+    table["notice_days"] = table["notice_days"].astype(float)
+    table = table[["fight_id", "fighter_id", "notice_days",
+                   "missed_weight", "missed_weight_over_lbs"]]
+    table = table.sort_values(["fight_id", "fighter_id"]).reset_index(drop=True)
+
+    per_fight = table.groupby("fight_id").size()
+    if not (per_fight == 2).all():
+        raise ValueError(
+            "every covered fight must contribute exactly two corners; "
+            f"{int((per_fight != 2).sum())} do not"
+        )
+    return table
+
+
 def write_readme(path: Path, table: pd.DataFrame, commit: str,
-                 coverage_end, fighters: pd.DataFrame) -> None:
+                 coverage_end, fighters: pd.DataFrame,
+                 notice: pd.DataFrame, fights: pd.DataFrame) -> None:
     """Both match rates are reported, pre- and post-drop.
 
     The committed table keeps the source-error fighters so the raw
@@ -281,6 +441,21 @@ def write_readme(path: Path, table: pd.DataFrame, commit: str,
         f"{table[column].notna().mean():.3f} |"
         for column in table.columns if column != "fighter_id"
     )
+    seen = fights["fight_id"].isin(set(notice["fight_id"]))
+    window = fights[
+        fights["fight_id"].isin(set(notice["fight_id"]))
+    ]["date"]
+    in_window = fights[(fights["date"] >= window.min()) & (fights["date"] <= window.max())]
+    n_notice_rows = len(notice)
+    n_notice_fights = int(notice["fight_id"].nunique())
+    notice_share = float(seen.mean())
+    n_fights = len(fights)
+    window_share = float(in_window["fight_id"].isin(set(notice["fight_id"])).mean())
+    window_label = f"{window.min():%Y-%m-%d} .. {window.max():%Y-%m-%d}"
+    n_replacements = int(notice["notice_days"].notna().sum())
+    n_misses = int(notice["missed_weight"].sum())
+    notice_lo = float(notice["notice_days"].min())
+    notice_hi = float(notice["notice_days"].max())
     path.write_text(f"""# `data/external/` — derived open-snapshot aggregates
 
 | | |
@@ -352,6 +527,40 @@ asserts it on the real table. `scripts/build_external.py` carries the full
 argument, including the zero-wins convention for an unrecorded opponent;
 `src/mma/external.py` carries the join (by fighter id only, never by name) and
 the missingness rules.
+
+# `fight_notice.parquet` — short notice and missed weight
+
+One row per CORNER of every UFC bout the snapshot's Bet MMA tables cover:
+{n_notice_rows} rows over {n_notice_fights} fights, {notice_share:.3f} of our
+{n_fights} fights ({window_share:.3f} of the {window_label} window the source spans).
+{n_replacements} of those corners were late replacements (notice
+{notice_lo:.0f}-{notice_hi:.0f} days) and {n_misses} missed weight.
+
+| | |
+|---|---|
+| Source tables | `Bet MMA/late_replacements.csv`, `Bet MMA/missed_weights.csv`, `Bet MMA/bouts.csv`, `bout_mapping.csv`, `Bet MMA/fighters.csv` |
+| Licence | MIT, same snapshot and commit as above |
+| Coverage | {window_label} |
+
+**Membership is the three-state boundary.** The two source lists name only the
+fighters a thing happened to, so "no row" would otherwise be ambiguous between
+"trained a full camp" and "nobody recorded it". Bet MMA's own bout list
+resolves it: inside the bouts it covers, absence of a replacement row is an
+observation; outside them, absence is ignorance. The derivation therefore emits
+BOTH corners of a covered bout or neither, which also means the block carries
+no per-corner missingness channel at all — the failure mode the `external`
+section above describes. `src/mma/notice.py` carries the rule and
+`tests/test_notice.py` checks it against the committed table.
+
+**Corner assignment never uses names.** `bout_mapping.csv` gives our
+`fight_id`, both Bet MMA fighter ids resolve to ufcstats ids through
+`fighter_mapping.csv` and `Bet MMA/fighters.csv`, and the derivation asserts
+the resulting pair is exactly the pair our own fights table records for that
+fight; a bout where it is not is dropped whole.
+
+**Point-in-time.** A replacement is booked and a weigh-in happens before the
+bout, so both facts are known on fight morning, and neither is accumulated
+across fights.
 """)
 
 
@@ -378,9 +587,12 @@ def main(argv=None) -> None:
     coverage_end = _dates(events["date"]).max()
 
     table = derive(args.snapshot, fights)
+    notice = derive_notice(args.snapshot, fights)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     table.to_parquet(args.out_dir / "fighter_external.parquet", index=False)
-    write_readme(args.out_dir / "README.md", table, commit, coverage_end, fighters)
+    notice.to_parquet(args.out_dir / "fight_notice.parquet", index=False)
+    write_readme(args.out_dir / "README.md", table, commit, coverage_end, fighters,
+                 notice, fights)
 
     matched = fighters["fighter_id"].isin(set(table["fighter_id"]))
     usable = drop_source_errors(table)
@@ -394,6 +606,13 @@ def main(argv=None) -> None:
     print("dropped at load (pro debut after first UFC bout, or a missing date): "
           f"{len(table) - len(usable)}")
     print(table.notna().mean().round(4).to_string())
+
+    seen = fights["fight_id"].isin(set(notice["fight_id"]))
+    print(f"\nfight_notice.parquet: {len(notice)} corner rows over "
+          f"{notice['fight_id'].nunique()} fights "
+          f"({seen.mean():.4f} of our {len(fights)} fights)")
+    print(f"late replacements: {int(notice['notice_days'].notna().sum())}; "
+          f"missed weight: {int(notice['missed_weight'].sum())}")
 
 
 if __name__ == "__main__":

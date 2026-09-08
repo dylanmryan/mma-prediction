@@ -786,7 +786,7 @@ EOF
 | context | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | recency | 0.6525 (0.6537) | 0.6499 (0.6510) | -0.0011 vs torch_v1 | **no** | best window/half-life: half-life 8y (window barely matters); improves on both scorers but by a third of the 0.003 bar. Incumbent stays `{xgb,torch}_v1`. |
 | external | 0.6506 (0.6537) | 0.6476 (0.6510) | -0.0034 vs torch_v1 | **yes** | shipped as `external_diffsonly`: six pre-UFC differentials, the two fight-level flags kept in the table but excluded from both model matrices. Three variants measured and all three clear the bar; this one is the only one that does not degrade on 2024-2025 (row-weighted -0.00064). external_missing slice n=779, 0.6429 -> 0.6447, +0.0018, against the paired incumbent `torch_v1_extslice`. Coverage 0.799 of rows. New incumbent: `{xgb,torch}_external_diffsonly_extslice`. |
-| notice | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
+| notice | 0.6501 (0.6506) | 0.6472 (0.6476) | -0.0004 vs torch_external_diffsonly_extslice | **no** | best variant `notice_noflag` (coverage flag in the table, out of the model); a seventh of the bar. Coverage 0.498 of rows and **0.000 of 2025-2026**, so the forced-unknown ablation was moot -- serving is the unknown state for every future fight by construction. Incumbent stays `{xgb,torch}_external_diffsonly_extslice`. |
 | rankings | _…_ | _…_ | _…_ | _…_ | match rate: _…_ |
 
 **Block `in_fight` (Task 5), measured and rejected.** 17 differentials from the
@@ -1153,6 +1153,124 @@ will never have again.
 cleared feature set is `base,external`, with `external_missing` and
 `same_country` present in the table and excluded from both model matrices.
 Later blocks are judged against these.
+
+**Block `notice` (Task 12 Step 1), measured and rejected.** Two hinged
+differentials and three per-corner flags over short-notice replacements and
+missed weight, plus a fight-level coverage flag:
+`notice_shortfall_days_diff` (max(0, 30 - days of notice), 0 for an observed
+full camp), `missed_weight_over_lbs_diff` (pounds over the divisional limit, 0
+if the fighter made weight), `short_notice_7_a/b`, `short_notice_30_a/b`,
+`missed_weight_a/b`, and `notice_unknown`.
+
+*Source paths actually found* (the plan's row counts were high):
+`data/clean/Bet MMA/late_replacements.csv` (**586** rows, not ~1,000;
+`fighter_id, bout_id, notice_time_days`, 1-46 days, median 9),
+`data/clean/Bet MMA/missed_weights.csv` (**271** rows;
+`fighter_id, bout_id, weight_lbs` -- the WEIGH-IN weight, not the overage),
+`data/clean/Bet MMA/bouts.csv` (13,163 bouts over 1,685 events, 2013-04-20 to
+2024-12-14), `data/clean/bout_mapping.csv` (5,674 of our fights carry a
+`betmma_id`) and `data/clean/Bet MMA/fighters.csv` (a `ufcstats_id` column,
+which with `fighter_mapping.csv`'s `betmma_id` resolves 1,874 Bet MMA fighter
+ids). Same MIT snapshot and commit as the `external` block (`ec77f537`).
+
+**The observability question the task posed, and the answer.** "Not a late
+replacement" IS observable, but not from `late_replacements.csv`, which lists
+only fighters it happened to. What makes it observable is the source's own
+BOUT list: Bet MMA covers its events bout by bout, so inside that set the
+absence of a replacement row is an observation and outside it is ignorance.
+The derivation therefore emits one row per CORNER of every covered bout and
+nothing at all for the rest, which makes membership of
+`data/external/fight_notice.parquet` the three-state boundary (row + NaN days =
+observed full camp; row + n days = replaced on n days' notice; no row =
+unknown). So the block encodes a genuine three-state, not
+`short_notice in {True, unknown}`.
+
+*Corner assignment never uses names, and needs no elimination.* All 5,674
+mapped bouts have BOTH Bet MMA fighter ids resolvable to ufcstats ids, and in
+all 5,674 the resulting pair is exactly the pair our own fights table records
+-- checked, not assumed, and asserted in the derivation. 11,348 corner rows
+over 5,674 fights.
+
+*Coverage.* 5,597 of the 11,238 feature rows are observed (0.498). Within the
+source's 2013-04-20 .. 2024-12-14 window the rate is 0.917; outside it, zero.
+**Every 2025 and 2026 row is unknown**, which is the finding that matters:
+`notice_unknown` runs 0.10-0.14 across the 2017-2024 folds and 1.000 for 2025
+and 2026. Of the observed rows, 484 have exactly one corner on <= 30 days'
+notice, 159 on <= 7 days, and 216 have exactly one corner missing weight.
+
+*The raw signal is real and large -- and still not enough.* Over the observed
+rows where exactly one corner was a late replacement, that corner wins
+**0.351** of the time at <= 30 days and **0.264** at <= 7 days; the corner that
+missed weight wins 0.458. That is a much stronger marginal than anything the
+`external` differentials carry. It reaches 4.3% of the table.
+
+*The constant-vector leak check passes.* Over the 5,641 feature rows the source
+has not seen, the block's nine columns take **exactly one distinct value
+tuple** -- `(NaN, NaN, False x 6, True)` -- so no function of them can say
+which corner the source is missing. Because the source's unit of coverage is
+the BOUT, this holds by construction rather than by correction: there is no
+per-corner missingness channel to leak in the first place. Now asserted one
+level lower, on `mma.notice.attach` over the real fights table, in
+`tests/test_notice.py::test_an_unknown_fight_carries_exactly_one_state_tuple`,
+so it survives the block being reverted.
+
+- XGB screen, `xgb_notice` (coverage flag modelled): pooled **0.6509** vs
+  incumbent 0.6506 (delta **+0.0003**). `xgb_notice_noflag` (flag in the table,
+  held out of the model with `--drop-columns`): **0.6501** (delta **-0.0005**).
+  Both inside the 0.002 screen threshold, so both went to torch.
+- torch decision, `torch_notice`: pooled **0.6482** vs 0.6476 (delta
+  **+0.0006**), worst fold +0.0063 (2018). `clears_delta: false`,
+  `no_fold_regression: true`, **`ships: false`**.
+- torch decision, `torch_notice_noflag`: pooled **0.6472** (delta **-0.0004**),
+  fold deltas 2018 +0.0080, 2019 -0.0014, 2020 -0.0014, 2021 -0.0011,
+  2022 +0.0003, 2023 -0.0057, 2024 +0.0024, 2025 -0.0023; worst fold +0.0080.
+  `clears_delta: false`, `no_fold_regression: true`, **`ships: false`**.
+  The better of the two, and still an eighth of the bar.
+- torch slices vs `torch_external_diffsonly_extslice` (`notice_noflag`):
+  debut -0.0052, womens +0.0001, five_round +0.0009,
+  external_missing -0.0004.
+- **The forced-unknown (serving-asymmetry) ablation was not run, and the reason
+  is stronger than the ablation.** It exists to ask what happens when the
+  Wikipedia parser finds nothing at prediction time. Here the answer is not a
+  probability but a certainty: the source stops at 2024-12-14, so the served
+  state is the unknown state for *every* future fight, and the eight columns
+  are constant on 100% of the rows the deployed model will ever see. The gate
+  is "ship only if the block clears the bar AND the forced-unknown variant does
+  not lose more than sigma_seed"; the block fails the first clause by 0.0026,
+  so the second was not reached. A forced-unknown run could only have moved the
+  result toward the incumbent it already fails to beat.
+- *Source data care taken along the way.* `missed_weight` is a separate boolean
+  column from `missed_weight_over_lbs` because three of the 223 covered misses
+  have no believable magnitude: two are `Catch Weight` bouts with no limit, and
+  one records a 273 lb weigh-in at a bantamweight bout, which entered the first
+  build of the feature table as **138 pounds over**. `MAX_MISSED_WEIGHT_OVER_LBS`
+  = 25 now bounds it; the flag keeps the fact, the magnitude goes to 0 rather
+  than being invented. All four reports were regenerated after that fix.
+- Gates before evaluation, all passing on the notice table (11,238 x 63):
+  `test_no_leakage_truncation_invariance` and both serving-parity tests. The
+  base+external rebuild afterwards stayed byte-identical.
+- Reports kept: `models/walkforward/{xgb,torch}_notice.json` and
+  `{xgb,torch}_notice_noflag.json`. Block registration reverted (left
+  commented in `mma.feature_blocks` with the numbers), together with the
+  `features.py` / `inference.py` / parity-test wiring.
+- **Kept and reusable, because the derivation is correct and the coverage is
+  the only thing wrong with it:** `scripts/build_external.py::derive_notice`,
+  the committed `data/external/fight_notice.parquet` (11,348 rows), the loader
+  `src/mma/notice.py` with its tests, and
+  `mma.wiki_cards.parse_background(html) -> {"withdrawals": [...],
+  "missed_weight": [...]}` -- the only route to these facts for a FUTURE event,
+  and the thing a live source would need. The parser is fixture-tested against
+  the trimmed Background sections of three real pages, one per era
+  (`tests/fixtures/wikipedia/ufc{196,302,326}_background.html`, 2016 / 2024 /
+  2026, CC BY-SA 4.0, source URL in each file): it reads withdrawals with their
+  replacements through a two-step chain, strips capitalised promotional titles
+  off names ("replaced by former LFA Middleweight Champion Gregory Rodrigues"),
+  parses overages written as words as well as digits ("three and three quarters
+  pounds over" -> 3.75), and returns days of notice only when the prose states
+  them, which it rarely does -- UFC 196 is the "no such notes" case for
+  weigh-ins, with two withdrawals and no missed weight. It is NOT wired into
+  `prospective.predict_event`, per the task's condition that it be wired only
+  if the block ships.
 
 **Secondary source (Task 10):** _fights available beyond the Kaggle cutoff: …_
 **Shipped set:** _…_ ; fresh-seed re-score: _…_ ; deployed model hash: _…_
