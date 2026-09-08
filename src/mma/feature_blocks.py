@@ -33,10 +33,8 @@ class Block:
     emitted per corner as "<stem>_a"/"<stem>_b" (booleans coerced to strict
     bools); `derived_booleans` are (output column, per-corner stem) pairs
     emitted as the XOR of that stem's two corners; `fight_level` columns
-    describe the fight rather than a corner and are passed through the
-    context verbatim. `external` marks a block fed by a source outside the
-    UFCStats scrape, which is what the `external_missing` evaluation slice
-    keys off.
+    describe the fight rather than a corner and are re-emitted from the
+    context at this block's position in the row.
     """
 
     name: str
@@ -45,7 +43,6 @@ class Block:
     booleans: tuple[str, ...] = ()
     derived_booleans: tuple[tuple[str, str], ...] = ()
     fight_level: tuple[str, ...] = ()
-    external: bool = False
 
 
 @dataclass(frozen=True)
