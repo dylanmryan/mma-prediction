@@ -38,6 +38,21 @@ jobs:
           python scripts/refresh_data.py | tee "$RUNNER_TEMP/refresh_output.txt"
           grep '^REFRESH_NEEDED=' "$RUNNER_TEMP/refresh_output.txt" | sed 's/REFRESH_NEEDED=/refresh=/' >> "$GITHUB_OUTPUT"
 
+      # Reports how far the daily ufcstats scrape (Greco1899/scrape_ufc_stats,
+      # GPL-3.0, used as data only) runs ahead of the irregularly refreshed
+      # Kaggle primary. Deliberately REPORT-ONLY and continue-on-error: a
+      # fetch failure or an upstream schema change must never break the
+      # weekly refresh. Promoting this to a writing step (--enable) is a
+      # human decision deferred to SP4 -- it also needs fighters.parquet
+      # extended with UFC debutants, which this script does not do.
+      - name: Report secondary-source gap (report only)
+        continue-on-error: true
+        env:
+          OMP_NUM_THREADS: "1"
+        run: |
+          set -o pipefail
+          python scripts/refresh_secondary.py --dry-run | tail -30
+
       - name: Rebuild processed dataset
         if: steps.refresh.outputs.refresh == 'true'
         env:

@@ -684,18 +684,18 @@ Then run a torch walk-forward with those values (add a `--fixed-epochs` / `--tem
 
 Goal: fill the gap between irregular Kaggle refreshes using the daily-refreshed ufcstats scrape (`Greco1899/scrape_ufc_stats`, same ufcstats ids, GPL-3.0 — used as a *data* source, not vendored code, and cited in the README).
 
-- [ ] **Step 1: Write the failing tests** for a pure `merge_secondary(primary_fights, secondary_fights) -> (merged, report)`: rows whose `fight_id` is already in primary are dropped (primary wins); genuinely new rows are appended and counted; rows with ids absent from the fighters table are rejected with a named error; the report carries `n_added`, `max_date_before`, `max_date_after`.
+- [x] **Step 1: Write the failing tests** for a pure `merge_secondary(primary_fights, secondary_fights) -> (merged, report)`: rows whose `fight_id` is already in primary are dropped (primary wins); genuinely new rows are appended and counted; rows with ids absent from the fighters table are rejected with a named error; the report carries `n_added`, `max_date_before`, `max_date_after`.
 
-- [ ] **Step 2: Implement** the fetch (HTTP GET of the repo's raw CSVs, no auth), the schema adaptation to our `fights`/`fight_stats` shape, and the merge. Gate the whole thing behind `--enable`; default off, so a fetch failure can never break the weekly Action.
+- [x] **Step 2: Implement** the fetch (HTTP GET of the repo's raw CSVs, no auth), the schema adaptation to our `fights`/`fight_stats` shape, and the merge. Gate the whole thing behind `--enable`; default off, so a fetch failure can never break the weekly Action.
 
-- [ ] **Step 3: Verify on real data**
+- [x] **Step 3: Verify on real data**
 
 ```bash
 OMP_NUM_THREADS=1 ~/.venvs/mma/bin/python scripts/refresh_secondary.py --enable --dry-run | tail -10
 ```
 Expected: reports how many fights the secondary source has beyond 2026-08-08 (today's Kaggle cutoff). Record the number.
 
-- [ ] **Step 4: Wire into the Action** as an optional step that runs *after* the Kaggle refresh and *before* `make_dataset.py`, with `continue-on-error: true`, then commit.
+- [x] **Step 4: Wire into the Action** as an optional step that runs *after* the Kaggle refresh and *before* `make_dataset.py`, with `continue-on-error: true`, then commit.
 
 ---
 
@@ -1402,6 +1402,62 @@ both sides, so a partially-covered block -- `external` populates
 rather than naming the column, and would previously have let a genuinely
 unpopulated column pass unnoticed on a luckier draw.
 
-**Secondary source (Task 10):** _fights available beyond the Kaggle cutoff: …_
+**Secondary source (Task 10).** `scripts/refresh_secondary.py` adapts the
+daily-refreshed ufcstats scrape at https://github.com/Greco1899/scrape_ufc_stats
+(GPL-3.0, used as a **data** source only -- the published CSVs are fetched over
+plain HTTPS; no GPL code is vendored). Files read: `ufc_event_details.csv`
+(EVENT/URL/DATE/LOCATION), `ufc_fight_results.csv`
+(EVENT/BOUT/OUTCOME/WEIGHTCLASS/METHOD/ROUND/TIME/TIME FORMAT/REFEREE/DETAILS/URL),
+`ufc_fight_stats.csv` (per round, per fighter: KD, SIG.STR. "45 of 118", TD,
+CTRL "4:20", HEAD/BODY/LEG/DISTANCE/CLINCH/GROUND), `ufc_fighter_details.csv`
+and `ufc_fighter_tott.csv` (name -> fighter URL). Stable ufcstats ids are the
+16-hex tail of every URL. The adaptation reshapes into the Kaggle `master.csv`
+column names and then calls `mma.dataset.build_fights` / `build_fight_stats`,
+so winner codes, method mapping and `duration_sec` are the tested ones by
+construction rather than a second implementation that could drift.
+
+Live dry run, 2026-09-08: **8,899 source rows -> 8,820 fights through
+2026-09-05** (25 duplicate fight ids from co-branded cards listed under two
+event names; 54 rows dropped because the bout string's name is ambiguous or
+unspelt in the source's own fighter files). Overlap with our table 8,768
+fights; reconciliation via `scripts/reconcile_sources.py::reconcile` gives
+**winner agreement 0.9999**, method 0.9999, date 0.9998, and 1.0000 on
+`fighter_a_id`/`fighter_b_id`/`finish_round`/`scheduled_rounds`/`weight_class`
+-- corner order matches ours, so no swap is needed. Below a 0.99 winner-agreement
+floor the script refuses to merge and exits non-zero.
+
+**52 fights exist beyond our 2026-08-08 Kaggle cutoff** (4 events: 2026-08-15,
+-08-22, -08-29, -09-05). 44 merge cleanly; **8 are rejected** because they
+involve one of **9 UFC debutants absent from `fighters.parquet`** -- we cannot
+build features for a fighter with no biographical row or history. Merging would
+move the table's max date from 2026-08-08 to 2026-09-05, i.e. **28 days fresher**.
+
+Two surprises worth recording. (1) The premise "same ids, so no name matching"
+only half holds: the fight tables key on the bout string, not on fighter URLs,
+so resolving a corner to an id needs a *within-source* name lookup against
+ufcstats' own two fighter files -- which themselves disagree on a few spellings
+("Zach Reese"/"Zachary Reese"). Both files are indexed and any name mapping to
+more than one id is dropped rather than guessed. (2) The scrape covers 787
+events to our 1,259: it is *fresher* but not a superset, so it can only ever be
+an append-on-top source, never a replacement.
+
+**Writes are off by default and report-only in CI** (`--enable` required;
+`.github/workflows/refresh-data.yml` runs `--dry-run` with
+`continue-on-error: true` after the Kaggle refresh and before `make_dataset.py`).
+**To enable writes (SP4)** needs four things. (a) An adaptation of
+`ufc_fighter_tott.csv` into `fighters.parquet` so debutants stop being
+rejected -- otherwise the freshest card is exactly the one that merges worst.
+(b) A resolution of the collision with `make_dataset.py`: it rebuilds
+`fights.parquet` wholesale from Kaggle and its regression guard fails when the
+new table *drops* any fight the committed one has, so the very next weekly run
+after a secondary write would go red on `n_dropped_by_new: 44` until Kaggle
+catches up. Either the write path re-runs after every rebuild, or the appended
+rows live in their own table that `make_dataset.py` knows to re-apply.
+(c) A provenance column on the fights table, so a secondary-sourced row is
+distinguishable in the track record and in any post-hoc audit.
+(d) The per-round table: this script adapts `fights` and `fight_stats` only, so
+`round_stats.parquet` would lag `fights.parquet` for the gap-filled fights --
+harmless today (no shipped block reads it) but a silent hole for any future
+per-round feature.
 **Shipped set:** _…_ ; fresh-seed re-score: _…_ ; deployed model hash: _…_
 **Follow-ups:** _…_
