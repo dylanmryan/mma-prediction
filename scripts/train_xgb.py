@@ -32,11 +32,12 @@ Why refit is the default: the walk-forward harness (scripts/run_walkforward.py)
 compared early-stopping on a held-out year against a fixed budget on all
 data through the newest year, on the same 2018-2025 eval folds; the fixed
 budget was not worse by more than the seed noise floor, and its pre-
-registered rule then ships it (models/walkforward/refit_decision_v3.json,
-``deployment_recipe: refit_through_latest``). The deployed models thereby
-train on ~5 more years of fights than the pre-2021 split. BUDGET, REPORT and
-REFIT_THROUGH below are that decision's numbers; re-derive them via
-run_walkforward.py --fixed-budget-from rather than editing them by hand.
+registered rule then ships it (models/walkforward/refit_decision_b1.json,
+``deployment_recipe: refit_through_latest``: B -0.0007 against A, inside
+sigma_seed). The deployed models thereby train on ~5 more years of fights than
+the pre-2021 split. BUDGET, REPORT and REFIT_THROUGH below are that decision's
+numbers; re-derive them via ``scripts/refit_decision.py --reports b1`` and
+``run_walkforward.py --fixed-budget-from`` rather than editing them by hand.
 
 The two flag families are mutually exclusive.
 """
@@ -75,8 +76,8 @@ DEFAULT_MODE = MODE_REFIT
 # single-fit numbers (105/61/75) stay in refit_decision_v3.json and the SP1
 # 46-column table's (82/80/76) in refit_decision.json, for the record.
 REFIT_THROUGH = "latest"
-BUDGET = {"winner": 105, "method": 61, "round": 75}
-REPORT = ROOT / "models" / "walkforward" / "xgb_v3_refit.json"
+BUDGET = {"winner": 109, "method": 73, "round": 71}
+REPORT = ROOT / "models" / "walkforward" / "xgb_ens5_s1_refit.json"
 
 
 def parse_budget(spec) -> dict:
