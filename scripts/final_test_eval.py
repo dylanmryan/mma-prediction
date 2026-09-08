@@ -32,13 +32,34 @@ import xgboost as xgb
 
 from mma.elo import expected_score
 from mma.evaluate import accuracy, brier_score, log_loss, macro_f1
-from mma.inference import Ensemble
+from mma.inference import BlendedPredictor, Ensemble
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
 from mma.models.xgb import feature_frame
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
 MODELS = ROOT / "models"
+
+
+def _load_seed_ensemble(head: str) -> list:
+    """The committed XGBoost seed ensemble for one head, in seed order."""
+    paths = sorted(MODELS.glob(f"xgb_{head}_seed*.json"),
+                   key=lambda q: int(q.stem.rsplit("seed", 1)[1]))
+    if not paths:
+        raise FileNotFoundError(
+            f"no xgb_{head}_seed*.json under {MODELS}; run scripts/train_xgb.py"
+        )
+    models = []
+    for path in paths:
+        model = xgb.XGBClassifier(enable_categorical=True)
+        model.load_model(path)
+        models.append(model)
+    return models
+
+
+def _mean_proba(models: list, x) -> np.ndarray:
+    """The ensemble's prediction: the mean of the members' predict_proba."""
+    return np.mean([model.predict_proba(x) for model in models], axis=0)
 TEST_START = "2024-01-01"
 TRAIN_END = "2021-01-01"  # majority baselines come from the training split
 
@@ -140,11 +161,10 @@ def main() -> None:
         **winner_metrics(elo["y"], elo["p_a"]),
     }
 
-    # 3. XGBoost winner (committed models/xgb_winner.json, no refit)
+    # 3. XGBoost winner: the committed 5-seed ensemble, no refit
     x = feature_frame(features)
-    xgb_winner = xgb.XGBClassifier(enable_categorical=True)
-    xgb_winner.load_model(MODELS / "xgb_winner.json")
-    p_xgb = xgb_winner.predict_proba(x[test])[:, 1]
+    xgb_winner = _load_seed_ensemble("winner")
+    p_xgb = _mean_proba(xgb_winner, x[test])[:, 1]
     results["winner"]["xgboost"] = {
         "n_test": n_test,
         **winner_metrics(y_test, p_xgb),
@@ -159,6 +179,15 @@ def main() -> None:
         **winner_metrics(y_test, p_torch),
     }
 
+    # 5. The DEPLOYED SCORER: the blend of 3 and 4, temperature-scaled after
+    # averaging. The two members above are reported as its components.
+    blended = BlendedPredictor.load(ROOT)
+    p_blend = blended.predict(features.loc[test])["winner_prob"]
+    results["winner"]["blend_deployed"] = {
+        "n_test": n_test,
+        **winner_metrics(y_test, p_blend),
+    }
+
     # method of victory (rows with known method)
     method_known = test & features["y_method"].notna().to_numpy()
     method_truth = list(features.loc[method_known, "y_method"])
@@ -166,9 +195,10 @@ def main() -> None:
         train & features["y_method"].notna().to_numpy(), "y_method"
     ].mode()[0]
 
-    xgb_method = xgb.XGBClassifier(enable_categorical=True)
-    xgb_method.load_model(MODELS / "xgb_method.json")
-    method_pred_xgb = [METHOD_CLASSES[i] for i in xgb_method.predict(x[method_known])]
+    method_pred_xgb = [
+        METHOD_CLASSES[i]
+        for i in _mean_proba(_load_seed_ensemble("method"), x[method_known]).argmax(axis=1)
+    ]
 
     method_out = ensemble.predict(features.loc[method_known])
     method_pred_torch = [
@@ -190,9 +220,10 @@ def main() -> None:
         train & features["y_finish_round"].notna().to_numpy(), "y_finish_round"
     ].mode()[0]
 
-    xgb_round = xgb.XGBClassifier(enable_categorical=True)
-    xgb_round.load_model(MODELS / "xgb_round.json")
-    round_pred_xgb = [ROUND_CLASSES[i] for i in xgb_round.predict(x[finish_known])]
+    round_pred_xgb = [
+        ROUND_CLASSES[i]
+        for i in _mean_proba(_load_seed_ensemble("round"), x[finish_known]).argmax(axis=1)
+    ]
 
     results["finish_round"] = {
         "n_test": int(finish_known.sum()),

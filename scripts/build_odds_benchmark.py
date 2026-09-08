@@ -3,11 +3,17 @@
 EVALUATION-ONLY: betting odds are a COMPARATOR here, never a model feature.
 This script downloads a Kaggle odds-history dataset via kagglehub, aligns it
 to our fighter_a/fighter_b feature convention using the shared 16-hex
-ufcstats fight id, and compares the committed neural ensemble's pre-fight
-win probabilities against the devigged market-implied probabilities on the
-same historical fights -- reusing exactly the loading/prediction machinery
-`scripts/final_test_eval.py` uses (features.parquet + the committed torch
-checkpoints), never re-predicting from live snapshots.
+ufcstats fight id, and compares the committed model's pre-fight win
+probabilities against the devigged market-implied probabilities on the same
+historical fights -- reusing exactly the loading/prediction machinery
+`scripts/final_test_eval.py` uses (features.parquet + the committed
+artifacts), never re-predicting from live snapshots.
+
+The committed artifact (models/market_benchmark.json) was computed ONCE
+against the pre-refit torch ensemble, for which the 2021+ years were out of
+sample, and is not recomputed -- the app says so. If it is ever re-run, it now
+scores the DEPLOYED SCORER, which since SP2.2 is the blend
+(`mma.inference.BlendedPredictor`), not the torch member alone.
 
 Run once: .venv/bin/python scripts/build_odds_benchmark.py
 Writes models/market_benchmark.json.
@@ -21,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from mma.evaluate import accuracy, brier_score, log_loss
-from mma.inference import Ensemble
+from mma.inference import BlendedPredictor
 from mma.odds import consensus_odds, decimal_to_implied, devig_pair, extract_fight_id
 from mma.prospective import build_name_index, match_fighter_id
 
@@ -354,7 +360,7 @@ def main() -> None:
     print("Validating alignment against famous fights ...")
     validate_famous_fights(fights, fighters, aligned)
 
-    print("Computing the neural ensemble's predictions (committed checkpoints, no refit) ...")
+    print("Computing the deployed blend's predictions (committed artifacts, no refit) ...")
     matched = features.merge(
         aligned[
             [
@@ -365,8 +371,8 @@ def main() -> None:
         on="fight_id", how="inner",
     )
     matched = to_features_convention(matched)
-    ensemble = Ensemble.load()
-    winner_probs = ensemble.predict(matched)["winner_prob"]
+    predictor = BlendedPredictor.load(ROOT)
+    winner_probs = predictor.predict(matched)["winner_prob"]
     matched["model_p_a"] = winner_probs
     matched["y_winner"] = matched["y_winner"].astype(float)
 
