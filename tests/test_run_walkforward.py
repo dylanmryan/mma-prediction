@@ -156,10 +156,14 @@ def test_a_dropped_column_is_absent_from_both_learners_model_matrices():
 
 
 def test_drop_columns_reaches_the_candidates_the_cli_builds():
-    xgb = rwf.build_candidate("xgb", "x", "0", {}, None, ("age_diff",))
-    torch_candidate = rwf.build_candidate("torch", "t", "0,1", {}, None, ("age_diff",))
+    xgb = rwf.build_candidate("xgb", "x", None, {}, None, ("age_diff",))
+    torch_candidate = rwf.build_candidate("torch", "t", (0, 1), {}, None, ("age_diff",))
+    blend = rwf.build_candidate("blend", "b", (0, 1), {}, None, ("age_diff",),
+                                {"blend_weight": 0.5, "blend_calibrated": True})
     assert xgb.drop_columns == ("age_diff",)
     assert torch_candidate.drop_columns == ("age_diff",)
+    assert blend.drop_columns == ("age_diff",)
+    assert all(m.drop_columns == ("age_diff",) for m in blend.members())
 
 
 # --- --model-seed -----------------------------------------------------------
@@ -210,3 +214,83 @@ def test_random_state_reaches_the_fitted_estimator():
     config = rwf.apply_model_seed(_seed_args(model_seed=3), {})
     assert _classifier("binary:logistic", config, 10).get_params()["random_state"] == 3
     assert _classifier("binary:logistic", {}, 10).get_params()["random_state"] == 0
+
+
+# --- --seeds / --blend-weight (SP2.2) ---------------------------------------
+# torch and blend run a 5-seed ensemble by default. XGBoost does not: SP2.2
+# gave it seed ensembling for the blend's sake, and defaulting it on would
+# silently change what every plain `--candidate xgb` run means.
+
+
+def _ens_args(**overrides) -> argparse.Namespace:
+    base = {"candidate": "torch", "seeds": None, "model_seed": None,
+            "blend_weight": None, "no_blend_calibration": False}
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+@pytest.mark.parametrize("candidate", ["torch", "blend"])
+def test_seeded_candidates_default_to_the_five_seed_ensemble(candidate):
+    assert rwf.resolve_seeds(_ens_args(candidate=candidate)) == (0, 1, 2, 3, 4)
+
+
+def test_xgb_stays_a_single_fit_unless_seeds_are_named():
+    assert rwf.resolve_seeds(_ens_args(candidate="xgb")) is None
+    assert rwf.resolve_seeds(_ens_args(candidate="xgb", seeds="0")) == (0,)
+    assert rwf.resolve_seeds(_ens_args(candidate="elo")) is None
+
+
+def test_seeds_are_parsed_stripped_and_deduplicated_in_order():
+    assert rwf.resolve_seeds(_ens_args(seeds=" 5, 6 ,5,7,")) == (5, 6, 7)
+
+
+def test_seeds_and_model_seed_together_are_a_usage_error():
+    with pytest.raises(SystemExit, match="both set the xgb random_state"):
+        rwf.resolve_seeds(_ens_args(candidate="xgb", seeds="0,1", model_seed=2))
+
+
+def test_seeding_the_elo_floor_is_a_usage_error():
+    with pytest.raises(SystemExit, match="fitted candidates only"):
+        rwf.resolve_seeds(_ens_args(candidate="elo", seeds="0,1"))
+
+
+def test_a_seeds_flag_that_names_nothing_is_a_usage_error():
+    with pytest.raises(SystemExit, match="names no seeds"):
+        rwf.resolve_seeds(_ens_args(seeds=" , "))
+
+
+def test_blend_weight_defaults_to_the_pre_registered_half():
+    assert rwf.resolve_blend(_ens_args(candidate="blend")) == {
+        "blend_weight": 0.5, "blend_calibrated": True,
+    }
+    assert rwf.resolve_blend(_ens_args(candidate="blend", blend_weight=0.3,
+                                       no_blend_calibration=True)) == {
+        "blend_weight": 0.3, "blend_calibrated": False,
+    }
+
+
+def test_blend_flags_are_blend_only_and_bounded():
+    assert rwf.resolve_blend(_ens_args(candidate="torch")) is None
+    with pytest.raises(SystemExit, match="blend candidate only"):
+        rwf.resolve_blend(_ens_args(candidate="xgb", blend_weight=0.5))
+    with pytest.raises(SystemExit, match="blend candidate only"):
+        rwf.resolve_blend(_ens_args(candidate="torch", no_blend_calibration=True))
+    with pytest.raises(SystemExit, match=r"must be in \[0, 1\]"):
+        rwf.resolve_blend(_ens_args(candidate="blend", blend_weight=1.5))
+
+
+def test_the_blend_rejects_flags_it_cannot_honour():
+    blend = {"blend_weight": 0.5, "blend_calibrated": True}
+    with pytest.raises(SystemExit, match="fixed-budget mode does not apply"):
+        rwf.build_candidate("blend", "b", (0,), {}, {"fixed_epochs": 4}, (), blend)
+    with pytest.raises(SystemExit, match="two members"):
+        rwf.build_candidate("blend", "b", (0,), {"lr": 1e-3}, None, (), blend)
+
+
+def test_the_blend_hands_both_members_the_same_seeds():
+    blend = rwf.build_candidate("blend", "b", (0, 1, 2), {}, None, (),
+                                {"blend_weight": 0.3, "blend_calibrated": False})
+    xgb, torch_member = blend.members()
+    assert blend.seeds == (0, 1, 2)
+    assert xgb.seeds == (0, 1, 2) and torch_member.seeds == (0, 1, 2)
+    assert blend.weight == 0.3 and blend.calibrate is False

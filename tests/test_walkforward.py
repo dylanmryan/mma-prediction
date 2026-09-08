@@ -426,15 +426,18 @@ def test_build_candidate_rejects_mismatched_budget():
     torch_budget = {"fixed_epochs": 14, "temperature": 1.1}
     xgb_budget = {"fixed_rounds": {"winner": 81, "method": 79, "round": 75}}
     with pytest.raises(SystemExit, match="fixed_rounds"):
-        build_candidate("xgb", "x", "0", {}, torch_budget)
+        build_candidate("xgb", "x", None, {}, torch_budget)
     with pytest.raises(SystemExit, match="fixed_epochs"):
-        build_candidate("torch", "t", "0", {}, xgb_budget)
+        build_candidate("torch", "t", (0,), {}, xgb_budget)
     with pytest.raises(SystemExit, match="elo"):
-        build_candidate("elo", "e", "0", {}, xgb_budget)
+        build_candidate("elo", "e", None, {}, xgb_budget)
     # no --fixed-budget-from at all: every learner builds in early-stopping mode
-    assert build_candidate("xgb", "x", "0", {}, None).fixed_rounds is None
-    assert build_candidate("torch", "t", "0,1", {}, None).fixed_epochs is None
+    assert build_candidate("xgb", "x", None, {}, None).fixed_rounds is None
+    assert build_candidate("torch", "t", (0, 1), {}, None).fixed_epochs is None
     # matching budgets are applied
-    assert build_candidate("xgb", "x", "0", {}, xgb_budget).fixed_rounds == xgb_budget["fixed_rounds"]
-    torch_cand = build_candidate("torch", "t", "0,1", {}, torch_budget)
+    assert build_candidate("xgb", "x", None, {}, xgb_budget).fixed_rounds == xgb_budget["fixed_rounds"]
+    torch_cand = build_candidate("torch", "t", (0, 1), {}, torch_budget)
     assert torch_cand.fixed_epochs == 14 and torch_cand.temperature == 1.1 and torch_cand.seeds == (0, 1)
+    # the xgb candidate is a single fit unless the CLI resolved a seed list
+    assert build_candidate("xgb", "x", None, {}, None).seeds is None
+    assert build_candidate("xgb", "x", (0, 1, 2), {}, None).seeds == (0, 1, 2)
