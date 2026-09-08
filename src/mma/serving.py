@@ -14,51 +14,18 @@ scalar (serving builds one row) or a pandas Series (training builds every
 row at once). The arithmetic below is written so both cases go through the
 same expressions, so there is one contract and one set of semantics, not
 two implementations that happen to agree today.
+
+*Which* columns it builds is not decided here: `mma.feature_blocks` owns the
+registry of named, switchable blocks and `feature_row` walks the spec it
+assembles. Callers that pass nothing get the `base` block -- the v1 feature
+contract -- unchanged.
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-# (state key, output stem) -> "<stem>_diff", A minus B.
-# The order here is the column order of the feature table.
-DIFFERENTIALS: tuple[tuple[str, str], ...] = (
-    ("career_fights", "career_fights"),
-    ("career_wins", "career_wins"),
-    ("career_win_rate", "career_win_rate"),
-    ("career_finish_rate", "career_finish_rate"),
-    ("kd_pf", "kd_pf"),
-    ("sub_att_pf", "sub_att_pf"),
-    ("td_landed_pf", "td_landed_pf"),
-    ("td_acc", "td_acc"),
-    ("td_def", "td_def"),
-    ("sig_pm", "sig_pm"),
-    ("sig_absorbed_pm", "sig_absorbed_pm"),
-    ("ctrl_share", "ctrl_share"),
-    ("streak", "streak"),
-    ("days_since_last", "days_since_last"),
-    ("last5_win_rate", "last5_win_rate"),
-    ("last5_avg_opp_elo", "last5_avg_opp_elo"),
-    ("pre_overall", "elo"),
-    ("pre_striking", "striking_elo"),
-    ("pre_grappling", "grappling_elo"),
-    ("pre_fights", "elo_fights"),
-    ("height_cm", "height"),
-    ("reach_cm", "reach"),
-    ("age", "age"),
-)
-
-# Emitted per corner as "<stem>_a" / "<stem>_b", unchanged from the state.
-ABSOLUTES: tuple[str, ...] = ("age", "career_fights")
-
-# Per-corner booleans, likewise "<stem>_a" / "<stem>_b".
-BOOLEANS: tuple[str, ...] = ("reach_missing", "dob_missing", "southpaw", "debut")
-
-# Derived corner-symmetric flags: (output column, per-corner stem XOR-ed).
-DERIVED_BOOLEANS: tuple[tuple[str, str], ...] = (
-    ("debut_matchup", "debut"),
-    ("stance_mismatch", "southpaw"),
-)
+from mma.feature_blocks import BASE_BLOCK, Spec, spec_for
 
 
 def minus(a, b):
@@ -91,23 +58,28 @@ def debut_flag(career_fights):
     return float(career_fights) == 0
 
 
-def feature_row(state_a, state_b, context: dict | None = None) -> dict:
+def feature_row(state_a, state_b, context: dict | None = None,
+                blocks=(BASE_BLOCK,)) -> dict:
     """One matchup -> {column: value} following the feature contract.
 
     `state_a` / `state_b` are anything supporting `.get(key)` over the state
-    keys named in `DIFFERENTIALS`, `ABSOLUTES` and `BOOLEANS` -- a plain dict
-    of scalars at serving time, a DataFrame of columns at training time.
-    `context` is the fight context (weight class, title flag, scheduled
-    rounds), passed through verbatim ahead of the features.
+    keys the enabled blocks name -- a plain dict of scalars at serving time,
+    a DataFrame of columns at training time. `context` is the fight context
+    (weight class, title flag, scheduled rounds, plus any fight-level block
+    columns), passed through verbatim ahead of the features. `blocks` is a
+    requested block list (or an already-assembled `Spec`); it defaults to the
+    v1 `base` block, and the column order is exactly `feature_blocks.
+    columns_for(blocks)`.
     """
+    spec = blocks if isinstance(blocks, Spec) else spec_for(blocks)
     row: dict = dict(context) if context else {}
-    for key, stem in DIFFERENTIALS:
+    for key, stem in spec.differentials:
         row[f"{stem}_diff"] = minus(state_a.get(key), state_b.get(key))
     for corner, state in (("a", state_a), ("b", state_b)):
-        for stem in ABSOLUTES:
+        for stem in spec.absolutes:
             row[f"{stem}_{corner}"] = state.get(stem)
-        for stem in BOOLEANS:
+        for stem in spec.booleans:
             row[f"{stem}_{corner}"] = as_flag(state.get(stem))
-    for name, stem in DERIVED_BOOLEANS:
+    for name, stem in spec.derived_booleans:
         row[name] = row[f"{stem}_a"] ^ row[f"{stem}_b"]
     return row

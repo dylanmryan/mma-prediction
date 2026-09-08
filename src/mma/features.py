@@ -5,10 +5,11 @@ md5(fight_id) parity so column order cannot encode the winner (the red
 corner wins ~65% of raw fights). Numeric features enter as A-minus-B
 differentials plus a few absolutes; missing values stay NaN.
 
-The feature columns themselves are not defined here: `mma.serving` owns
-the contract and both this module and `mma.inference.build_matchup` build
-their rows with `serving.feature_row`, so a feature cannot exist in the
-training table but be missing (or different) at prediction time.
+The feature columns themselves are not defined here: `mma.feature_blocks`
+owns the registry of named blocks and `mma.serving` owns the builder that
+walks it. Both this module and `mma.inference.build_matchup` build their
+rows with `serving.feature_row`, so a feature cannot exist in the training
+table but be missing (or different) at prediction time.
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from mma import serving
+from mma.feature_blocks import BASE_BLOCK
 
 # The state keys `serving.feature_row` reads that come from the Elo ratings
 # table and the career-history accumulator respectively.
@@ -58,7 +60,8 @@ def _side_frame(fights, fighters, ratings, history, corner: str) -> pd.DataFrame
     return side
 
 
-def build_features(fights, fighters, ratings, history) -> pd.DataFrame:
+def build_features(fights, fighters, ratings, history,
+                   blocks=(BASE_BLOCK,)) -> pd.DataFrame:
     """Targets, identifiers and one `serving.feature_row` per decisive fight.
 
     The whole table is built in a single vectorised pass: `serving.feature_row`
@@ -69,6 +72,10 @@ def build_features(fights, fighters, ratings, history) -> pd.DataFrame:
     such as `career_fights_diff` stay int64), which a per-row Python loop
     would silently widen to float. It is still literally the same builder
     serving uses -- `tests/test_serving_parity.py` compares the values.
+
+    `blocks` is the requested feature-block list (see `mma.feature_blocks`);
+    it defaults to the `base` v1 contract, so the committed feature table is
+    what an unadorned call produces.
     """
     decisive = fights[fights["winner"].isin(["a", "b"])].reset_index(drop=True)
     side_a = _side_frame(decisive, fighters, ratings, history, "a")
@@ -100,4 +107,5 @@ def build_features(fights, fighters, ratings, history) -> pd.DataFrame:
         "title_fight": decisive["title_fight"],
         "scheduled_rounds": decisive["scheduled_rounds"],
     }
-    return pd.DataFrame({**identifiers, **serving.feature_row(first, second, context)})
+    row = serving.feature_row(first, second, context, blocks=blocks)
+    return pd.DataFrame({**identifiers, **row})
