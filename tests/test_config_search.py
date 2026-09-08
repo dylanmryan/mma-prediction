@@ -133,7 +133,13 @@ def test_summary_covers_only_the_configs_that_have_reports(tmp_path):
 
 
 def test_the_wrong_feature_table_stops_the_run(monkeypatch):
+    # Both directions of the mismatch, spelled with blocks that are actually
+    # registered: an unregistered name is caught one level lower, by
+    # `resolve_blocks`, and would test that instead of this guard.
     monkeypatch.setattr(cs, "table_blocks", lambda: ("base", "external"))
     assert cs.check_table("base,external") == ("base", "external")
     with pytest.raises(SystemExit, match="was built from"):
-        cs.check_table("base,external,trajectory")
+        cs.check_table("base")
+    monkeypatch.setattr(cs, "table_blocks", lambda: ("base",))
+    with pytest.raises(SystemExit, match="was built from"):
+        cs.check_table("base,external")
