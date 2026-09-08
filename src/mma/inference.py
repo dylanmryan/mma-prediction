@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,10 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
+from mma import external, serving
+from mma.feature_blocks import (
+    EXTERNAL_BLOCK, resolve_blocks, state_key_blocks, state_keys, table_blocks,
+)
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
 from mma.tensors import Preprocessor
@@ -267,14 +272,86 @@ def predict_symmetrized(
     }
 
 
+# A ufcstats fighter id: 16 lowercase hex characters. Every id in
+# data/processed/fighters.parquet has this shape (4,581 of 4,581), which is
+# what makes it safe to use as a validation rule rather than a guess.
+UFCSTATS_ID = re.compile(r"^[0-9a-f]{16}$")
+
+
+def _fighter_id(bio: pd.Series, corner: str) -> str:
+    """The ufcstats id of a bio row: its index label, as every caller passes it.
+
+    The `external` block joins by id and never by name, so a bio row whose
+    label is not an id has to be an error. Checking `isinstance(str)` was not
+    enough, because the obvious wrong call --
+    `fighters.set_index("name").loc["Jon Jones"]` -- produces a bio row whose
+    label IS a string, just the wrong one. That passed the check and then
+    matched nothing in the external table, so a mapped fighter was served
+    all-NaN external values with `external_missing` quietly set: a silent
+    wrong answer, and precisely the name-matching failure the id-only join
+    exists to make impossible. Validating the SHAPE closes it.
+    """
+    fighter_id = getattr(bio, "name", None)
+    if not isinstance(fighter_id, str) or not UFCSTATS_ID.match(fighter_id):
+        raise KeyError(
+            f"the {EXTERNAL_BLOCK!r} block joins by ufcstats fighter id (16 "
+            f"lowercase hex characters), but the corner-{corner} bio row is not "
+            f"labelled with one (got {fighter_id!r}); pass "
+            "fighters.set_index('fighter_id').loc[id]"
+        )
+    return fighter_id
+
+
 def build_matchup(
     snapshot_a: pd.Series, snapshot_b: pd.Series,
     bio_a: pd.Series, bio_b: pd.Series,
     weight_class: str, title_fight: bool, scheduled_rounds: int,
     as_of: pd.Timestamp,
+    blocks=None,
 ) -> pd.DataFrame:
-    """One feature row matching the training feature contract (A vs B, no swap)."""
-    def side(snapshot, bio):
+    """One feature row matching the training feature contract (A vs B, no swap).
+
+    The row itself is built by `mma.serving.feature_row`, the same function
+    `mma.features.build_features` uses for the training table -- this
+    function's only job is to turn a current-state snapshot plus a bio row
+    into the state dict that builder expects. `tests/test_serving_parity.py`
+    pins the two paths to identical values.
+
+    *Which* state keys that dict carries comes from
+    `feature_blocks.state_keys(blocks)`, not a tuple maintained here: a key a
+    block declares that neither the derived extras below nor the snapshot nor
+    the bio row can supply raises, rather than silently becoming NaN. `blocks`
+    defaults to `feature_blocks.table_blocks()` -- the blocks the deployed
+    model's own feature table was built from -- so the served row matches the
+    trained one without every caller having to name them; pass an explicit
+    list only to serve a different contract than the one on disk.
+
+    The `external` block is the one place this function needs a fighter's
+    IDENTITY rather than just their state: its table is joined by ufcstats
+    `fighter_id`. That id is taken from the bio row's index label, which is
+    what every caller already passes (`fighters.set_index("fighter_id").loc[id]`);
+    a bio row without one raises rather than silently serving an unmatched,
+    all-NaN external corner.
+
+    NOTE: elo_fights (via "pre_fights") and career_fights both read
+    snapshot["career_fights"] here. In training these come from two separate
+    counters -- the ratings table's fight count and the fight-history table's
+    count -- which can differ slightly for a fighter if a bout was recorded
+    in one table but not the other. At inference time there is only the
+    single current-state snapshot, so both coincide exactly; the difference
+    is negligible after standardization (Preprocessor.transform).
+    """
+    blocks = table_blocks() if blocks is None else blocks
+    keys = state_keys(blocks)
+    owners = state_key_blocks(blocks)
+
+    ext_a = ext_b = None
+    if EXTERNAL_BLOCK in resolve_blocks(blocks):
+        table = external.load_table()
+        ext_a = external.state_for(_fighter_id(bio_a, "a"), as_of, table)
+        ext_b = external.state_for(_fighter_id(bio_b, "b"), as_of, table)
+
+    def side(snapshot, bio, ext):
         age = (
             (as_of - bio["dob"]).days / 365.25 if pd.notna(bio["dob"]) else np.nan
         )
@@ -283,73 +360,54 @@ def build_matchup(
             if pd.notna(snapshot.get("last_date"))
             else np.nan
         )
-        return {
+        career_fights = snapshot.get("career_fights")
+        # Keys the snapshot does not carry under the name the spec uses, or
+        # does not carry at all (bio fields, the as-of derivations, the flags).
+        extras = {
             "age": age,
             "height_cm": bio["height_cm"],
             "reach_cm": bio["reach_cm"],
             "reach_missing": pd.isna(bio["reach_cm"]),
             "dob_missing": pd.isna(bio["dob"]),
             "southpaw": bio["stance"] == "Southpaw",
+            "debut": serving.debut_flag(career_fights),
             "days_since_last": days,
             "pre_overall": snapshot["elo_overall"],
             "pre_striking": snapshot["elo_striking"],
             "pre_grappling": snapshot["elo_grappling"],
-            "pre_fights": snapshot["career_fights"],
-            **{
-                name: snapshot.get(name)
-                for name in (
-                    "career_fights", "career_wins", "career_win_rate",
-                    "career_finish_rate", "kd_pf", "sub_att_pf", "td_landed_pf",
-                    "td_acc", "td_def", "sig_pm", "sig_absorbed_pm", "ctrl_share",
-                    "streak", "last5_win_rate", "last5_avg_opp_elo",
-                )
-            },
+            "pre_fights": career_fights,
         }
+        if ext is not None:
+            extras.update(ext)
+        state = {}
+        for key in keys:
+            if key in extras:
+                state[key] = extras[key]
+            elif key in snapshot:
+                state[key] = snapshot[key]
+            elif key in bio:
+                state[key] = bio[key]
+            else:
+                raise KeyError(
+                    f"snapshot/bio cannot supply {key!r}, declared by block "
+                    f"{owners[key]!r}; add it to mma.snapshots.build_snapshots "
+                    "or to the derived extras in mma.inference.build_matchup"
+                )
+        return state
 
-    first, second = side(snapshot_a, bio_a), side(snapshot_b, bio_b)
-    row: dict = {
+    context = {
         "weight_class": weight_class,
         "title_fight": title_fight,
         "scheduled_rounds": scheduled_rounds,
     }
-    # NOTE: elo_fights_diff (via "pre_fights") and career_fights_diff (via
-    # history_names below) both read side(...)["career_fights"], i.e. the
-    # same snapshot["career_fights"] value. In training these came from two
-    # separate counters -- the ratings-table fight count and the fight-history
-    # table's count -- which could differ slightly for a fighter if a bout
-    # was recorded in one table but not the other. At inference time we only
-    # have the single current-state snapshot, so both diffs coincide exactly;
-    # this is negligible after standardization (Preprocessor.transform).
-    diff_names = {
-        "pre_overall": "elo", "pre_striking": "striking_elo",
-        "pre_grappling": "grappling_elo", "pre_fights": "elo_fights",
-        "height_cm": "height", "reach_cm": "reach", "age": "age",
-    }
-    history_names = (
-        "career_fights", "career_wins", "career_win_rate", "career_finish_rate",
-        "kd_pf", "sub_att_pf", "td_landed_pf", "td_acc", "td_def",
-        "sig_pm", "sig_absorbed_pm", "ctrl_share", "streak", "days_since_last",
-        "last5_win_rate", "last5_avg_opp_elo",
+    if ext_a is not None:
+        context.update(external.fight_context(ext_a, ext_b))
+    row = serving.feature_row(
+        side(snapshot_a, bio_a, ext_a),
+        side(snapshot_b, bio_b, ext_b),
+        context,
+        blocks=blocks,
     )
-    for name in history_names:
-        row[f"{name}_diff"] = _minus(first.get(name), second.get(name))
-    for source, out in diff_names.items():
-        row[f"{out}_diff"] = _minus(first.get(source), second.get(source))
-    for label, data in (("a", first), ("b", second)):
-        row[f"age_{label}"] = data["age"]
-        row[f"career_fights_{label}"] = data["career_fights"]
-        row[f"reach_missing_{label}"] = bool(data["reach_missing"])
-        row[f"dob_missing_{label}"] = bool(data["dob_missing"])
-        row[f"southpaw_{label}"] = bool(data["southpaw"])
-        row[f"debut_{label}"] = (data["career_fights"] or 0) == 0
-    row["debut_matchup"] = row["debut_a"] ^ row["debut_b"]
-    row["stance_mismatch"] = row["southpaw_a"] ^ row["southpaw_b"]
     frame = pd.DataFrame([row])
     frame["weight_class"] = frame["weight_class"].astype("string")
     return frame
-
-
-def _minus(a, b):
-    if a is None or b is None or pd.isna(a) or pd.isna(b):
-        return np.nan
-    return float(a) - float(b)

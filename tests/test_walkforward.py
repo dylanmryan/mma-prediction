@@ -5,7 +5,8 @@ import pandas as pd
 import pytest
 
 from mma.walkforward import FOLD_YEARS, make_folds, recency_weights
-from mma.walkforward import bar_check, build_report, paired_delta, pool, score_rows, slice_masks
+from mma.walkforward import bar_check, build_report, paired_delta, pool, score_rows
+from mma.walkforward import slice_comparison, slice_masks
 
 METHOD = ["ko_tko", "submission", "decision"]
 ROUND = ["1", "2", "3", "45"]
@@ -222,6 +223,110 @@ def test_paired_delta_folds_restricted_to_common_years():
     b = {"pooled": {"winner_log_loss": 0.5}, "folds": {"2019": {"winner_log_loss": 0.4}, "2020": {"winner_log_loss": 0.5}}}
     out = paired_delta(a, b, sigma_seed=0.002)
     assert out["per_fold_B_minus_A"] == {"2019": pytest.approx(-0.1)}
+
+
+def test_slice_comparison_pairs_slices_and_flags_missing_ones():
+    cand = {"slices": {
+        "debut": {"n": 100, "winner_log_loss": 0.640},
+        "external_missing": {"n": 20, "winner_log_loss": 0.700},
+    }}
+    inc = {"slices": {
+        "debut": {"n": 100, "winner_log_loss": 0.650},
+        "womens": {"n": 50, "winner_log_loss": 0.660},
+    }}
+    rows = {r["slice"]: r for r in slice_comparison(cand, inc)}
+    assert set(rows) == {"debut", "external_missing", "womens"}
+
+    shared = rows["debut"]
+    assert shared["candidate_n"] == 100
+    assert shared["incumbent_n"] == 100
+    assert shared["candidate_winner_log_loss"] == pytest.approx(0.640)
+    assert shared["incumbent_winner_log_loss"] == pytest.approx(0.650)
+    assert shared["delta"] == pytest.approx(-0.010)
+
+    # candidate-only slice: no incumbent number, so no delta
+    only_cand = rows["external_missing"]
+    assert only_cand["candidate_n"] == 20
+    assert only_cand["incumbent_n"] is None
+    assert only_cand["candidate_winner_log_loss"] == pytest.approx(0.700)
+    assert only_cand["incumbent_winner_log_loss"] is None
+    assert only_cand["delta"] is None
+
+    # incumbent-only slice is still reported, from the other side
+    only_inc = rows["womens"]
+    assert only_inc["candidate_n"] is None
+    assert only_inc["incumbent_n"] == 50
+    assert only_inc["candidate_winner_log_loss"] is None
+    assert only_inc["delta"] is None
+
+
+    # candidate slices come first, in the candidate report's own order
+    assert [r["slice"] for r in slice_comparison(cand, inc)] == [
+        "debut", "external_missing", "womens"]
+
+
+def test_slice_comparison_reports_each_side_own_n():
+    """A single `n` taken from the candidate hid a slice whose membership
+    changed between the two reports -- the delta would then be comparing
+    different row sets without saying so."""
+    cand = {"slices": {"debut": {"n": 120, "winner_log_loss": 0.64}}}
+    inc = {"slices": {"debut": {"n": 100, "winner_log_loss": 0.65}}}
+    row = slice_comparison(cand, inc)[0]
+    assert row["candidate_n"] == 120
+    assert row["incumbent_n"] == 100
+
+
+def test_bar_check_rejects_a_non_finite_pooled_metric():
+    """A report whose pooled winner log-loss is null/NaN yields a NaN delta,
+    which is invalid JSON and reads downstream as `ships: false` -- i.e. as a
+    candidate that failed the bar rather than a broken report."""
+    good = {"pooled": {"winner_log_loss": 0.65, "n": 10}, "folds": {"2019": {"winner_log_loss": 0.65}}}
+    for broken in ({"winner_log_loss": None, "n": 10},
+                   {"winner_log_loss": float("nan"), "n": 10}):
+        report = {"pooled": broken, "folds": {"2019": {"winner_log_loss": 0.65}}}
+        with pytest.raises(ValueError, match="pooled winner_log_loss"):
+            bar_check(report, good, sigma_seed=0.001)
+        with pytest.raises(ValueError, match="pooled winner_log_loss"):
+            bar_check(good, report, sigma_seed=0.001)
+
+
+def test_bar_check_rejects_a_non_finite_fold_metric():
+    """A NaN *fold* metric must be caught the same way a NaN pooled metric
+    is -- otherwise it flows through untouched into `worst_fold_delta` and
+    `ships: false`, reading as a candidate that failed the bar rather than
+    as a broken report, and `json.dumps` would emit an invalid bare NaN."""
+    good = {"pooled": {"winner_log_loss": 0.65, "n": 10},
+            "folds": {"2018": {"winner_log_loss": 0.65}, "2019": {"winner_log_loss": 0.64}}}
+    for broken_value in (None, float("nan")):
+        broken = {"pooled": {"winner_log_loss": 0.64, "n": 10},
+                  "folds": {"2018": {"winner_log_loss": broken_value}, "2019": {"winner_log_loss": 0.63}}}
+        with pytest.raises(ValueError, match="fold 2018 winner_log_loss"):
+            bar_check(broken, good, sigma_seed=0.001)
+        with pytest.raises(ValueError, match="fold 2018 winner_log_loss"):
+            bar_check(good, broken, sigma_seed=0.001)
+    # a NaN fold metric outside the shared fold-year intersection is fine --
+    # bar_check never looks at it
+    broken_but_unshared = {"pooled": {"winner_log_loss": 0.64, "n": 10},
+                            "folds": {"2020": {"winner_log_loss": float("nan")}}}
+    out = bar_check(broken_but_unshared, good, sigma_seed=0.001)
+    assert out["fold_deltas"] == {}
+
+
+def test_paired_delta_rejects_a_non_finite_pooled_metric():
+    """`paired_delta` is the path that writes `refit_decision.json`, so a
+    non-finite pooled metric on either side must raise rather than produce
+    an unserializable/misleading artifact."""
+    good = {"pooled": {"winner_log_loss": 0.65}, "folds": {}}
+    for broken_value in (None, float("nan")):
+        broken = {"pooled": {"winner_log_loss": broken_value}, "folds": {}}
+        with pytest.raises(ValueError, match="report_a pooled winner_log_loss"):
+            paired_delta(broken, good, sigma_seed=0.001)
+        with pytest.raises(ValueError, match="report_b pooled winner_log_loss"):
+            paired_delta(good, broken, sigma_seed=0.001)
+
+
+def test_slice_comparison_handles_reports_without_slices():
+    assert slice_comparison({}, {}) == []
 
 
 def test_build_report_shape():

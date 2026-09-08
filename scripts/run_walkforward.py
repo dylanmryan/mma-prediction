@@ -7,6 +7,8 @@ Examples:
   python scripts/run_walkforward.py --candidate torch --name torch_v1_seeds5 --seeds 5,6,7,8,9
   python scripts/run_walkforward.py --candidate xgb --name xgb_hl4 --half-life 4 --train-start 2005-01-01
   python scripts/run_walkforward.py --candidate torch --name torch_refit --fixed-budget-from models/walkforward/torch_v1.json
+  python scripts/run_walkforward.py --candidate torch --name torch_refit_recent --fixed-epochs 18 --temperature 0.98
+  python scripts/run_walkforward.py --candidate torch --name torch_v1_extslice --drop-columns external_missing,same_country
 
 Reports land in models/walkforward/<name>.json. Nothing here touches the
 deployed artifacts under models/torch or models/xgb_*.json.
@@ -63,15 +65,94 @@ def fixed_budget_from(report: dict) -> dict:
     return budget
 
 
-def build_candidate(kind: str, name: str, seeds: str, config: dict, budget: dict | None):
-    """``budget`` is None without --fixed-budget-from; otherwise the dict from
-    fixed_budget_from, which must carry the key this learner consumes
+def resolve_budget(args: argparse.Namespace) -> dict | None:
+    """The fit budget for this run, or None to early-stop on the inner val.
+
+    Either derived from a reference report (--fixed-budget-from) or stated
+    outright (--fixed-epochs/--temperature, torch only); the two sources are
+    mutually exclusive. A temperature without a budget is a usage error --
+    outside fixed-budget mode the temperature is fit on the inner val.
+    """
+    explicit = args.fixed_epochs is not None or args.temperature is not None
+    if args.fixed_budget_from is not None:
+        if explicit:
+            raise SystemExit(
+                "--fixed-budget-from is mutually exclusive with --fixed-epochs/--temperature"
+            )
+        return fixed_budget_from(json.loads(args.fixed_budget_from.read_text()))
+    if not explicit:
+        return None
+    if args.candidate != "torch":
+        raise SystemExit(
+            f"--fixed-epochs/--temperature apply to the torch candidate only (got {args.candidate!r})"
+        )
+    if args.fixed_epochs is None:
+        raise SystemExit(
+            "--temperature applies to fixed-budget mode only; pass --fixed-epochs too "
+            "(without it the temperature is fit on the inner validation year)"
+        )
+    if args.fixed_epochs < 1:
+        raise SystemExit(f"--fixed-epochs must be at least 1 (got {args.fixed_epochs})")
+    budget = {"fixed_epochs": int(args.fixed_epochs)}
+    if args.temperature is not None:
+        if not args.temperature > 0:
+            raise SystemExit(f"--temperature must be positive (got {args.temperature})")
+        budget["temperature"] = float(args.temperature)
+    return budget
+
+
+def resolve_drop_columns(args: argparse.Namespace) -> tuple[str, ...]:
+    """Feature columns to hold out of the model matrix, in the order given.
+
+    The columns stay in the feature table -- only the learner stops seeing
+    them -- so `walkforward.slice_masks` still reports a slice keyed on a
+    dropped column. That is the point: it makes a *paired* incumbent
+    computable on the same table as the candidate, which is the only way a
+    slice delta means "what the block did to those rows" rather than "how
+    easy those rows are". Names are deduplicated in order; whitespace and
+    empty entries are ignored, but a flag that names nothing is a usage
+    error rather than a silent no-op.
+    """
+    if args.drop_columns is None:
+        return ()
+    names: list[str] = []
+    for name in args.drop_columns.split(","):
+        name = name.strip()
+        if name and name not in names:
+            names.append(name)
+    if not names:
+        raise SystemExit(f"--drop-columns names no columns (got {args.drop_columns!r})")
+    if args.candidate == "elo":
+        raise SystemExit(
+            "--drop-columns applies to the fitted candidates only; the elo "
+            "candidate reads elo_diff directly and fits nothing"
+        )
+    return tuple(names)
+
+
+def check_drop_columns(drop_columns, features: pd.DataFrame) -> None:
+    """Fail loudly on a column that is not in the table.
+
+    A typo would otherwise drop nothing and the run would silently be an
+    ordinary one wearing an ablation's name.
+    """
+    unknown = [name for name in drop_columns if name not in features.columns]
+    if unknown:
+        raise SystemExit(
+            f"--drop-columns names column(s) absent from the feature table: {unknown}"
+        )
+
+
+def build_candidate(kind: str, name: str, seeds: str, config: dict, budget: dict | None,
+                    drop_columns: tuple[str, ...] = ()):
+    """``budget`` is None in early-stopping mode; otherwise the dict from
+    resolve_budget, which must carry the key this learner consumes
     (fixed_rounds for xgb, fixed_epochs for torch) -- a budget derived from
     the wrong learner's report, or an elo candidate, is a usage error."""
     if kind == "elo":
         if budget is not None:
             raise SystemExit("--fixed-budget-from does not apply to the elo candidate (nothing is fit)")
-        return EloCandidate()
+        return EloCandidate()  # resolve_drop_columns already rejected --drop-columns here
     needed = "fixed_rounds" if kind == "xgb" else "fixed_epochs"
     if budget is not None and needed not in budget:
         raise SystemExit(
@@ -80,9 +161,11 @@ def build_candidate(kind: str, name: str, seeds: str, config: dict, budget: dict
         )
     budget = budget or {}
     if kind == "xgb":
-        return XGBCandidate(name=name, params=config, fixed_rounds=budget.get("fixed_rounds"))
+        return XGBCandidate(name=name, params=config, fixed_rounds=budget.get("fixed_rounds"),
+                            drop_columns=drop_columns)
     return TorchCandidate(name=name, seeds=tuple(int(s) for s in seeds.split(",")), config=config,
-                         fixed_epochs=budget.get("fixed_epochs"), temperature=budget.get("temperature"))
+                         fixed_epochs=budget.get("fixed_epochs"), temperature=budget.get("temperature"),
+                         drop_columns=drop_columns)
 
 
 def main() -> None:
@@ -95,6 +178,13 @@ def main() -> None:
     parser.add_argument("--half-life", type=float, default=None, help="recency half-life in years")
     parser.add_argument("--fixed-budget-from", type=Path, default=None,
                         help="reference report; train on train+inner_val with its median budget, no early stopping")
+    parser.add_argument("--fixed-epochs", type=int, default=None,
+                        help="torch fit budget stated outright (mutually exclusive with --fixed-budget-from)")
+    parser.add_argument("--temperature", type=float, default=None,
+                        help="calibration temperature for --fixed-epochs mode (default 1.0)")
+    parser.add_argument("--drop-columns", default=None,
+                        help="comma-separated feature columns to hold out of the model matrix "
+                             "(they stay in the table, so slices keyed on them still report)")
     parser.add_argument("--out-dir", type=Path, default=OUT_DIR)
     args = parser.parse_args()
 
@@ -103,8 +193,10 @@ def main() -> None:
         .sort_values("date", kind="stable").reset_index(drop=True)
     )
     config = json.loads(args.config_json) if args.config_json else {}
-    budget = fixed_budget_from(json.loads(args.fixed_budget_from.read_text())) if args.fixed_budget_from else None
-    candidate = build_candidate(args.candidate, args.name, args.seeds, config, budget)
+    budget = resolve_budget(args)
+    drop_columns = resolve_drop_columns(args)
+    check_drop_columns(drop_columns, features)
+    candidate = build_candidate(args.candidate, args.name, args.seeds, config, budget, drop_columns)
     budget = budget or {}  # report shape: always a dict
 
     fold_results = []
@@ -119,7 +211,8 @@ def main() -> None:
         "candidate": args.candidate, "seeds": args.seeds if args.candidate == "torch" else None,
         "config": config, "train_start": args.train_start, "half_life": args.half_life,
         "fixed_budget_from": str(args.fixed_budget_from) if args.fixed_budget_from else None,
-        "budget": budget, "n_feature_rows": int(len(features)),
+        "budget": budget, "drop_columns": list(drop_columns),
+        "n_feature_rows": int(len(features)),
         "features_max_date": str(features["date"].max().date()),
         "runtime_sec": round(time.time() - started, 1),
     }

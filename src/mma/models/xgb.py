@@ -13,7 +13,17 @@ import pandas as pd
 import xgboost as xgb
 
 TARGETS = ("y_winner", "y_method", "y_finish_round")
-NON_FEATURES = {"fight_id", "date", "swapped", *TARGETS}
+# Kept in the feature table, held out of the model matrix: the `external`
+# block's two fight-level flags. `external_missing` has to stay in the table
+# for `mma.walkforward.slice_masks` to report its slice, but modelling it (or
+# `same_country`, which is False whenever a nationality is unknown and so
+# encodes the same coverage artifact) makes the block decay as the snapshot
+# ages -- +0.0006 row-weighted on the 2024-2025 folds with the flags, -0.0006
+# without. The twin exclusion for the torch path is `mma.tensors.DROPPED`,
+# which carries the full argument; see also the SP2 plan's Task 11 shipping
+# note (docs/superpowers/plans/2026-09-07-sp2-features-v3.md).
+MODEL_EXCLUDED = ("external_missing", "same_country")
+NON_FEATURES = {"fight_id", "date", "swapped", *TARGETS, *MODEL_EXCLUDED}
 
 BASE_PARAMS = {
     "max_depth": 4,
@@ -27,8 +37,15 @@ MAX_ROUNDS = 2000
 EARLY_STOP = 50
 
 
-def feature_frame(features: pd.DataFrame) -> pd.DataFrame:
-    x = features[[c for c in features.columns if c not in NON_FEATURES]].copy()
+def feature_frame(features: pd.DataFrame, drop_columns=()) -> pd.DataFrame:
+    """The model matrix: every column that is not an identifier or a target.
+
+    `drop_columns` names further columns to leave out *for this call only* --
+    the ablation path behind `scripts/run_walkforward.py --drop-columns`.
+    Columns excluded for good belong in `NON_FEATURES`, not here.
+    """
+    excluded = NON_FEATURES | set(drop_columns)
+    x = features[[c for c in features.columns if c not in excluded]].copy()
     x["weight_class"] = x["weight_class"].astype("category")
     for column in x.columns:
         if x[column].dtype == "bool" or str(x[column].dtype) == "boolean":

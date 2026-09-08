@@ -39,16 +39,22 @@ def matchup():
     weaker["career_win_rate"] = 0.4
     weaker["career_wins"] = 4.0
     weaker["streak"] = -2
+    # The bio row's index label is the ufcstats id the `external` block joins
+    # on, so the two corners get real ids: one the snapshot maps (A) and one it
+    # does not (B), which is also the served shape of every post-snapshot
+    # debutant -- NaN differentials plus the flag, not a crash.
     bio = pd.Series(
         {"dob": pd.Timestamp("1993-01-01"), "height_cm": 180.0,
-         "reach_cm": 185.0, "stance": "Orthodox"}
+         "reach_cm": 185.0, "stance": "Orthodox"},
+        name="002ca196477ce572",
     )
+    bio_unmapped = pd.Series(bio, name="000774e57404d8c7")
     matchup_ab = build_matchup(
-        snapshot, weaker, bio, bio, "Lightweight", False, 3,
+        snapshot, weaker, bio, bio_unmapped, "Lightweight", False, 3,
         as_of=pd.Timestamp("2025-09-06"),
     )
     matchup_ba = build_matchup(
-        weaker, snapshot, bio, bio, "Lightweight", False, 3,
+        weaker, snapshot, bio_unmapped, bio, "Lightweight", False, 3,
         as_of=pd.Timestamp("2025-09-06"),
     )
     return matchup_ab, matchup_ba

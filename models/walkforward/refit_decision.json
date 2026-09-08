@@ -1,5 +1,6 @@
 {
   "rule": "B ships as the deployment recipe iff torch B pooled winner log-loss <= torch A + sigma_seed (spec v3 \u00a74 SP1)",
+  "feature_table": "the SP1 46-column base table",
   "xgb": {
     "A_pooled": {
       "n": 4804,
