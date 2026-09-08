@@ -147,9 +147,11 @@ def test_snapshots_carry_the_archived_blocks_state_and_serve_a_row():
     `days_since_last` -- both need an as-of date the snapshot does not have.
 
     The blocks are unregistered on `main`, so this registers the archived
-    specs into a throwaway registry rather than asking for them by name.
+    specs into a throwaway registry rather than asking for them by name -- and
+    skips any the live registry already has, so it also passes on a branch that
+    has registered them (SP2.2 registers all three for its S1 table).
     """
-    from mma.feature_blocks import BASE_BLOCK, columns_for, register, registry
+    from mma.feature_blocks import BASE_BLOCK, BLOCKS, columns_for, register, registry
     from mma.inference import build_matchup
 
     snapshots = build_snapshots(_fights(), _stats(), _ratings())
@@ -169,7 +171,8 @@ def test_snapshots_carry_the_archived_blocks_state_and_serve_a_row():
     # the two cards -- the column has to see that, measured from `first_date`
     with registry():
         for block in _ARCHIVED_BLOCKS:
-            register(block)
+            if block.name not in BLOCKS:
+                register(block)
         served = build_matchup(
             snapshots.loc["x"], snapshots.loc["z"], bio, bio,
             "Lightweight", False, 3, as_of=as_of, blocks=blocks,
