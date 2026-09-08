@@ -7,10 +7,13 @@ the state fields it consumes and the output columns it produces; the
 registry is what `scripts/build_features.py --blocks` and the serving path
 both read, so a block cannot be half-enabled.
 
-`spec_for` flattens a requested block list into the one assembled spec
-`mma.serving.feature_row` walks; `columns_for` names the columns that walk
-emits, in the order it emits them, and `state_keys` names the state fields
-it reads -- the registry is the contract, not a parallel description of one.
+`mma.serving.feature_row` walks the resolved blocks one at a time, in
+registry order; `spec_for` assembles a requested block list into one `Spec`
+(used by tests and callers that want the flattened differentials/absolutes/
+booleans rather than walking blocks themselves), `columns_for` names the
+columns that walk emits, in the order it emits them, and `state_keys` names
+the state fields it reads -- the registry is the contract, not a parallel
+description of one.
 Both the training merge (`mma.features._side_frame`) and the serving state
 dict (`mma.inference.build_matchup`) are built from `state_keys`, so a block
 whose state key nothing provides raises instead of quietly producing an
@@ -65,12 +68,20 @@ def register(block: Block) -> Block:
     The column check lives here rather than in a test so a colliding block
     cannot enter the registry at all: whichever of the two blocks lost the
     race would otherwise have its column silently overwritten in the built
-    table, which is the same class of bug as a state key nothing provides."""
+    table, which is the same class of bug as a state key nothing provides.
+    This also rejects a block that redeclares one of its own columns
+    against itself (e.g. the same differential stem twice) -- checking only
+    against previously registered blocks would let that in cleanly and then
+    break the documented `columns_for` == `feature_row` order contract."""
     if block.name in BLOCKS:
         raise ValueError(f"duplicate feature block {block.name}")
+    own_columns = columns_of(block)
+    if len(own_columns) != len(set(own_columns)):
+        self_dupes = sorted({c for c in own_columns if own_columns.count(c) > 1})
+        raise ValueError(f"feature block {block.name} redeclares its own column(s): {self_dupes}")
     claimed = {column: name for name, other in BLOCKS.items()
                for column in columns_of(other)}
-    collisions = sorted(set(columns_of(block)) & set(claimed))
+    collisions = sorted(set(own_columns) & set(claimed))
     if collisions:
         named = ", ".join(f"{c} (already {claimed[c]})" for c in collisions)
         raise ValueError(f"feature block {block.name} redeclares column(s): {named}")

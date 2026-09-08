@@ -163,6 +163,17 @@ def _subset(pred: dict, mask: np.ndarray) -> dict:
     return {k: (np.asarray(v)[mask] if v is not None else None) for k, v in pred.items()}
 
 
+def _require_finite(value, label: str) -> float:
+    """Return `value` as a finite float, or raise `ValueError` naming `label`.
+
+    A None/NaN metric is not valid JSON and every downstream comparison
+    against it is False, so a report built on it would read as "ships:
+    false" -- a candidate that failed the bar -- rather than as broken."""
+    if value is None or not np.isfinite(float(value)):
+        raise ValueError(f"{label} must be finite (got {value!r})")
+    return float(value)
+
+
 def _to_python(value):
     """Recursively cast numpy scalars/arrays to plain Python so json.dumps works."""
     if isinstance(value, np.generic):
@@ -215,29 +226,27 @@ def bar_check(candidate: dict, incumbent: dict, sigma_seed: float) -> dict:
     pooled delta are rounded to 6 dp before the strict comparison so that a
     candidate sitting exactly on the bar does not clear it on float noise. The pair is
     `comparable` only when both reports cover the same fold years and the
-    same pooled `n`; a non-comparable pair never ships."""
+    same pooled `n`; a non-comparable pair never ships. Both pooled metrics
+    and every fold metric in the shared fold-year intersection must be
+    finite -- a NaN metric raises rather than reading downstream as a
+    candidate that merely failed the bar."""
     if sigma_seed is None or not np.isfinite(sigma_seed):
         raise ValueError("sigma_seed must be a finite number; run scripts/noise_floor.py first")
-    cand_ll = candidate["pooled"]["winner_log_loss"]
-    inc_ll = incumbent["pooled"]["winner_log_loss"]
-    if any(v is None or not np.isfinite(float(v)) for v in (cand_ll, inc_ll)):
-        # A NaN delta is not valid JSON and every downstream comparison
-        # against it is False, so the report would read as "ships: false"
-        # -- a candidate that failed the bar -- rather than as broken.
-        raise ValueError(
-            "pooled winner_log_loss must be finite on both reports "
-            f"(candidate={cand_ll!r}, incumbent={inc_ll!r}); rerun the "
-            "walk-forward that produced it"
-        )
+    cand_ll = _require_finite(candidate["pooled"]["winner_log_loss"], "candidate pooled winner_log_loss")
+    inc_ll = _require_finite(incumbent["pooled"]["winner_log_loss"], "incumbent pooled winner_log_loss")
     bar = round(max(MIN_BAR, 2.0 * float(sigma_seed)), 6)
     delta = round(cand_ll - inc_ll, 6)
     cand_years, inc_years = set(candidate["folds"]), set(incumbent["folds"])
     missing_folds = sorted(cand_years ^ inc_years)
     comparable = (not missing_folds
                   and candidate["pooled"].get("n") == incumbent["pooled"].get("n"))
+    common_years = [year for year in candidate["folds"] if year in incumbent["folds"]]
     fold_deltas = {
-        year: candidate["folds"][year]["winner_log_loss"] - incumbent["folds"][year]["winner_log_loss"]
-        for year in candidate["folds"] if year in incumbent["folds"]
+        year: (
+            _require_finite(candidate["folds"][year]["winner_log_loss"], f"candidate fold {year} winner_log_loss")
+            - _require_finite(incumbent["folds"][year]["winner_log_loss"], f"incumbent fold {year} winner_log_loss")
+        )
+        for year in common_years
     }
     worst = round(max(fold_deltas.values()), 6) if fold_deltas else 0.0  # 0.65-0.64 != 0.01 in floats
     clears = delta < -bar
@@ -293,9 +302,14 @@ def paired_delta(report_a: dict, report_b: dict, sigma_seed: float) -> dict:
     winner log-loss is not worse than A's by more than ``sigma_seed``. Unlike
     `bar_check`, this has no "ships as a challenger" bar or comparability
     check -- it is the shared arithmetic behind both the main A/B refit
-    comparison and a fresh-seed re-score of the same pair."""
+    comparison and a fresh-seed re-score of the same pair. This is the path
+    that writes `models/walkforward/refit_decision.json`
+    (`scripts/refit_decision.py`), so a non-finite pooled metric on either
+    side raises rather than silently producing an unshippable artifact."""
     a_pooled, b_pooled = report_a["pooled"], report_b["pooled"]
-    delta = round(b_pooled["winner_log_loss"] - a_pooled["winner_log_loss"], 4)
+    a_ll = _require_finite(a_pooled["winner_log_loss"], "report_a pooled winner_log_loss")
+    b_ll = _require_finite(b_pooled["winner_log_loss"], "report_b pooled winner_log_loss")
+    delta = round(b_ll - a_ll, 4)
     a_folds, b_folds = report_a["folds"], report_b["folds"]
     common_years = sorted(set(a_folds) & set(b_folds), key=int)
     fold_deltas = {

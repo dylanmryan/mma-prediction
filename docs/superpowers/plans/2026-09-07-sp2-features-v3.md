@@ -419,7 +419,7 @@ Register `BASE_BLOCK` from the tuples now living in `serving.py` (move them here
 
 - [ ] **Step 3: `--blocks` in `scripts/build_features.py`**
 
-Add `--blocks` (comma-separated, default `base`) and `--out` (default `data/processed/features.parquet`). Write a sidecar `data/processed/features_blocks.json` recording `{"blocks": [...], "n_rows": N, "n_columns": M, "built_at_utc": "..."}` so a report can be traced to the table it was computed on. Print the block list and column count.
+Add `--blocks` (comma-separated, default `base`) and `--out` (default `data/processed/features.parquet`). Write a sidecar `data/processed/features_blocks.json` recording `{"blocks": [...], "n_rows": N, "n_columns": M}` so a report can be traced to the table it was computed on. (No timestamp: the sidecar is committed alongside the table and records nothing time-varying, which is how the byte-identity check on `features.parquet` stays meaningful.) Print the block list and column count.
 
 - [ ] **Step 4: Verify the default is unchanged**
 

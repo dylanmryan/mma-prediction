@@ -61,6 +61,20 @@ def test_register_rejects_a_block_that_reclaims_a_column():
         assert "clash" not in BLOCKS
 
 
+def test_register_rejects_a_block_that_redeclares_its_own_column():
+    """A block declaring the same output column twice within itself must be
+    caught here too, not just against other registered blocks -- otherwise
+    it registers cleanly and then breaks the documented `columns_for` ==
+    `feature_row` order contract."""
+    with registry():
+        with pytest.raises(ValueError, match="dup_stem_diff"):
+            register(Block(
+                name="self_clash",
+                differentials=(("k1", "dup_stem"), ("k2", "dup_stem")),
+            ))
+        assert "self_clash" not in BLOCKS
+
+
 def test_resolve_blocks_accepts_a_bare_string(dummy_blocks):
     """A single name is a common slip and used to iterate its characters,
     failing with a list of unknown one-letter blocks."""
@@ -93,6 +107,11 @@ def test_registry_columns_match_the_committed_feature_table():
     identifiers = {"fight_id", "date", "swapped", "y_winner", "y_method", "y_finish_round",
                    "weight_class", "title_fight", "scheduled_rounds"}
     assert set(columns_for(blocks)) == set(table.columns) - identifiers
+    # Column SETS matching is not enough -- a registry reorder would
+    # silently change the committed parquet's physical column order with a
+    # green suite. Pin the order too.
+    non_identifier_columns = [c for c in table.columns if c not in identifiers]
+    assert non_identifier_columns == list(columns_for(blocks))
 
 
 @pytest.fixture
