@@ -441,3 +441,41 @@ def test_build_candidate_rejects_mismatched_budget():
     # the xgb candidate is a single fit unless the CLI resolved a seed list
     assert build_candidate("xgb", "x", None, {}, None).seeds is None
     assert build_candidate("xgb", "x", (0, 1, 2), {}, None).seeds == (0, 1, 2)
+
+
+def test_sigma_from_reports_measures_ece_without_inventing_a_bar():
+    """SP2.2 measures the ECE gate's own precision. The max(0.003, 2 sigma)
+    bar is the spec's LOG-LOSS shipping rule, so an ece floor must not carry
+    one -- that would be a threshold no pre-registration states."""
+    reports = [{"pooled": {"winner_log_loss": 0.65, "ece": v}} for v in (0.0088, 0.016, 0.0113)]
+    out = sigma_from_reports(reports, metric="ece")
+    assert out["pooled_ece"] == [0.0088, 0.016, 0.0113]
+    assert "pooled_winner_log_loss" not in out and "bar" not in out
+    assert out["sigma_seed"] == pytest.approx(np.std([0.0088, 0.016, 0.0113], ddof=1))
+    assert out["mean"] == pytest.approx(np.mean([0.0088, 0.016, 0.0113]))
+    assert out["two_sigma"] == pytest.approx(2 * out["sigma_seed"])
+
+
+def test_noise_floor_named_arms_and_positional_reports_are_exclusive(tmp_path):
+    import scripts.noise_floor as nf
+
+    paths = []
+    for i, value in enumerate((0.650, 0.652, 0.648)):
+        p = tmp_path / f"r{i}.json"
+        p.write_text(json.dumps({"config": {"candidate": "torch", "seeds": f"{i}"},
+                                 "pooled": {"winner_log_loss": value, "ece": 0.01 * (i + 1)}}))
+        paths.append(str(p))
+    out = tmp_path / "floor.json"
+    nf.main(["--metric", "ece", "--arm", "incumbent", *paths, "--out", str(out)])
+    written = json.loads(out.read_text())
+    assert written["metric"] == "ece"
+    assert set(written["arms"]) == {"incumbent"}
+    assert written["arms"]["incumbent"]["pooled_ece"] == [0.01, 0.02, 0.03]
+    assert written["arms"]["incumbent"]["seed_sets"] == ["0", "1", "2"]
+
+    with pytest.raises(SystemExit, match="not both"):
+        nf.main([paths[0], "--arm", "a", paths[1], "--out", str(out)])
+    with pytest.raises(SystemExit, match="pass either"):
+        nf.main(["--out", str(out)])
+    with pytest.raises(SystemExit, match="used twice"):
+        nf.main(["--arm", "a", paths[0], "--arm", "a", paths[1], "--out", str(out)])

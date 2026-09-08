@@ -1,0 +1,1742 @@
+{
+  "experiment": "SP2.2 calibrated two-model blend",
+  "pre_registration": "docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md",
+  "generated_by": "scripts/sp2_2_decision.py",
+  "decided": false,
+  "incumbent": {
+    "report": "models/walkforward/torch_external_diffsonly_extslice.json",
+    "note": "I: the deployed scorer, a 5-seed torch ensemble on S0",
+    "pooled_winner_log_loss": 0.6476,
+    "pooled_ece": 0.0088
+  },
+  "noise_floors": {
+    "blend_winner_log_loss": {
+      "source": "models/walkforward/noise_floor_blend.json",
+      "sigma_blend": 9.999999999998899e-05,
+      "bar": 0.003,
+      "seed_sets": [
+        "0,1,2,3,4",
+        "5,6,7,8,9",
+        "10,11,12,13,14"
+      ],
+      "pooled_winner_log_loss": [
+        0.6453,
+        0.6451,
+        0.6452
+      ]
+    },
+    "ece": {
+      "source": "models/walkforward/noise_floor_ece.json",
+      "seed_sets_measured": {
+        "incumbent_recipe_S0": [
+          "models/walkforward/torch_external_diffsonly_extslice.json",
+          "models/walkforward/torch_external_diffsonly_seeds5.json",
+          "models/walkforward/torch_external_diffsonly_seeds10.json"
+        ],
+        "B1_S1": [
+          "models/walkforward/blend_b1.json",
+          "models/walkforward/blend_b1_seeds5.json",
+          "models/walkforward/blend_b1_seeds10.json"
+        ],
+        "B0_S0": [
+          "models/walkforward/blend_b0_seeds0.json",
+          "models/walkforward/blend_b0_seeds5.json",
+          "models/walkforward/blend_b0_seeds10.json"
+        ]
+      },
+      "B0_pooled_ece_by_seed_set": [
+        0.0091,
+        0.006,
+        0.0119
+      ],
+      "why": "Rule 4 compares two single ECE numbers with no known precision. This is that precision: the same recipe run on three disjoint seed sets, exactly as sigma_blend was measured for log-loss. It is a measurement, not a threshold -- no bar is derived from it, because the pre-registration states none.",
+      "metric": "ece",
+      "arms": {
+        "incumbent_torch_S0": {
+          "n_reports": 3,
+          "pooled_ece": [
+            0.0088,
+            0.016,
+            0.0101
+          ],
+          "sigma_seed": 0.0038370995990895693,
+          "mean": 0.011633333333333334,
+          "two_sigma": 0.0076741991981791385,
+          "reports": [
+            "models/walkforward/torch_external_diffsonly_extslice.json",
+            "models/walkforward/torch_external_diffsonly_seeds5.json",
+            "models/walkforward/torch_external_diffsonly_seeds10.json"
+          ],
+          "seed_sets": [
+            "0,1,2,3,4",
+            "5,6,7,8,9",
+            "10,11,12,13,14"
+          ]
+        },
+        "B1_blend_S1": {
+          "n_reports": 3,
+          "pooled_ece": [
+            0.0124,
+            0.0144,
+            0.0133
+          ],
+          "sigma_seed": 0.0010016652800877814,
+          "mean": 0.013366666666666666,
+          "two_sigma": 0.002003330560175563,
+          "reports": [
+            "models/walkforward/blend_b1.json",
+            "models/walkforward/blend_b1_seeds5.json",
+            "models/walkforward/blend_b1_seeds10.json"
+          ],
+          "seed_sets": [
+            "0,1,2,3,4",
+            "5,6,7,8,9",
+            "10,11,12,13,14"
+          ]
+        },
+        "B0_blend_S0": {
+          "n_reports": 3,
+          "pooled_ece": [
+            0.0091,
+            0.006,
+            0.0119
+          ],
+          "sigma_seed": 0.0029512709126747415,
+          "mean": 0.009000000000000001,
+          "two_sigma": 0.005902541825349483,
+          "reports": [
+            "models/walkforward/blend_b0_seeds0.json",
+            "models/walkforward/blend_b0_seeds5.json",
+            "models/walkforward/blend_b0_seeds10.json"
+          ],
+          "seed_sets": [
+            "0,1,2,3,4",
+            "5,6,7,8,9",
+            "10,11,12,13,14"
+          ]
+        }
+      }
+    }
+  },
+  "candidates": {
+    "B0": {
+      "role": "primary candidate: equal-weight blend on S0",
+      "seeds_0_4": {
+        "report": "models/walkforward/blend_b0_seeds0.json",
+        "candidate": "blend",
+        "seeds": "0,1,2,3,4",
+        "drop_columns": [
+          "external_missing",
+          "same_country"
+        ],
+        "blend_weight": 0.5,
+        "blend_calibrated": true,
+        "blend_calibrator": "temperature",
+        "pooled": {
+          "n": 4804,
+          "winner_log_loss": 0.6453,
+          "accuracy": 0.6182,
+          "brier": 0.2272,
+          "ece": 0.0091,
+          "joint_log_loss": 2.2027,
+          "method_macro_f1": 0.3442,
+          "round_macro_f1": 0.2758,
+          "n_method": 4792,
+          "n_round": 2446
+        },
+        "folds": {
+          "2018": 0.6358,
+          "2019": 0.6726,
+          "2020": 0.653,
+          "2021": 0.6703,
+          "2022": 0.6472,
+          "2023": 0.6395,
+          "2024": 0.6343,
+          "2025": 0.6254
+        },
+        "fold_ece": {
+          "2018": 0.0257,
+          "2019": 0.0774,
+          "2020": 0.0629,
+          "2021": 0.0549,
+          "2022": 0.0332,
+          "2023": 0.0233,
+          "2024": 0.0239,
+          "2025": 0.026
+        },
+        "slices": {
+          "debut": {
+            "n": 983,
+            "winner_log_loss": 0.6414,
+            "ece": 0.0138
+          },
+          "womens": {
+            "n": 779,
+            "winner_log_loss": 0.6531,
+            "ece": 0.0266
+          },
+          "five_round": {
+            "n": 420,
+            "winner_log_loss": 0.6582,
+            "ece": 0.0211
+          },
+          "external_missing": {
+            "n": 779,
+            "winner_log_loss": 0.6299,
+            "ece": 0.0306
+          }
+        },
+        "bar_check": {
+          "bar": 0.003,
+          "sigma_seed": 9.999999999998899e-05,
+          "delta": -0.0023,
+          "fold_deltas": {
+            "2018": -0.0177,
+            "2019": 0.0048,
+            "2020": -0.0054,
+            "2021": 0.0024,
+            "2022": 0.0053,
+            "2023": -0.0037,
+            "2024": -0.0011,
+            "2025": -0.0033
+          },
+          "worst_fold_delta": 0.0053,
+          "comparable": true,
+          "missing_folds": [],
+          "clears_delta": false,
+          "no_fold_regression": true,
+          "ships": false
+        },
+        "slice_deltas": [
+          {
+            "slice": "debut",
+            "candidate_n": 983,
+            "incumbent_n": 983,
+            "candidate_winner_log_loss": 0.6414,
+            "incumbent_winner_log_loss": 0.6525,
+            "delta": -0.0111
+          },
+          {
+            "slice": "womens",
+            "candidate_n": 779,
+            "incumbent_n": 779,
+            "candidate_winner_log_loss": 0.6531,
+            "incumbent_winner_log_loss": 0.659,
+            "delta": -0.0059
+          },
+          {
+            "slice": "five_round",
+            "candidate_n": 420,
+            "incumbent_n": 420,
+            "candidate_winner_log_loss": 0.6582,
+            "incumbent_winner_log_loss": 0.6575,
+            "delta": 0.0007
+          },
+          {
+            "slice": "external_missing",
+            "candidate_n": 779,
+            "incumbent_n": 779,
+            "candidate_winner_log_loss": 0.6299,
+            "incumbent_winner_log_loss": 0.6447,
+            "delta": -0.0148
+          }
+        ],
+        "paired_incumbent": "models/walkforward/torch_external_diffsonly_extslice.json"
+      },
+      "seeds_5_9": {
+        "report": "models/walkforward/blend_b0_seeds5.json",
+        "candidate": "blend",
+        "seeds": "5,6,7,8,9",
+        "drop_columns": [
+          "external_missing",
+          "same_country"
+        ],
+        "blend_weight": 0.5,
+        "blend_calibrated": true,
+        "blend_calibrator": "temperature",
+        "pooled": {
+          "n": 4804,
+          "winner_log_loss": 0.6451,
+          "accuracy": 0.6205,
+          "brier": 0.2272,
+          "ece": 0.006,
+          "joint_log_loss": 2.2031,
+          "method_macro_f1": 0.3399,
+          "round_macro_f1": 0.2681,
+          "n_method": 4792,
+          "n_round": 2446
+        },
+        "folds": {
+          "2018": 0.6378,
+          "2019": 0.6715,
+          "2020": 0.6534,
+          "2021": 0.6704,
+          "2022": 0.6464,
+          "2023": 0.6378,
+          "2024": 0.6343,
+          "2025": 0.6251
+        },
+        "fold_ece": {
+          "2018": 0.0408,
+          "2019": 0.0602,
+          "2020": 0.0609,
+          "2021": 0.0518,
+          "2022": 0.028,
+          "2023": 0.038,
+          "2024": 0.0337,
+          "2025": 0.03
+        },
+        "slices": {
+          "debut": {
+            "n": 983,
+            "winner_log_loss": 0.6406,
+            "ece": 0.0162
+          },
+          "womens": {
+            "n": 779,
+            "winner_log_loss": 0.6538,
+            "ece": 0.0371
+          },
+          "five_round": {
+            "n": 420,
+            "winner_log_loss": 0.6586,
+            "ece": 0.0236
+          },
+          "external_missing": {
+            "n": 779,
+            "winner_log_loss": 0.6286,
+            "ece": 0.0392
+          }
+        },
+        "bar_check": {
+          "bar": 0.003,
+          "sigma_seed": 9.999999999998899e-05,
+          "delta": -0.0022,
+          "fold_deltas": {
+            "2018": -0.0201,
+            "2019": 0.0053,
+            "2020": -0.0045,
+            "2021": 0.0065,
+            "2022": 0.0038,
+            "2023": -0.0032,
+            "2024": -0.0021,
+            "2025": -0.0035
+          },
+          "worst_fold_delta": 0.0065,
+          "comparable": true,
+          "missing_folds": [],
+          "clears_delta": false,
+          "no_fold_regression": true,
+          "ships": false
+        },
+        "slice_deltas": [
+          {
+            "slice": "debut",
+            "candidate_n": 983,
+            "incumbent_n": 983,
+            "candidate_winner_log_loss": 0.6406,
+            "incumbent_winner_log_loss": 0.6506,
+            "delta": -0.01
+          },
+          {
+            "slice": "womens",
+            "candidate_n": 779,
+            "incumbent_n": 779,
+            "candidate_winner_log_loss": 0.6538,
+            "incumbent_winner_log_loss": 0.6585,
+            "delta": -0.0047
+          },
+          {
+            "slice": "five_round",
+            "candidate_n": 420,
+            "incumbent_n": 420,
+            "candidate_winner_log_loss": 0.6586,
+            "incumbent_winner_log_loss": 0.6586,
+            "delta": 0.0
+          },
+          {
+            "slice": "external_missing",
+            "candidate_n": 779,
+            "incumbent_n": 779,
+            "candidate_winner_log_loss": 0.6286,
+            "incumbent_winner_log_loss": 0.643,
+            "delta": -0.0144
+          }
+        ],
+        "paired_incumbent": "models/walkforward/torch_external_diffsonly_seeds5.json"
+      },
+      "rule_2": {
+        "clears_at_seeds_0_4": false,
+        "clears_at_seeds_5_9": false,
+        "rule_2_satisfied": false
+      },
+      "pooled_ece": 0.0091,
+      "ece_vs_incumbent": 0.0003
+    },
+    "B1": {
+      "role": "secondary candidate: the identical construction on S1",
+      "seeds_0_4": {
+        "report": "models/walkforward/blend_b1.json",
+        "candidate": "blend",
+        "seeds": "0,1,2,3,4",
+        "drop_columns": [
+          "external_missing",
+          "same_country",
+          "notice_unknown",
+          "home_country_a",
+          "home_country_b"
+        ],
+        "blend_weight": 0.5,
+        "blend_calibrated": true,
+        "blend_calibrator": "temperature",
+        "pooled": {
+          "n": 4804,
+          "winner_log_loss": 0.6437,
+          "accuracy": 0.6216,
+          "brier": 0.2264,
+          "ece": 0.0124,
+          "joint_log_loss": 2.2013,
+          "method_macro_f1": 0.3385,
+          "round_macro_f1": 0.2793,
+          "n_method": 4792,
+          "n_round": 2446
+        },
+        "folds": {
+          "2018": 0.6367,
+          "2019": 0.666,
+          "2020": 0.6519,
+          "2021": 0.674,
+          "2022": 0.6455,
+          "2023": 0.6377,
+          "2024": 0.6326,
+          "2025": 0.6218
+        },
+        "fold_ece": {
+          "2018": 0.0485,
+          "2019": 0.064,
+          "2020": 0.0606,
+          "2021": 0.0723,
+          "2022": 0.0395,
+          "2023": 0.0461,
+          "2024": 0.0311,
+          "2025": 0.0371
+        },
+        "slices": {
+          "debut": {
+            "n": 983,
+            "winner_log_loss": 0.6398,
+            "ece": 0.0186
+          },
+          "womens": {
+            "n": 779,
+            "winner_log_loss": 0.6498,
+            "ece": 0.0432
+          },
+          "five_round": {
+            "n": 420,
+            "winner_log_loss": 0.6559,
+            "ece": 0.0471
+          },
+          "external_missing": {
+            "n": 779,
+            "winner_log_loss": 0.6297,
+            "ece": 0.0474
+          }
+        },
+        "bar_check": {
+          "bar": 0.003,
+          "sigma_seed": 9.999999999998899e-05,
+          "delta": -0.0039,
+          "fold_deltas": {
+            "2018": -0.0168,
+            "2019": -0.0018,
+            "2020": -0.0065,
+            "2021": 0.0061,
+            "2022": 0.0036,
+            "2023": -0.0055,
+            "2024": -0.0028,
+            "2025": -0.0069
+          },
+          "worst_fold_delta": 0.0061,
+          "comparable": true,
+          "missing_folds": [],
+          "clears_delta": true,
+          "no_fold_regression": true,
+          "ships": true
+        },
+        "slice_deltas": [
+          {
+            "slice": "debut",
+            "candidate_n": 983,
+            "incumbent_n": 983,
+            "candidate_winner_log_loss": 0.6398,
+            "incumbent_winner_log_loss": 0.6525,
+            "delta": -0.0127
+          },
+          {
+            "slice": "womens",
+            "candidate_n": 779,
+            "incumbent_n": 779,
+            "candidate_winner_log_loss": 0.6498,
+            "incumbent_winner_log_loss": 0.659,
+            "delta": -0.0092
+          },
+          {
+            "slice": "five_round",
+            "candidate_n": 420,
+            "incumbent_n": 420,
+            "candidate_winner_log_loss": 0.6559,
+            "incumbent_winner_log_loss": 0.6575,
+            "delta": -0.0016
+          },
+          {
+            "slice": "external_missing",
+            "candidate_n": 779,
+            "incumbent_n": 779,
+            "candidate_winner_log_loss": 0.6297,
+            "incumbent_winner_log_loss": 0.6447,
+            "delta": -0.015
+          }
+        ],
+        "paired_incumbent": "models/walkforward/torch_external_diffsonly_extslice.json"
+      },
+      "seeds_0_4_against_the_paired_S1_torch_arm": {
+        "bar": 0.003,
+        "sigma_seed": 9.999999999998899e-05,
+        "delta": -0.0038,
+        "fold_deltas": {
+          "2018": -0.0216,
+          "2019": -0.0005,
+          "2020": -0.005,
+          "2021": 0.0036,
+          "2022": 0.0027,
+          "2023": -0.0003,
+          "2024": -0.0033,
+          "2025": -0.0062
+        },
+        "worst_fold_delta": 0.0036,
+        "comparable": true,
+        "missing_folds": [],
+        "clears_delta": true,
+        "no_fold_regression": true,
+        "ships": true
+      },
+      "seeds_5_9": {
+        "report": "models/walkforward/blend_b1_seeds5.json",
+        "candidate": "blend",
+        "seeds": "5,6,7,8,9",
+        "drop_columns": [
+          "external_missing",
+          "same_country",
+          "notice_unknown",
+          "home_country_a",
+          "home_country_b"
+        ],
+        "blend_weight": 0.5,
+        "blend_calibrated": true,
+        "blend_calibrator": "temperature",
+        "pooled": {
+          "n": 4804,
+          "winner_log_loss": 0.6434,
+          "accuracy": 0.6191,
+          "brier": 0.2263,
+          "ece": 0.0144,
+          "joint_log_loss": 2.2028,
+          "method_macro_f1": 0.3421,
+          "round_macro_f1": 0.2895,
+          "n_method": 4792,
+          "n_round": 2446
+        },
+        "folds": {
+          "2018": 0.6375,
+          "2019": 0.6653,
+          "2020": 0.6501,
+          "2021": 0.6744,
+          "2022": 0.6445,
+          "2023": 0.6392,
+          "2024": 0.6321,
+          "2025": 0.6215
+        },
+        "fold_ece": {
+          "2018": 0.0487,
+          "2019": 0.0514,
+          "2020": 0.0684,
+          "2021": 0.0725,
+          "2022": 0.0378,
+          "2023": 0.0428,
+          "2024": 0.036,
+          "2025": 0.0164
+        },
+        "slices": {
+          "debut": {
+            "n": 983,
+            "winner_log_loss": 0.6387,
+            "ece": 0.0215
+          },
+          "womens": {
+            "n": 779,
+            "winner_log_loss": 0.6513,
+            "ece": 0.0448
+          },
+          "five_round": {
+            "n": 420,
+            "winner_log_loss": 0.6561,
+            "ece": 0.0485
+          },
+          "external_missing": {
+            "n": 779,
+            "winner_log_loss": 0.6299,
+            "ece": 0.0406
+          }
+        },
+        "bar_check": {
+          "bar": 0.003,
+          "sigma_seed": 9.999999999998899e-05,
+          "delta": -0.0037,
+          "fold_deltas": {
+            "2018": -0.0219,
+            "2019": 0.0002,
+            "2020": -0.0071,
+            "2021": 0.0064,
+            "2022": 0.0025,
+            "2023": -0.0006,
+            "2024": -0.003,
+            "2025": -0.0058
+          },
+          "worst_fold_delta": 0.0064,
+          "comparable": true,
+          "missing_folds": [],
+          "clears_delta": true,
+          "no_fold_regression": true,
+          "ships": true
+        },
+        "slice_deltas": [
+          {
+            "slice": "debut",
+            "candidate_n": 983,
+            "incumbent_n": 983,
+            "candidate_winner_log_loss": 0.6387,
+            "incumbent_winner_log_loss": 0.6501,
+            "delta": -0.0114
+          },
+          {
+            "slice": "womens",
+            "candidate_n": 779,
+            "incumbent_n": 779,
+            "candidate_winner_log_loss": 0.6513,
+            "incumbent_winner_log_loss": 0.6553,
+            "delta": -0.004
+          },
+          {
+            "slice": "five_round",
+            "candidate_n": 420,
+            "incumbent_n": 420,
+            "candidate_winner_log_loss": 0.6561,
+            "incumbent_winner_log_loss": 0.6549,
+            "delta": 0.0012
+          },
+          {
+            "slice": "external_missing",
+            "candidate_n": 779,
+            "incumbent_n": 779,
+            "candidate_winner_log_loss": 0.6299,
+            "incumbent_winner_log_loss": 0.6453,
+            "delta": -0.0154
+          }
+        ],
+        "paired_incumbent": "models/walkforward/torch_a1_combined_seeds5.json"
+      },
+      "rule_2": {
+        "clears_at_seeds_0_4": true,
+        "clears_at_seeds_5_9": true,
+        "rule_2_satisfied": true
+      },
+      "pooled_ece": 0.0124,
+      "ece_vs_incumbent": 0.0036
+    }
+  },
+  "diagnostics": {
+    "blend_b0_uncalibrated": {
+      "report": "models/walkforward/blend_b0_uncal.json",
+      "candidate": "blend",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country"
+      ],
+      "blend_weight": 0.5,
+      "blend_calibrated": false,
+      "blend_calibrator": "temperature",
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6455,
+        "accuracy": 0.6182,
+        "brier": 0.2272,
+        "ece": 0.0162,
+        "joint_log_loss": 2.2029,
+        "method_macro_f1": 0.3442,
+        "round_macro_f1": 0.2758,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6405,
+        "2019": 0.6671,
+        "2020": 0.6535,
+        "2021": 0.6667,
+        "2022": 0.6473,
+        "2023": 0.6402,
+        "2024": 0.6363,
+        "2025": 0.6267
+      },
+      "fold_ece": {
+        "2018": 0.032,
+        "2019": 0.043,
+        "2020": 0.0629,
+        "2021": 0.0392,
+        "2022": 0.0397,
+        "2023": 0.0408,
+        "2024": 0.0268,
+        "2025": 0.0245
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.643,
+          "ece": 0.0324
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6531,
+          "ece": 0.0364
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6555,
+          "ece": 0.0239
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6338,
+          "ece": 0.039
+        }
+      }
+    },
+    "blend_b0_weight_0.3": {
+      "report": "models/walkforward/blend_b0_w03.json",
+      "candidate": "blend",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country"
+      ],
+      "blend_weight": 0.3,
+      "blend_calibrated": true,
+      "blend_calibrator": "temperature",
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6456,
+        "accuracy": 0.6205,
+        "brier": 0.2273,
+        "ece": 0.0103,
+        "joint_log_loss": 2.2354,
+        "method_macro_f1": 0.3687,
+        "round_macro_f1": 0.3086,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6409,
+        "2019": 0.6716,
+        "2020": 0.654,
+        "2021": 0.6697,
+        "2022": 0.6436,
+        "2023": 0.6407,
+        "2024": 0.6339,
+        "2025": 0.6261
+      },
+      "fold_ece": {
+        "2018": 0.0185,
+        "2019": 0.0778,
+        "2020": 0.052,
+        "2021": 0.0504,
+        "2022": 0.0366,
+        "2023": 0.0423,
+        "2024": 0.0211,
+        "2025": 0.0217
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6448,
+          "ece": 0.0233
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6552,
+          "ece": 0.024
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6577,
+          "ece": 0.0465
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6341,
+          "ece": 0.0403
+        }
+      }
+    },
+    "blend_b0_weight_0.7": {
+      "report": "models/walkforward/blend_b0_w07.json",
+      "candidate": "blend",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country"
+      ],
+      "blend_weight": 0.7,
+      "blend_calibrated": true,
+      "blend_calibrator": "temperature",
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6462,
+        "accuracy": 0.618,
+        "brier": 0.2276,
+        "ece": 0.0082,
+        "joint_log_loss": 2.1828,
+        "method_macro_f1": 0.3337,
+        "round_macro_f1": 0.2391,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6338,
+        "2019": 0.6739,
+        "2020": 0.6534,
+        "2021": 0.6712,
+        "2022": 0.6514,
+        "2023": 0.6397,
+        "2024": 0.6358,
+        "2025": 0.6256
+      },
+      "fold_ece": {
+        "2018": 0.0311,
+        "2019": 0.0758,
+        "2020": 0.0732,
+        "2021": 0.051,
+        "2022": 0.0377,
+        "2023": 0.0317,
+        "2024": 0.0335,
+        "2025": 0.0327
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6408,
+          "ece": 0.0177
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6519,
+          "ece": 0.0302
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.659,
+          "ece": 0.0268
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6289,
+          "ece": 0.0358
+        }
+      }
+    },
+    "xgb_member_5seed_S0": {
+      "report": "models/walkforward/xgb_ens5_s0.json",
+      "candidate": "xgb",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country"
+      ],
+      "blend_weight": null,
+      "blend_calibrated": null,
+      "blend_calibrator": null,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.649,
+        "accuracy": 0.6109,
+        "brier": 0.2289,
+        "ece": 0.0175,
+        "joint_log_loss": 2.1824,
+        "method_macro_f1": 0.331,
+        "round_macro_f1": 0.1752,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.636,
+        "2019": 0.675,
+        "2020": 0.6528,
+        "2021": 0.67,
+        "2022": 0.6572,
+        "2023": 0.644,
+        "2024": 0.6417,
+        "2025": 0.6295
+      },
+      "fold_ece": {
+        "2018": 0.0344,
+        "2019": 0.0389,
+        "2020": 0.0475,
+        "2021": 0.0167,
+        "2022": 0.0507,
+        "2023": 0.0218,
+        "2024": 0.0308,
+        "2025": 0.0375
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6448,
+          "ece": 0.0433
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6526,
+          "ece": 0.0497
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6582,
+          "ece": 0.0431
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6335,
+          "ece": 0.0563
+        }
+      }
+    },
+    "xgb_member_5seed_S1": {
+      "report": "models/walkforward/xgb_ens5_s1.json",
+      "candidate": "xgb",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "blend_weight": null,
+      "blend_calibrated": null,
+      "blend_calibrator": null,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6462,
+        "accuracy": 0.6164,
+        "brier": 0.2276,
+        "ece": 0.0194,
+        "joint_log_loss": 2.1775,
+        "method_macro_f1": 0.3314,
+        "round_macro_f1": 0.1872,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6325,
+        "2019": 0.6677,
+        "2020": 0.6544,
+        "2021": 0.6718,
+        "2022": 0.6529,
+        "2023": 0.6443,
+        "2024": 0.6372,
+        "2025": 0.6244
+      },
+      "fold_ece": {
+        "2018": 0.0297,
+        "2019": 0.0271,
+        "2020": 0.0611,
+        "2021": 0.0476,
+        "2022": 0.0561,
+        "2023": 0.032,
+        "2024": 0.0453,
+        "2025": 0.0313
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6403,
+          "ece": 0.0476
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6506,
+          "ece": 0.0592
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6571,
+          "ece": 0.0312
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6315,
+          "ece": 0.062
+        }
+      }
+    },
+    "torch_member_5seed_S1": {
+      "report": "models/walkforward/torch_a1_combined.json",
+      "candidate": "torch",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "blend_weight": null,
+      "blend_calibrated": null,
+      "blend_calibrator": null,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6475,
+        "accuracy": 0.6222,
+        "brier": 0.2281,
+        "ece": 0.0111,
+        "joint_log_loss": 2.3132,
+        "method_macro_f1": 0.3728,
+        "round_macro_f1": 0.3068,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6583,
+        "2019": 0.6665,
+        "2020": 0.6569,
+        "2021": 0.6704,
+        "2022": 0.6428,
+        "2023": 0.638,
+        "2024": 0.6359,
+        "2025": 0.628
+      },
+      "fold_ece": {
+        "2018": 0.0471,
+        "2019": 0.052,
+        "2020": 0.0588,
+        "2021": 0.0442,
+        "2022": 0.0491,
+        "2023": 0.0276,
+        "2024": 0.0372,
+        "2025": 0.0367
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6514,
+          "ece": 0.0204
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6546,
+          "ece": 0.0338
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6538,
+          "ece": 0.0418
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6456,
+          "ece": 0.0508
+        }
+      }
+    }
+  },
+  "ece_gate": {
+    "rule": "4. **Calibration is a gate, not a tiebreak.** A shipping candidate must not have a worse pooled ECE than the incumbent `I` (0.0088). If a candidate clears on log-loss but fails on ECE, it does **not** ship as-is; record it and stop for a human call.",
+    "incumbent_pooled_ece": 0.0088,
+    "B0_pooled_ece": 0.0091,
+    "B1_pooled_ece": 0.0124,
+    "B1_fails_the_gate_as_written": true,
+    "gap_as_written": 0.0036,
+    "incumbent_pooled_ece_by_seed_set": {
+      "0-4 (the number rule 4 names)": 0.0088,
+      "5-9": 0.016,
+      "10-14": 0.0101
+    },
+    "B1_pooled_ece_by_seed_set": {
+      "0-4": 0.0124,
+      "5-9": 0.0144,
+      "10-14": 0.0133
+    },
+    "binning_sensitivity": {
+      "convention": "gap = candidate - incumbent; positive = candidate worse calibrated",
+      "default_n_bins": 10,
+      "rows": [
+        {
+          "n_bins": 5,
+          "incumbent_ece": 0.00817,
+          "candidate_ece": 0.005875,
+          "gap": -0.002295,
+          "candidate_worse": false
+        },
+        {
+          "n_bins": 10,
+          "incumbent_ece": 0.00877,
+          "candidate_ece": 0.012449,
+          "gap": 0.003679,
+          "candidate_worse": true
+        },
+        {
+          "n_bins": 15,
+          "incumbent_ece": 0.018085,
+          "candidate_ece": 0.011676,
+          "gap": -0.006409,
+          "candidate_worse": false
+        },
+        {
+          "n_bins": 20,
+          "incumbent_ece": 0.020722,
+          "candidate_ece": 0.015836,
+          "gap": -0.004886,
+          "candidate_worse": false
+        }
+      ],
+      "sign_flips": true,
+      "candidate_worse_at_every_bin_count": false
+    },
+    "reliability_curves": {
+      "incumbent": {
+        "predictions": "models/walkforward/preds/torch_external_diffsonly_extslice.json",
+        "n": 4804,
+        "n_bins": 10,
+        "pooled_ece": 0.00877,
+        "curve": [
+          {
+            "bin": 0,
+            "lo": 0.0,
+            "hi": 0.1,
+            "n": 12,
+            "weight": 0.002498,
+            "mean_pred": 0.070723,
+            "empirical_rate": 0.0,
+            "gap": 0.070723
+          },
+          {
+            "bin": 1,
+            "lo": 0.1,
+            "hi": 0.2,
+            "n": 85,
+            "weight": 0.017694,
+            "mean_pred": 0.163739,
+            "empirical_rate": 0.152941,
+            "gap": 0.010798
+          },
+          {
+            "bin": 2,
+            "lo": 0.2,
+            "hi": 0.3,
+            "n": 347,
+            "weight": 0.072231,
+            "mean_pred": 0.25306,
+            "empirical_rate": 0.236311,
+            "gap": 0.016749
+          },
+          {
+            "bin": 3,
+            "lo": 0.3,
+            "hi": 0.4,
+            "n": 807,
+            "weight": 0.167985,
+            "mean_pred": 0.35611,
+            "empirical_rate": 0.350682,
+            "gap": 0.005429
+          },
+          {
+            "bin": 4,
+            "lo": 0.4,
+            "hi": 0.5,
+            "n": 1178,
+            "weight": 0.245212,
+            "mean_pred": 0.45193,
+            "empirical_rate": 0.433786,
+            "gap": 0.018144
+          },
+          {
+            "bin": 5,
+            "lo": 0.5,
+            "hi": 0.6,
+            "n": 1232,
+            "weight": 0.256453,
+            "mean_pred": 0.548198,
+            "empirical_rate": 0.54789,
+            "gap": 0.000308
+          },
+          {
+            "bin": 6,
+            "lo": 0.6,
+            "hi": 0.7,
+            "n": 799,
+            "weight": 0.16632,
+            "mean_pred": 0.643429,
+            "empirical_rate": 0.635795,
+            "gap": 0.007634
+          },
+          {
+            "bin": 7,
+            "lo": 0.7,
+            "hi": 0.8,
+            "n": 289,
+            "weight": 0.060158,
+            "mean_pred": 0.738959,
+            "empirical_rate": 0.743945,
+            "gap": -0.004986
+          },
+          {
+            "bin": 8,
+            "lo": 0.8,
+            "hi": 0.9,
+            "n": 55,
+            "weight": 0.011449,
+            "mean_pred": 0.834102,
+            "empirical_rate": 0.818182,
+            "gap": 0.01592
+          },
+          {
+            "bin": 9,
+            "lo": 0.9,
+            "hi": 1.0,
+            "n": 0,
+            "weight": 0.0,
+            "mean_pred": null,
+            "empirical_rate": null,
+            "gap": null
+          }
+        ],
+        "top_ece_contributors": [
+          {
+            "bin": 4,
+            "lo": 0.4,
+            "hi": 0.5,
+            "n": 1178,
+            "weight": 0.245212,
+            "mean_pred": 0.45193,
+            "empirical_rate": 0.433786,
+            "gap": 0.018144,
+            "ece_contribution": 0.004449
+          },
+          {
+            "bin": 6,
+            "lo": 0.6,
+            "hi": 0.7,
+            "n": 799,
+            "weight": 0.16632,
+            "mean_pred": 0.643429,
+            "empirical_rate": 0.635795,
+            "gap": 0.007634,
+            "ece_contribution": 0.00127
+          },
+          {
+            "bin": 2,
+            "lo": 0.2,
+            "hi": 0.3,
+            "n": 347,
+            "weight": 0.072231,
+            "mean_pred": 0.25306,
+            "empirical_rate": 0.236311,
+            "gap": 0.016749,
+            "ece_contribution": 0.00121
+          }
+        ]
+      },
+      "B1": {
+        "predictions": "models/walkforward/preds/blend_b1.json",
+        "n": 4804,
+        "n_bins": 10,
+        "pooled_ece": 0.012449,
+        "curve": [
+          {
+            "bin": 0,
+            "lo": 0.0,
+            "hi": 0.1,
+            "n": 21,
+            "weight": 0.004371,
+            "mean_pred": 0.076222,
+            "empirical_rate": 0.095238,
+            "gap": -0.019017
+          },
+          {
+            "bin": 1,
+            "lo": 0.1,
+            "hi": 0.2,
+            "n": 160,
+            "weight": 0.033306,
+            "mean_pred": 0.164838,
+            "empirical_rate": 0.18125,
+            "gap": -0.016412
+          },
+          {
+            "bin": 2,
+            "lo": 0.2,
+            "hi": 0.3,
+            "n": 445,
+            "weight": 0.092631,
+            "mean_pred": 0.257871,
+            "empirical_rate": 0.253933,
+            "gap": 0.003939
+          },
+          {
+            "bin": 3,
+            "lo": 0.3,
+            "hi": 0.4,
+            "n": 784,
+            "weight": 0.163197,
+            "mean_pred": 0.355424,
+            "empirical_rate": 0.359694,
+            "gap": -0.004269
+          },
+          {
+            "bin": 4,
+            "lo": 0.4,
+            "hi": 0.5,
+            "n": 1108,
+            "weight": 0.230641,
+            "mean_pred": 0.450479,
+            "empirical_rate": 0.456679,
+            "gap": -0.006199
+          },
+          {
+            "bin": 5,
+            "lo": 0.5,
+            "hi": 0.6,
+            "n": 1063,
+            "weight": 0.221274,
+            "mean_pred": 0.548389,
+            "empirical_rate": 0.543744,
+            "gap": 0.004645
+          },
+          {
+            "bin": 6,
+            "lo": 0.6,
+            "hi": 0.7,
+            "n": 769,
+            "weight": 0.160075,
+            "mean_pred": 0.646575,
+            "empirical_rate": 0.617685,
+            "gap": 0.02889
+          },
+          {
+            "bin": 7,
+            "lo": 0.7,
+            "hi": 0.8,
+            "n": 352,
+            "weight": 0.073272,
+            "mean_pred": 0.742183,
+            "empirical_rate": 0.767045,
+            "gap": -0.024862
+          },
+          {
+            "bin": 8,
+            "lo": 0.8,
+            "hi": 0.9,
+            "n": 98,
+            "weight": 0.0204,
+            "mean_pred": 0.832214,
+            "empirical_rate": 0.744898,
+            "gap": 0.087316
+          },
+          {
+            "bin": 9,
+            "lo": 0.9,
+            "hi": 1.0,
+            "n": 4,
+            "weight": 0.000833,
+            "mean_pred": 0.912528,
+            "empirical_rate": 1.0,
+            "gap": -0.087472
+          }
+        ],
+        "top_ece_contributors": [
+          {
+            "bin": 6,
+            "lo": 0.6,
+            "hi": 0.7,
+            "n": 769,
+            "weight": 0.160075,
+            "mean_pred": 0.646575,
+            "empirical_rate": 0.617685,
+            "gap": 0.02889,
+            "ece_contribution": 0.004625
+          },
+          {
+            "bin": 7,
+            "lo": 0.7,
+            "hi": 0.8,
+            "n": 352,
+            "weight": 0.073272,
+            "mean_pred": 0.742183,
+            "empirical_rate": 0.767045,
+            "gap": -0.024862,
+            "ece_contribution": 0.001822
+          },
+          {
+            "bin": 8,
+            "lo": 0.8,
+            "hi": 0.9,
+            "n": 98,
+            "weight": 0.0204,
+            "mean_pred": 0.832214,
+            "empirical_rate": 0.744898,
+            "gap": 0.087316,
+            "ece_contribution": 0.001781
+          }
+        ]
+      },
+      "B1_isotonic_remediation": {
+        "predictions": "models/walkforward/preds/blend_b1_isotonic.json",
+        "n": 4804,
+        "n_bins": 10,
+        "pooled_ece": 0.028879,
+        "curve": [
+          {
+            "bin": 0,
+            "lo": 0.0,
+            "hi": 0.1,
+            "n": 119,
+            "weight": 0.024771,
+            "mean_pred": 0.027688,
+            "empirical_rate": 0.168067,
+            "gap": -0.140379
+          },
+          {
+            "bin": 1,
+            "lo": 0.1,
+            "hi": 0.2,
+            "n": 100,
+            "weight": 0.020816,
+            "mean_pred": 0.136811,
+            "empirical_rate": 0.2,
+            "gap": -0.063189
+          },
+          {
+            "bin": 2,
+            "lo": 0.2,
+            "hi": 0.3,
+            "n": 417,
+            "weight": 0.086803,
+            "mean_pred": 0.255224,
+            "empirical_rate": 0.261391,
+            "gap": -0.006167
+          },
+          {
+            "bin": 3,
+            "lo": 0.3,
+            "hi": 0.4,
+            "n": 769,
+            "weight": 0.160075,
+            "mean_pred": 0.343766,
+            "empirical_rate": 0.381014,
+            "gap": -0.037249
+          },
+          {
+            "bin": 4,
+            "lo": 0.4,
+            "hi": 0.5,
+            "n": 1100,
+            "weight": 0.228976,
+            "mean_pred": 0.440616,
+            "empirical_rate": 0.451818,
+            "gap": -0.011202
+          },
+          {
+            "bin": 5,
+            "lo": 0.5,
+            "hi": 0.6,
+            "n": 1040,
+            "weight": 0.216486,
+            "mean_pred": 0.541156,
+            "empirical_rate": 0.535577,
+            "gap": 0.00558
+          },
+          {
+            "bin": 6,
+            "lo": 0.6,
+            "hi": 0.7,
+            "n": 696,
+            "weight": 0.144879,
+            "mean_pred": 0.643069,
+            "empirical_rate": 0.610632,
+            "gap": 0.032437
+          },
+          {
+            "bin": 7,
+            "lo": 0.7,
+            "hi": 0.8,
+            "n": 308,
+            "weight": 0.064113,
+            "mean_pred": 0.746756,
+            "empirical_rate": 0.701299,
+            "gap": 0.045457
+          },
+          {
+            "bin": 8,
+            "lo": 0.8,
+            "hi": 0.9,
+            "n": 147,
+            "weight": 0.0306,
+            "mean_pred": 0.830254,
+            "empirical_rate": 0.721088,
+            "gap": 0.109165
+          },
+          {
+            "bin": 9,
+            "lo": 0.9,
+            "hi": 1.0,
+            "n": 108,
+            "weight": 0.022481,
+            "mean_pred": 0.951325,
+            "empirical_rate": 0.824074,
+            "gap": 0.127251
+          }
+        ],
+        "top_ece_contributors": [
+          {
+            "bin": 3,
+            "lo": 0.3,
+            "hi": 0.4,
+            "n": 769,
+            "weight": 0.160075,
+            "mean_pred": 0.343766,
+            "empirical_rate": 0.381014,
+            "gap": -0.037249,
+            "ece_contribution": 0.005963
+          },
+          {
+            "bin": 6,
+            "lo": 0.6,
+            "hi": 0.7,
+            "n": 696,
+            "weight": 0.144879,
+            "mean_pred": 0.643069,
+            "empirical_rate": 0.610632,
+            "gap": 0.032437,
+            "ece_contribution": 0.004699
+          },
+          {
+            "bin": 0,
+            "lo": 0.0,
+            "hi": 0.1,
+            "n": 119,
+            "weight": 0.024771,
+            "mean_pred": 0.027688,
+            "empirical_rate": 0.168067,
+            "gap": -0.140379,
+            "ece_contribution": 0.003477
+          }
+        ]
+      }
+    },
+    "not_resolved_here": "Rule 4 sends this to a human. The facts above are what the call needs; the call itself is not taken by this script."
+  },
+  "remediation_isotonic": {
+    "label": "POST-HOC VARIANT -- NOT A CANDIDATE AND NOT A SHIPPING FORM",
+    "what_it_changes": "Only the calibration step the pre-registration already specifies. The candidate is defined as 'temperature-scaled after averaging'; this fits an isotonic regression on the same fold inner-validation year instead, on the reasoning that one scalar cannot fix a SHAPE mismatch between two differently-calibrated probability streams.",
+    "provenance": "Measured after seeing B1 fail the ECE gate. It has no fresh-seed confirmation of its own; rule 2 would require one before it could ship in any form, and rule 3's choice between candidates does not contemplate it at all.",
+    "report": {
+      "report": "models/walkforward/blend_b1_isotonic.json",
+      "candidate": "blend",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "blend_weight": 0.5,
+      "blend_calibrated": true,
+      "blend_calibrator": "isotonic",
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.7049,
+        "accuracy": 0.6159,
+        "brier": 0.2305,
+        "ece": 0.0289,
+        "joint_log_loss": 2.2627,
+        "method_macro_f1": 0.3385,
+        "round_macro_f1": 0.2793,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6702,
+        "2019": 0.8613,
+        "2020": 0.6626,
+        "2021": 0.7466,
+        "2022": 0.6526,
+        "2023": 0.7679,
+        "2024": 0.6381,
+        "2025": 0.6655
+      },
+      "fold_ece": {
+        "2018": 0.0555,
+        "2019": 0.0416,
+        "2020": 0.0546,
+        "2021": 0.1012,
+        "2022": 0.0399,
+        "2023": 0.0319,
+        "2024": 0.0406,
+        "2025": 0.0498
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.7206,
+          "ece": 0.0427
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.703,
+          "ece": 0.0519
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6747,
+          "ece": 0.0661
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.665,
+          "ece": 0.0524
+        }
+      }
+    },
+    "bar_check_against_the_paired_S1_torch_arm": {
+      "bar": 0.003,
+      "sigma_seed": 9.999999999998899e-05,
+      "delta": 0.0574,
+      "fold_deltas": {
+        "2018": 0.0119,
+        "2019": 0.1948,
+        "2020": 0.0057,
+        "2021": 0.0762,
+        "2022": 0.0098,
+        "2023": 0.1299,
+        "2024": 0.0022,
+        "2025": 0.0375
+      },
+      "worst_fold_delta": 0.1948,
+      "comparable": true,
+      "missing_folds": [],
+      "clears_delta": false,
+      "no_fold_regression": false,
+      "ships": false
+    },
+    "slice_deltas_against_the_paired_S1_torch_arm": [
+      {
+        "slice": "debut",
+        "candidate_n": 983,
+        "incumbent_n": 983,
+        "candidate_winner_log_loss": 0.7206,
+        "incumbent_winner_log_loss": 0.6514,
+        "delta": 0.0692
+      },
+      {
+        "slice": "womens",
+        "candidate_n": 779,
+        "incumbent_n": 779,
+        "candidate_winner_log_loss": 0.703,
+        "incumbent_winner_log_loss": 0.6546,
+        "delta": 0.0484
+      },
+      {
+        "slice": "five_round",
+        "candidate_n": 420,
+        "incumbent_n": 420,
+        "candidate_winner_log_loss": 0.6747,
+        "incumbent_winner_log_loss": 0.6538,
+        "delta": 0.0209
+      },
+      {
+        "slice": "external_missing",
+        "candidate_n": 779,
+        "incumbent_n": 779,
+        "candidate_winner_log_loss": 0.665,
+        "incumbent_winner_log_loss": 0.6456,
+        "delta": 0.0194
+      }
+    ],
+    "vs_B1_temperature": {
+      "winner_log_loss": 0.0612,
+      "ece": 0.0165
+    },
+    "vs_incumbent_I": {
+      "winner_log_loss": 0.0573,
+      "ece": 0.0201
+    }
+  },
+  "rules": {
+    "quoted_verbatim_from": "docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md",
+    "text": {
+      "1": "1. Build the fresh-seed paired incumbent for each candidate's table the way SP2 did (the deployed recipe re-run under a different name with the same drop-columns), and verify it reproduces the committed incumbent bit-exactly where the table is S0.",
+      "2": "2. A candidate **ships** only if it clears the bar against `I` at seeds 0\u20134 **and** clears it again on a fresh-seed re-score at seeds 5\u20139. Both required.",
+      "3": "3. **Choice between candidates:** if both clear, ship **B0** unless B1 beats B0 by more than `max(0.003, 2\u00b7\u03c3_blend)`. Rationale fixed in advance: B0 is the smaller change and does not resurrect four blocks that failed on their own; B1 must earn its complexity by the same margin any other change would.",
+      "4": "4. **Calibration is a gate, not a tiebreak.** A shipping candidate must not have a worse pooled ECE than the incumbent `I` (0.0088). If a candidate clears on log-loss but fails on ECE, it does **not** ship as-is; record it and stop for a human call.",
+      "5": "5. If nothing clears, revert and record \u2014 the third such outcome in this project, and a further argument that the current data and model family are at their ceiling."
+    },
+    "status": {
+      "1": {
+        "satisfied": true,
+        "evidence": "Paired incumbents exist on both tables at both seed sets: torch_external_diffsonly_extslice.json / torch_external_diffsonly_seeds5.json on S0 and torch_a1_combined.json / torch_a1_combined_seeds5.json on S1, each the deployed recipe with the candidate's own drop-columns. The S0 incumbent was re-run under this branch's code and reproduces its committed report in every pooled metric, every fold metric, every slice and every per-fold fit budget; the only difference anywhere in the JSON is a `config.model_seed: null` key, which SP2.1 added to the run-config schema after that report was written and which no learner reads."
+      },
+      "2": {
+        "B0": {
+          "clears_at_seeds_0_4": false,
+          "clears_at_seeds_5_9": false,
+          "rule_2_satisfied": false
+        },
+        "B1": {
+          "clears_at_seeds_0_4": true,
+          "clears_at_seeds_5_9": true,
+          "rule_2_satisfied": true
+        },
+        "satisfied_by": [
+          "B1"
+        ]
+      },
+      "3": {
+        "applies": false,
+        "B1_minus_B0": -0.0016,
+        "margin_required": 0.003,
+        "note": "Rule 3 chooses between two candidates that BOTH clear rule 2. Clearing it: ['B1']."
+      },
+      "4": {
+        "applies": true,
+        "resolved": false,
+        "reason": "reserved for a human call by the rule's own text"
+      },
+      "5": {
+        "applies": false,
+        "note": "rule 5 is the nothing-clears branch; B1 clears on log-loss."
+      }
+    }
+  },
+  "awaiting_human_call": {
+    "blocked_on": "rule 4",
+    "rule": "4. **Calibration is a gate, not a tiebreak.** A shipping candidate must not have a worse pooled ECE than the incumbent `I` (0.0088). If a candidate clears on log-loss but fails on ECE, it does **not** ship as-is; record it and stop for a human call.",
+    "why": "B1 satisfies rule 2 -- it clears the bar against I at seeds 0-4 and clears it again at seeds 5-9 against the fresh-seed paired incumbent -- and then fails rule 4 as written, because its pooled ECE is worse than I's. Rule 4's own text sends that case to a human: 'record it and stop for a human call'. Nothing in this artifact resolves it, nothing was deployed and nothing was reverted.",
+    "what_the_call_needs": [
+      "the ECE noise floors, which say how much of the ECE gap is measurable",
+      "the bin-count sweep, which says whether the gap survives a different binning of the same predictions",
+      "the reliability curves, which say WHERE the miscalibration sits",
+      "the isotonic remediation, which is a post-hoc variant and would itself need a fresh-seed confirmation before it could ship"
+    ]
+  }
+}

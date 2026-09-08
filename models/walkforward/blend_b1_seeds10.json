@@ -1,0 +1,649 @@
+{
+  "name": "blend_b1_seeds10",
+  "config": {
+    "candidate": "blend",
+    "seeds": "10,11,12,13,14",
+    "model_seed": null,
+    "config": {},
+    "train_start": null,
+    "half_life": null,
+    "fixed_budget_from": null,
+    "budget": {},
+    "drop_columns": [
+      "external_missing",
+      "same_country",
+      "notice_unknown",
+      "home_country_a",
+      "home_country_b"
+    ],
+    "n_feature_rows": 11238,
+    "features_max_date": "2026-08-08",
+    "runtime_sec": 139.9,
+    "blend_weight": 0.5,
+    "blend_calibrated": true
+  },
+  "fold_years": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "folds": {
+    "2018": {
+      "n": 522,
+      "winner_log_loss": 0.6365,
+      "accuracy": 0.6149,
+      "brier": 0.2237,
+      "ece": 0.0453,
+      "joint_log_loss": 2.2335,
+      "method_macro_f1": 0.3283,
+      "round_macro_f1": 0.2822,
+      "n_method": 521,
+      "n_round": 280
+    },
+    "2019": {
+      "n": 553,
+      "winner_log_loss": 0.6642,
+      "accuracy": 0.5877,
+      "brier": 0.2358,
+      "ece": 0.0572,
+      "joint_log_loss": 2.1507,
+      "method_macro_f1": 0.364,
+      "round_macro_f1": 0.2792,
+      "n_method": 552,
+      "n_round": 257
+    },
+    "2020": {
+      "n": 492,
+      "winner_log_loss": 0.6499,
+      "accuracy": 0.6565,
+      "brier": 0.2284,
+      "ece": 0.0789,
+      "joint_log_loss": 2.2092,
+      "method_macro_f1": 0.3316,
+      "round_macro_f1": 0.2857,
+      "n_method": 490,
+      "n_round": 247
+    },
+    "2021": {
+      "n": 546,
+      "winner_log_loss": 0.675,
+      "accuracy": 0.5751,
+      "brier": 0.2408,
+      "ece": 0.0737,
+      "joint_log_loss": 2.2353,
+      "method_macro_f1": 0.307,
+      "round_macro_f1": 0.2049,
+      "n_method": 544,
+      "n_round": 270
+    },
+    "2022": {
+      "n": 582,
+      "winner_log_loss": 0.646,
+      "accuracy": 0.6048,
+      "brier": 0.2273,
+      "ece": 0.0501,
+      "joint_log_loss": 2.2507,
+      "method_macro_f1": 0.3206,
+      "round_macro_f1": 0.3487,
+      "n_method": 581,
+      "n_round": 318
+    },
+    "2023": {
+      "n": 581,
+      "winner_log_loss": 0.6376,
+      "accuracy": 0.6506,
+      "brier": 0.2235,
+      "ece": 0.0383,
+      "joint_log_loss": 2.2355,
+      "method_macro_f1": 0.3227,
+      "round_macro_f1": 0.2422,
+      "n_method": 578,
+      "n_round": 303
+    },
+    "2024": {
+      "n": 593,
+      "winner_log_loss": 0.634,
+      "accuracy": 0.6256,
+      "brier": 0.2218,
+      "ece": 0.0267,
+      "joint_log_loss": 2.1258,
+      "method_macro_f1": 0.3567,
+      "round_macro_f1": 0.2684,
+      "n_method": 591,
+      "n_round": 270
+    },
+    "2025": {
+      "n": 935,
+      "winner_log_loss": 0.6211,
+      "accuracy": 0.6503,
+      "brier": 0.2163,
+      "ece": 0.0151,
+      "joint_log_loss": 2.1901,
+      "method_macro_f1": 0.3558,
+      "round_macro_f1": 0.2979,
+      "n_method": 935,
+      "n_round": 501
+    }
+  },
+  "pooled": {
+    "n": 4804,
+    "winner_log_loss": 0.6434,
+    "accuracy": 0.6228,
+    "brier": 0.2263,
+    "ece": 0.0133,
+    "joint_log_loss": 2.2023,
+    "method_macro_f1": 0.3394,
+    "round_macro_f1": 0.283,
+    "n_method": 4792,
+    "n_round": 2446
+  },
+  "slices": {
+    "debut": {
+      "n": 983,
+      "winner_log_loss": 0.6402,
+      "accuracy": 0.6185,
+      "brier": 0.2246,
+      "ece": 0.0197,
+      "joint_log_loss": 2.268,
+      "method_macro_f1": 0.3406,
+      "round_macro_f1": 0.1831,
+      "n_method": 980,
+      "n_round": 559
+    },
+    "womens": {
+      "n": 779,
+      "winner_log_loss": 0.6516,
+      "accuracy": 0.6021,
+      "brier": 0.2302,
+      "ece": 0.0442,
+      "joint_log_loss": 1.9948,
+      "method_macro_f1": 0.2885,
+      "round_macro_f1": 0.2504,
+      "n_method": 777,
+      "n_round": 277
+    },
+    "five_round": {
+      "n": 420,
+      "winner_log_loss": 0.6581,
+      "accuracy": 0.6238,
+      "brier": 0.2331,
+      "ece": 0.0545,
+      "joint_log_loss": 2.4406,
+      "method_macro_f1": 0.36,
+      "round_macro_f1": 0.1629,
+      "n_method": 419,
+      "n_round": 233
+    },
+    "external_missing": {
+      "n": 779,
+      "winner_log_loss": 0.6301,
+      "accuracy": 0.629,
+      "brier": 0.2204,
+      "ece": 0.0424,
+      "joint_log_loss": 2.2611,
+      "method_macro_f1": 0.3485,
+      "round_macro_f1": 0.1866,
+      "n_method": 777,
+      "n_round": 462
+    }
+  },
+  "fit_info": {
+    "blend_weight": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "temperature": [
+      0.7400000000000002,
+      0.7800000000000002,
+      0.9400000000000004,
+      0.7600000000000002,
+      1.0200000000000005,
+      0.8000000000000003,
+      0.8500000000000003,
+      0.8400000000000003
+    ],
+    "calibrated": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "n_train": [
+      5949,
+      6434,
+      6956,
+      7509,
+      8001,
+      8547,
+      9129,
+      9710
+    ],
+    "xgb": [
+      {
+        "best_iteration": {
+          "winner": [
+            80,
+            66,
+            115,
+            71,
+            82
+          ],
+          "method": [
+            60,
+            103,
+            98,
+            90,
+            85
+          ],
+          "round": [
+            50,
+            64,
+            50,
+            74,
+            71
+          ]
+        },
+        "n_train": 5949
+      },
+      {
+        "best_iteration": {
+          "winner": [
+            150,
+            176,
+            150,
+            162,
+            157
+          ],
+          "method": [
+            86,
+            75,
+            68,
+            91,
+            99
+          ],
+          "round": [
+            71,
+            69,
+            73,
+            63,
+            45
+          ]
+        },
+        "n_train": 6434
+      },
+      {
+        "best_iteration": {
+          "winner": [
+            151,
+            129,
+            157,
+            81,
+            106
+          ],
+          "method": [
+            183,
+            166,
+            190,
+            168,
+            166
+          ],
+          "round": [
+            76,
+            122,
+            119,
+            76,
+            121
+          ]
+        },
+        "n_train": 6956
+      },
+      {
+        "best_iteration": {
+          "winner": [
+            101,
+            86,
+            79,
+            75,
+            100
+          ],
+          "method": [
+            47,
+            33,
+            45,
+            39,
+            44
+          ],
+          "round": [
+            37,
+            19,
+            35,
+            32,
+            42
+          ]
+        },
+        "n_train": 7509
+      },
+      {
+        "best_iteration": {
+          "winner": [
+            122,
+            130,
+            158,
+            78,
+            132
+          ],
+          "method": [
+            27,
+            31,
+            41,
+            35,
+            30
+          ],
+          "round": [
+            146,
+            87,
+            100,
+            90,
+            74
+          ]
+        },
+        "n_train": 8001
+      },
+      {
+        "best_iteration": {
+          "winner": [
+            113,
+            121,
+            87,
+            84,
+            138
+          ],
+          "method": [
+            61,
+            64,
+            67,
+            105,
+            91
+          ],
+          "round": [
+            94,
+            127,
+            141,
+            108,
+            99
+          ]
+        },
+        "n_train": 8547
+      },
+      {
+        "best_iteration": {
+          "winner": [
+            100,
+            157,
+            97,
+            144,
+            129
+          ],
+          "method": [
+            25,
+            18,
+            27,
+            25,
+            26
+          ],
+          "round": [
+            58,
+            55,
+            43,
+            53,
+            60
+          ]
+        },
+        "n_train": 9129
+      },
+      {
+        "best_iteration": {
+          "winner": [
+            191,
+            176,
+            157,
+            147,
+            126
+          ],
+          "method": [
+            244,
+            216,
+            252,
+            184,
+            189
+          ],
+          "round": [
+            64,
+            84,
+            72,
+            80,
+            82
+          ]
+        },
+        "n_train": 9710
+      }
+    ],
+    "torch": [
+      {
+        "best_epoch": [
+          2,
+          6,
+          4,
+          11,
+          13
+        ],
+        "temperature": [
+          1.2,
+          1.24,
+          1.11,
+          1.3,
+          1.41
+        ],
+        "epochs_run": [
+          23,
+          27,
+          25,
+          32,
+          34
+        ],
+        "n_train": 5949,
+        "torch_threads": 1
+      },
+      {
+        "best_epoch": [
+          5,
+          16,
+          13,
+          6,
+          9
+        ],
+        "temperature": [
+          1.11,
+          1.22,
+          1.19,
+          1.04,
+          1.15
+        ],
+        "epochs_run": [
+          26,
+          37,
+          34,
+          27,
+          30
+        ],
+        "n_train": 6434,
+        "torch_threads": 1
+      },
+      {
+        "best_epoch": [
+          13,
+          10,
+          4,
+          14,
+          13
+        ],
+        "temperature": [
+          1.43,
+          1.35,
+          1.21,
+          1.44,
+          1.34
+        ],
+        "epochs_run": [
+          34,
+          31,
+          25,
+          35,
+          34
+        ],
+        "n_train": 6956,
+        "torch_threads": 1
+      },
+      {
+        "best_epoch": [
+          4,
+          9,
+          2,
+          3,
+          7
+        ],
+        "temperature": [
+          0.99,
+          1.28,
+          1.06,
+          1.15,
+          1.1
+        ],
+        "epochs_run": [
+          25,
+          30,
+          23,
+          24,
+          28
+        ],
+        "n_train": 7509,
+        "torch_threads": 1
+      },
+      {
+        "best_epoch": [
+          0,
+          0,
+          6,
+          2,
+          2
+        ],
+        "temperature": [
+          1.2,
+          1.26,
+          1.33,
+          1.34,
+          1.4
+        ],
+        "epochs_run": [
+          21,
+          21,
+          27,
+          23,
+          23
+        ],
+        "n_train": 8001,
+        "torch_threads": 1
+      },
+      {
+        "best_epoch": [
+          6,
+          6,
+          2,
+          2,
+          15
+        ],
+        "temperature": [
+          0.9,
+          0.84,
+          0.81,
+          0.76,
+          1.0
+        ],
+        "epochs_run": [
+          27,
+          27,
+          23,
+          23,
+          36
+        ],
+        "n_train": 8547,
+        "torch_threads": 1
+      },
+      {
+        "best_epoch": [
+          11,
+          5,
+          4,
+          3,
+          5
+        ],
+        "temperature": [
+          1.12,
+          0.95,
+          0.88,
+          0.9,
+          1.0
+        ],
+        "epochs_run": [
+          32,
+          26,
+          25,
+          24,
+          26
+        ],
+        "n_train": 9129,
+        "torch_threads": 1
+      },
+      {
+        "best_epoch": [
+          3,
+          2,
+          5,
+          8,
+          6
+        ],
+        "temperature": [
+          0.89,
+          0.91,
+          0.93,
+          0.95,
+          1.03
+        ],
+        "epochs_run": [
+          24,
+          23,
+          26,
+          29,
+          27
+        ],
+        "n_train": 9710,
+        "torch_threads": 1
+      }
+    ]
+  }
+}

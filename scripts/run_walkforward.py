@@ -12,6 +12,8 @@ Examples:
   python scripts/run_walkforward.py --candidate xgb --name xgb_v1_seed1 --model-seed 1
   python scripts/run_walkforward.py --candidate xgb --name xgb_ens5 --seeds 0,1,2,3,4
   python scripts/run_walkforward.py --candidate blend --name blend_b0 --seeds 0,1,2,3,4 --blend-weight 0.5
+  python scripts/run_walkforward.py --candidate blend --name blend_b1_isotonic --blend-calibrator isotonic
+  python scripts/run_walkforward.py --candidate torch --name torch_v1 --dump-predictions models/walkforward/preds/torch_v1.json
 
 Reports land in models/walkforward/<name>.json. Nothing here touches the
 deployed artifacts under models/torch or models/xgb_*.json.
@@ -30,9 +32,11 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mma.candidates import BlendCandidate, EloCandidate, TorchCandidate, XGBCandidate  # noqa: E402
+from mma.candidates import (  # noqa: E402
+    CALIBRATORS, BlendCandidate, EloCandidate, TorchCandidate, XGBCandidate,
+)
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES  # noqa: E402
-from mma.walkforward import build_report, make_folds, recency_weights  # noqa: E402
+from mma.walkforward import build_report, make_folds, pool, recency_weights  # noqa: E402
 
 PROCESSED = ROOT / "data" / "processed"
 OUT_DIR = ROOT / "models" / "walkforward"
@@ -234,7 +238,19 @@ def resolve_blend(args: argparse.Namespace) -> dict | None:
     weight = 0.5 if args.blend_weight is None else float(args.blend_weight)
     if not 0.0 <= weight <= 1.0:
         raise SystemExit(f"--blend-weight must be in [0, 1] (got {args.blend_weight})")
-    return {"blend_weight": weight, "blend_calibrated": not args.no_blend_calibration}
+    if args.blend_calibrator not in CALIBRATORS:
+        raise SystemExit(
+            f"--blend-calibrator must be one of {CALIBRATORS} (got {args.blend_calibrator!r})"
+        )
+    if args.no_blend_calibration and args.blend_calibrator != "temperature":
+        raise SystemExit(
+            "--no-blend-calibration turns the post-average calibrator off, so it cannot be "
+            f"combined with --blend-calibrator {args.blend_calibrator}"
+        )
+    out = {"blend_weight": weight, "blend_calibrated": not args.no_blend_calibration}
+    if args.blend_calibrator != "temperature":  # keep the committed reports' config shape
+        out["blend_calibrator"] = args.blend_calibrator
+    return out
 
 
 def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | None,
@@ -260,7 +276,8 @@ def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | No
                 "the flag cannot say which one it configures; both run their deployed configs"
             )
         return BlendCandidate(name=name, seeds=tuple(seeds), weight=blend["blend_weight"],
-                              calibrate=blend["blend_calibrated"], drop_columns=drop_columns)
+                              calibrate=blend["blend_calibrated"], drop_columns=drop_columns,
+                              calibrator=blend.get("blend_calibrator", "temperature"))
     needed = "fixed_rounds" if kind == "xgb" else "fixed_epochs"
     if budget is not None and needed not in budget:
         raise SystemExit(
@@ -275,6 +292,34 @@ def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | No
     return TorchCandidate(name=name, seeds=tuple(seeds), config=config,
                          fixed_epochs=budget.get("fixed_epochs"), temperature=budget.get("temperature"),
                          drop_columns=drop_columns)
+
+
+def prediction_dump(name: str, features: pd.DataFrame, fold_results: list) -> dict:
+    """Pooled evaluation rows as (fold year, y_winner, p_winner), row-aligned.
+
+    Row order is `walkforward.pool`'s -- the concatenation order of the folds,
+    which is also the order every pooled metric in the report is computed over,
+    so a metric recomputed from this dump is the report's metric and not a
+    lookalike over a different row set. Winner probabilities are written at
+    full precision: ECE at a different bin count moves in the fourth decimal,
+    which rounding to the report's 4 dp would erase.
+
+    It exists because the reports carry metrics and no predictions, and SP2.2's
+    ECE gate needs the underlying calibration curve -- which bins a candidate
+    is miscalibrated in, and whether the incumbent/candidate gap survives a
+    different `n_bins` -- to be applied as anything other than two rounded
+    numbers compared with no known precision.
+    """
+    pooled_feats, pooled_pred = pool(features, [(m, p) for _, m, p, _ in fold_results])
+    years = np.concatenate([np.full(int(np.asarray(m, dtype=bool).sum()), int(y))
+                            for y, m, _, _ in fold_results])
+    return {
+        "name": name,
+        "n": int(len(pooled_feats)),
+        "fold_year": [int(v) for v in years],
+        "y_winner": [float(v) for v in pooled_feats["y_winner"].to_numpy(dtype=float)],
+        "p_winner": [float(v) for v in np.asarray(pooled_pred["winner"], dtype=float)],
+    }
 
 
 def main() -> None:
@@ -299,12 +344,22 @@ def main() -> None:
     parser.add_argument("--blend-weight", type=float, default=None,
                         help="blend candidate: weight on the XGB member (default 0.5, the "
                              "pre-registered value; 0.3/0.7 are a flatness diagnostic only)")
+    parser.add_argument("--blend-calibrator", default="temperature", choices=list(CALIBRATORS),
+                        help="blend candidate: post-average calibrator fitted on the fold's "
+                             "inner-validation year. 'temperature' is the pre-registered "
+                             "step; 'isotonic' is SP2.2 Task 3's post-hoc remediation "
+                             "diagnostic and is not a shipping form")
     parser.add_argument("--no-blend-calibration", action="store_true",
                         help="blend candidate: skip the post-average temperature (diagnostic)")
     parser.add_argument("--drop-columns", default=None,
                         help="comma-separated feature columns to hold out of the model matrix "
                              "(they stay in the table, so slices keyed on them still report)")
     parser.add_argument("--out-dir", type=Path, default=OUT_DIR)
+    parser.add_argument("--dump-predictions", type=Path, default=None,
+                        help="also write the pooled evaluation rows' y_winner/p_winner to "
+                             "this JSON path, so calibration diagnostics (reliability "
+                             "curves, ECE at other bin counts) are computable without a "
+                             "re-run. The report itself is unaffected")
     args = parser.parse_args()
 
     features = (
@@ -348,6 +403,11 @@ def main() -> None:
     print(json.dumps({"pooled": report["pooled"],
                       "folds": {y: f["winner_log_loss"] for y, f in report["folds"].items()}}, indent=2))
     print(f"wrote {out}")
+    if args.dump_predictions is not None:
+        dump = prediction_dump(args.name, features, fold_results)
+        args.dump_predictions.parent.mkdir(parents=True, exist_ok=True)
+        args.dump_predictions.write_text(json.dumps(dump) + "\n")
+        print(f"wrote {args.dump_predictions} ({dump['n']} pooled rows)")
 
 
 if __name__ == "__main__":

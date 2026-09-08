@@ -224,7 +224,8 @@ def test_random_state_reaches_the_fitted_estimator():
 
 def _ens_args(**overrides) -> argparse.Namespace:
     base = {"candidate": "torch", "seeds": None, "model_seed": None,
-            "blend_weight": None, "no_blend_calibration": False}
+            "blend_weight": None, "no_blend_calibration": False,
+            "blend_calibrator": "temperature"}
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -294,3 +295,83 @@ def test_the_blend_hands_both_members_the_same_seeds():
     assert blend.seeds == (0, 1, 2)
     assert xgb.seeds == (0, 1, 2) and torch_member.seeds == (0, 1, 2)
     assert blend.weight == 0.3 and blend.calibrate is False
+
+
+def test_the_default_calibrator_leaves_the_committed_blend_config_shape_alone():
+    """`blend_calibrator` appears in the run config only when it is NOT the
+    pre-registered temperature, so a default blend report is shaped exactly
+    like the committed B0/B1 ones."""
+    assert "blend_calibrator" not in rwf.resolve_blend(_ens_args(candidate="blend"))
+    assert rwf.resolve_blend(_ens_args(candidate="blend", blend_calibrator="isotonic")) == {
+        "blend_weight": 0.5, "blend_calibrated": True, "blend_calibrator": "isotonic",
+    }
+
+
+def test_an_unknown_or_contradictory_calibrator_is_a_usage_error():
+    with pytest.raises(SystemExit, match="--blend-calibrator must be one of"):
+        rwf.resolve_blend(_ens_args(candidate="blend", blend_calibrator="platt"))
+    with pytest.raises(SystemExit, match="cannot be combined"):
+        rwf.resolve_blend(_ens_args(candidate="blend", blend_calibrator="isotonic",
+                                    no_blend_calibration=True))
+
+
+def test_build_candidate_passes_the_calibrator_through_to_the_blend():
+    default = rwf.build_candidate("blend", "b", (0,), {}, None, (),
+                                  {"blend_weight": 0.5, "blend_calibrated": True})
+    assert default.calibrator == "temperature"
+    iso = rwf.build_candidate("blend", "b", (0,), {}, None, (),
+                              {"blend_weight": 0.5, "blend_calibrated": True,
+                               "blend_calibrator": "isotonic"})
+    assert iso.calibrator == "isotonic"
+
+
+# --- prediction_dump --------------------------------------------------------
+
+
+def _dump_frame():
+    return pd.DataFrame({
+        "y_winner": [1.0, 0.0, 1.0, 0.0, 1.0, 1.0],
+        "date": pd.to_datetime(["2018-01-01"] * 3 + ["2019-01-01"] * 3),
+    })
+
+
+def test_prediction_dump_is_row_aligned_with_the_pooled_metrics():
+    """The dump's row order must be `pool`'s -- the fold concatenation order --
+    so an ECE recomputed from it is the report's ECE and not a lookalike over
+    a differently ordered row set."""
+    frame = _dump_frame()
+    m18 = np.array([True, True, True, False, False, False])
+    m19 = ~m18
+    fold_results = [
+        (2018, m18, {"winner": np.array([0.7, 0.2, 0.9]), "method": None, "round": None}, {}),
+        (2019, m19, {"winner": np.array([0.1, 0.6, 0.55]), "method": None, "round": None}, {}),
+    ]
+    dump = rwf.prediction_dump("d", frame, fold_results)
+    assert dump == {
+        "name": "d", "n": 6,
+        "fold_year": [2018, 2018, 2018, 2019, 2019, 2019],
+        "y_winner": [1.0, 0.0, 1.0, 0.0, 1.0, 1.0],
+        "p_winner": [0.7, 0.2, 0.9, 0.1, 0.6, 0.55],
+    }
+
+
+def test_prediction_dump_follows_the_fold_order_it_is_given_not_the_table_order():
+    frame = _dump_frame()
+    m18 = np.array([True, True, True, False, False, False])
+    fold_results = [
+        (2019, ~m18, {"winner": np.array([0.1, 0.6, 0.55]), "method": None, "round": None}, {}),
+        (2018, m18, {"winner": np.array([0.7, 0.2, 0.9]), "method": None, "round": None}, {}),
+    ]
+    dump = rwf.prediction_dump("d", frame, fold_results)
+    assert dump["fold_year"] == [2019, 2019, 2019, 2018, 2018, 2018]
+    assert dump["y_winner"] == [0.0, 1.0, 1.0, 1.0, 0.0, 1.0]
+    assert dump["p_winner"] == [0.1, 0.6, 0.55, 0.7, 0.2, 0.9]
+
+
+def test_prediction_dump_is_json_round_trippable_at_full_precision():
+    frame = _dump_frame().iloc[:2]
+    mask = np.array([True, True])
+    p = np.array([0.6543210987654321, 0.1234567890123456])
+    dump = rwf.prediction_dump("d", frame, [(2018, mask, {"winner": p, "method": None,
+                                                          "round": None}, {})])
+    assert json.loads(json.dumps(dump))["p_winner"] == [float(v) for v in p]

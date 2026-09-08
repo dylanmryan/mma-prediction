@@ -55,6 +55,41 @@ def expected_calibration_error(y_true, p_pred, n_bins: int = 10) -> float:
     return float(ece)
 
 
+def reliability_curve(y_true, p_pred, n_bins: int = 10) -> list[dict]:
+    """Per-bin count, mean prediction and empirical rate, in `expected_calibration_error`'s bins.
+
+    Same equal-width edges and the same `np.digitize` placement, so
+    `sum(row["weight"] * abs(row["gap"]) for row in reliability_curve(...))`
+    reconstructs `expected_calibration_error(...)` exactly. That is the point:
+    ECE is one number summarising this table, and a gate that compares two ECEs
+    is really comparing two of these curves. `gap` is mean_pred - empirical_rate
+    (positive = over-confident in the favourite's direction).
+
+    Empty bins are reported with `n` 0 and null statistics rather than dropped,
+    so two curves over different predictions stay row-comparable, and so a
+    "miscalibration" carried by one nearly-empty bin is visible as such.
+    """
+    y = np.asarray(y_true, dtype=float)
+    p = np.asarray(p_pred, dtype=float)
+    if len(y) != len(p):
+        raise ValueError(f"y_true and p_pred must be the same length ({len(y)} vs {len(p)})")
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    bins = np.clip(np.digitize(p, edges[1:-1], right=False), 0, n_bins - 1)
+    rows = []
+    for b in range(n_bins):
+        mask = bins == b
+        n = int(mask.sum())
+        row = {"bin": b, "lo": float(edges[b]), "hi": float(edges[b + 1]), "n": n,
+               "weight": float(mask.mean()) if len(y) else 0.0,
+               "mean_pred": None, "empirical_rate": None, "gap": None}
+        if n:
+            row["mean_pred"] = float(p[mask].mean())
+            row["empirical_rate"] = float(y[mask].mean())
+            row["gap"] = float(p[mask].mean() - y[mask].mean())
+        rows.append(row)
+    return rows
+
+
 def joint_outcome_log_loss(
     y_winner, y_method, y_round, p_winner, method_probs, round_probs,
     method_classes, round_classes,

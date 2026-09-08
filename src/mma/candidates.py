@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.isotonic import IsotonicRegression
 
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import (
@@ -235,6 +236,35 @@ def _logit(p: np.ndarray) -> np.ndarray:
     return np.log(q / (1.0 - q))
 
 
+CALIBRATORS = ("temperature", "isotonic")
+
+
+def fit_isotonic(p_val: np.ndarray, y_val: np.ndarray):
+    """Isotonic post-average calibrator, fitted on inner-validation rows.
+
+    SP2.2 Task 3's single bounded remediation of the ECE gate, and a
+    POST-HOC variant: the pre-registration fixes the candidate's calibration
+    step as "temperature-scaled after averaging", and this replaces that step
+    rather than adding a candidate. The mechanism it tests is that a single
+    scalar cannot fix a *shape* mismatch between two differently-calibrated
+    probability streams, which a monotone piecewise-constant map can.
+
+    It sees exactly the data `fit_temperature` sees -- the fold's
+    inner-validation year -- and never an evaluation row. Outputs are clipped
+    to `_LOGIT_EPS` because isotonic regression happily predicts exactly 0 or
+    1 on a pure bin, which log-loss reads as infinity; `out_of_bounds="clip"`
+    holds evaluation probabilities outside the inner-val range at the end
+    values rather than raising.
+    """
+    model = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
+    model.fit(np.asarray(p_val, dtype=float), np.asarray(y_val, dtype=float))
+
+    def apply(p: np.ndarray) -> np.ndarray:
+        return np.clip(model.predict(np.asarray(p, dtype=float)), _LOGIT_EPS, 1.0 - _LOGIT_EPS)
+
+    return apply
+
+
 def _mask_round_45(probs: np.ndarray, three_round: np.ndarray) -> np.ndarray:
     """Zero the '45' column for three-round fights and renormalise those rows.
 
@@ -284,6 +314,11 @@ class BlendCandidate:
     seeds: tuple = (0, 1, 2, 3, 4)
     weight: float = 0.5  # on the XGB member
     calibrate: bool = True
+    # "temperature" is the pre-registered calibration step and the default, so
+    # nothing about B0/B1 changes. "isotonic" is SP2.2 Task 3's post-hoc
+    # remediation of the ECE gate; it is a diagnostic, has no fresh-seed
+    # confirmation of its own, and must not be read as a shipping form.
+    calibrator: str = "temperature"
     params: dict = field(default_factory=dict)  # XGB member's param override
     config: dict = field(default_factory=dict)  # torch member's config
     max_epochs: int = 200
@@ -306,6 +341,10 @@ class BlendCandidate:
         w = float(self.weight)
         if not 0.0 <= w <= 1.0:
             raise ValueError(f"blend weight must be in [0, 1] (got {self.weight!r})")
+        if self.calibrator not in CALIBRATORS:
+            raise ValueError(
+                f"blend calibrator must be one of {CALIBRATORS} (got {self.calibrator!r})"
+            )
         if (fold.inner_val & fold.eval).any():
             raise ValueError(
                 f"fold {fold.year}: inner_val and eval overlap, so the post-average "
@@ -329,14 +368,14 @@ class BlendCandidate:
         is_val = fold.inner_val[scored]  # positions within `scored`
         is_eval = fold.eval[scored]
         temperature = 1.0
-        if self.calibrate:
-            temperature = fit_temperature(
-                _logit(blended["winner"][is_val]),
-                features.loc[fold.inner_val, "y_winner"].to_numpy(dtype=float),
-            )
         winner = blended["winner"][is_eval]
         if self.calibrate:
-            winner = 1.0 / (1.0 + np.exp(-_logit(winner) / temperature))
+            y_val = features.loc[fold.inner_val, "y_winner"].to_numpy(dtype=float)
+            if self.calibrator == "temperature":
+                temperature = fit_temperature(_logit(blended["winner"][is_val]), y_val)
+                winner = 1.0 / (1.0 + np.exp(-_logit(winner) / temperature))
+            else:
+                winner = fit_isotonic(blended["winner"][is_val], y_val)(winner)
         pred = {
             "winner": winner,
             "method": blended["method"][is_eval],
@@ -344,9 +383,13 @@ class BlendCandidate:
         }
         info = {
             "blend_weight": w,
-            "temperature": float(temperature),
+            "temperature": float(temperature),  # 1.0 when the calibrator is not a temperature
             "calibrated": bool(self.calibrate),
             "n_train": int(fold.train.sum()),
+            # Recorded only when it is NOT the pre-registered temperature, so a
+            # report produced by the default path keeps the fit_info shape every
+            # committed blend report already has.
+            **({} if self.calibrator == "temperature" else {"calibrator": str(self.calibrator)}),
             "xgb": xgb_info,
             "torch": torch_info,
         }
