@@ -4,9 +4,14 @@ scripts has no side effects: they define main() under __main__."""
 from __future__ import annotations
 
 import argparse
+import json
+from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
+
+from mma.models.xgb import feature_frame
 
 import scripts.train_torch as train_torch
 import scripts.train_xgb as train_xgb
@@ -50,6 +55,87 @@ def test_xgb_parse_budget_rejects_bad_shapes():
         train_xgb.parse_budget("1.5")
 
 
+def test_xgb_seed_ensemble_is_the_same_five_seeds_the_harness_measured():
+    """The deployed XGB member has to be the construction B1 was scored with,
+    not a lookalike: same seeds, same per-seed params."""
+    from mma.candidates import XGBCandidate
+    from scripts.run_walkforward import DEFAULT_SEEDS
+
+    assert train_xgb.SEEDS == DEFAULT_SEEDS == (0, 1, 2, 3, 4)
+    candidate = XGBCandidate(seeds=train_xgb.SEEDS)
+    for seed in train_xgb.SEEDS:
+        assert candidate._seed_params(seed) == {"random_state": int(seed)}
+
+
+def test_xgb_head_path_is_one_artifact_per_head_per_seed():
+    from mma.versioning import MODEL_ARTIFACT_GLOBS
+
+    import fnmatch
+    for head in ("winner", "method", "round"):
+        for seed in train_xgb.SEEDS:
+            path = train_xgb.head_path(Path("models"), head, seed)
+            assert path.name == f"xgb_{head}_seed{seed}.json"
+            # every artifact the trainer writes must be one the model hash covers
+            assert any(fnmatch.fnmatch(f"models/{path.name}", glob)
+                       for glob in MODEL_ARTIFACT_GLOBS), path
+
+
+def test_xgb_mean_proba_averages_members_and_leaves_a_lone_member_untouched():
+    class _Fake:
+        def __init__(self, value):
+            self.value = value
+
+        def predict_proba(self, x):
+            return np.full((len(x), 2), self.value)
+
+    x = [0, 1, 2]
+    only = _Fake(0.25)
+    assert train_xgb.mean_proba([only], x) is not None
+    np.testing.assert_array_equal(train_xgb.mean_proba([only], x), only.predict_proba(x))
+    averaged = train_xgb.mean_proba([_Fake(0.2), _Fake(0.4)], x)
+    np.testing.assert_allclose(averaged, np.full((3, 2), 0.3))
+
+
+def test_xgb_refit_writes_a_booster_per_head_per_seed_and_they_differ(tmp_path):
+    """End-to-end on a tiny frame: the refit path must leave fifteen artifacts,
+    and the five winner boosters must not be five copies of one fit -- that
+    would be a seed ensemble in name only."""
+    rng = np.random.default_rng(0)
+    n = 260
+    features = pd.DataFrame({
+        "fight_id": [f"f{i}" for i in range(n)],
+        "date": pd.date_range("2015-01-01", periods=n, freq="7D"),
+        "swapped": False,
+        "weight_class": "Lightweight",
+        "elo_diff": rng.normal(size=n),
+        "reach_diff": rng.normal(size=n),
+        "y_winner": rng.integers(0, 2, size=n).astype(float),
+        "y_method": [["ko_tko", "submission", "decision"][i % 3] for i in range(n)],
+        "y_finish_round": [["1", "2", "3", "45"][i % 4] for i in range(n)],
+    })
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps({
+        "pooled": POOLED, "fold_years": FOLD_YEARS,
+        "config": {"features_max_date": HARNESS_MAX_DATE},
+    }))
+    args = argparse.Namespace(refit_through="latest", budget={"winner": 4, "method": 4, "round": 4},
+                              report=report)
+    x = feature_frame(features)
+    metrics, winners = train_xgb.run_refit(features, x, args, tmp_path)
+
+    assert len(winners) == len(train_xgb.SEEDS) == 5
+    assert metrics["seeds"] == list(train_xgb.SEEDS)
+    written = sorted(q.name for q in tmp_path.glob("xgb_*_seed*.json"))
+    assert written == sorted(
+        f"xgb_{head}_seed{seed}.json"
+        for head in ("winner", "method", "round") for seed in train_xgb.SEEDS
+    )
+    probs = [model.predict_proba(x)[:, 1] for model in winners]
+    assert not all(np.array_equal(probs[0], other) for other in probs[1:])
+    ensembled = train_xgb.mean_proba(winners, x)[:, 1]
+    np.testing.assert_allclose(ensembled, np.mean(probs, axis=0))
+
+
 def test_xgb_refit_metrics_shape():
     budget = {"winner": 81, "method": 79, "round": 75}
     out = train_xgb.refit_metrics("2026-08-08", 11238, budget, "models/walkforward/xgb_refit.json", POOLED,
@@ -60,6 +146,7 @@ def test_xgb_refit_metrics_shape():
     assert out["harness_report"] == "models/walkforward/xgb_refit.json"
     assert out["harness_features_max_date"] == HARNESS_MAX_DATE
     assert out["harness_fold_years"] == FOLD_YEARS
+    assert out["seeds"] == list(train_xgb.SEEDS)
     # README-facing blocks keep their key names
     assert out["winner"] == {
         "n_val": 4804, "accuracy": 0.6184, "log_loss": 0.6512, "brier": 0.23,
