@@ -787,7 +787,7 @@ EOF
 | recency | 0.6525 (0.6537) | 0.6499 (0.6510) | -0.0011 vs torch_v1 | **no** | best window/half-life: half-life 8y (window barely matters); improves on both scorers but by a third of the 0.003 bar. Incumbent stays `{xgb,torch}_v1`. |
 | external | 0.6506 (0.6537) | 0.6476 (0.6510) | -0.0034 vs torch_v1 | **yes** | shipped as `external_diffsonly`: six pre-UFC differentials, the two fight-level flags kept in the table but excluded from both model matrices. Three variants measured and all three clear the bar; this one is the only one that does not degrade on 2024-2025 (row-weighted -0.00064). external_missing slice n=779, 0.6429 -> 0.6447, +0.0018, against the paired incumbent `torch_v1_extslice`. Coverage 0.799 of rows. New incumbent: `{xgb,torch}_external_diffsonly_extslice`. |
 | notice | 0.6501 (0.6506) | 0.6472 (0.6476) | -0.0004 vs torch_external_diffsonly_extslice | **no** | best variant `notice_noflag` (coverage flag in the table, out of the model); a seventh of the bar. Coverage 0.498 of rows and **0.000 of 2025-2026**, so the forced-unknown ablation was moot -- serving is the unknown state for every future fight by construction. Incumbent stays `{xgb,torch}_external_diffsonly_extslice`. |
-| rankings | _…_ | _…_ | _…_ | _…_ | match rate: _…_ |
+| rankings | 0.6499 (0.6506) | 0.6487 (0.6476) | +0.0011 vs torch_external_diffsonly_extslice | **no** | match rate 631/656 names (0.9786 of source rows). All three variants worse on torch (+0.0011 to +0.0017). Real signal on 13.8% of rows, correlated -0.40 with `elo_diff` there. Incumbent stays `{xgb,torch}_external_diffsonly_extslice`. |
 
 **Block `in_fight` (Task 5), measured and rejected.** 17 differentials from the
 per-round table and the target/position columns: `head/body/leg_share`,
@@ -1147,7 +1147,9 @@ will never have again.
   paying, `scripts/build_external.py` needs a refreshable source, or the
   pre-UFC record needs to come from a live scrape.
 
-**Incumbent after this block: `models/walkforward/xgb_external_diffsonly_extslice.json`
+**Incumbent after this block (and still the incumbent after Task 12, since
+neither `notice` nor `rankings` shipped):
+`models/walkforward/xgb_external_diffsonly_extslice.json`
 (0.6506) and `models/walkforward/torch_external_diffsonly_extslice.json`
 (0.6476)** -- the SHIPPED variant's reports, not the best-pooled one's. The
 cleared feature set is `base,external`, with `external_missing` and
@@ -1271,6 +1273,134 @@ so it survives the block being reverted.
   weigh-ins, with two withdrawals and no missed weight. It is NOT wired into
   `prospective.predict_event`, per the task's condition that it be wired only
   if the block ships.
+
+**Block `rankings` (Task 12 Step 2), measured and rejected.** The UFC's own
+weekly divisional rankings as `rank_diff` (unranked = NaN), `is_champion_a/b`,
+`is_ranked_a/b`, and the fight-level `rank_missing` and
+`ranking_regime_post_2026_06`.
+
+*Source and licence.* Kaggle `jerzyszocik/ufc-rankings-history` ("UFC Rankings
+History (2013-ongoing)"), version 53, **CC0: Public Domain** -- confirmed from
+the dataset metadata, not assumed. `date, weightclass, fighter, rank`, champion
+= rank 0, 533 weekly publications from 2013-02-04 to 2026-09-03. Downloaded
+with `kagglehub`, already a dependency; the raw CSV is not committed. The
+GitHub alternative `martj42/ufc_rankings_history` was not used: it carries no
+LICENSE file at all, so redistributing anything derived from it would be a
+guess. Derived table: `data/external/rankings.parquet` (86,850 rows over 12
+divisions), documented in `data/external/RANKINGS.md`.
+
+*Pound-for-pound rows are dropped.* They are not a division a bout happens in,
+they re-list fighters already ranked in their own division, and the source
+spells them four different ways across the years.
+
+*Match rate.* The source has names and nothing else, so matching used the
+prospective pipeline's never-guess matcher unchanged (exact unicode-normalised,
+then accent-folded, ambiguous = unmatched): **631 of 656 distinct names**
+matched, 620 exact and 11 accent-folded, covering **0.9786 of the divisional
+source rows**; 630 distinct fighter ids. The 25 misses are ring names the UFC
+uses and ufcstats does not (`Rampage Jackson`, `Cris Cyborg`, `Mirko Cro Cop`,
+`Minotauro Nogueira`, `Michael Venom Page`), spellings (`Georges St. Pierre`,
+`Costas Philippou`, `Seohee Ham` vs `Seo Hee Ham`), four names shared by two of
+our fighters (ambiguous by construction), and three MECHANICAL near-misses --
+`Jan Błachowicz`/`Blachowicz` and `Klaudia Syguła`/`Sygula` (a stroked Latin
+letter, which NFKD does not decompose the way it decomposes an accent) and
+`Lone'er Kavanagh` (curly vs straight apostrophe). Those three would close by
+extending `mma.prospective.fold_accents` with a stroked-letter map and
+apostrophe normalisation, without weakening the never-guess rule; left as a
+follow-up because `fold_accents` is on the live prediction path.
+An unmatched name is dropped, so that fighter reads as *unranked* rather than
+*unknown* -- the honest cost of a name-keyed source, recorded rather than
+patched over with a fuzzy match.
+
+*Point-in-time is a JOIN RULE here, not a cut.* Every other external table in
+this project is safe because its window closed before the fights; a ranking
+moves every week and moves *because of results*, so the safety is
+`merge_asof(..., allow_exact_matches=False)` -- the last publication STRICTLY
+before the fight date. A same-day list is inadmissible even though it is not
+literally after the fight: the UFC updates on Tuesdays after the weekend's
+cards. Asserted on a fixture whose rank changes on the fight day
+(`test_the_ranking_used_is_the_last_one_published_before_the_fight`) and end to
+end on the real tables
+(`test_no_fight_reads_a_ranking_published_on_or_after_its_own_date`).
+
+**Leak check: this block's per-corner flags are NOT the `external` failure.**
+Three separate readings, all pointing the same way:
+- *No coverage decay.* `rank_diff` is populated on 0.19-0.27 of rows in every
+  year from 2015 to 2026 with no trend -- the source is refreshed weekly, so
+  unlike the 2024-12 jds snapshot it does not age away from the fights served.
+- *The per-corner channel is weak, not decisive.* Over the 1,300 rows where
+  exactly one corner is ranked, that corner wins **0.545** of the time, flat
+  across years (0.44-0.64, n~100/yr). Compare `external`, where the unmapped
+  corner lost 76% of the time overall and 90% in the debut slice. Being ranked
+  in the week before a fight is determined by results already in our own fights
+  table; it is contemporaneous merit, not a look-ahead into career length.
+- The constant-vector check therefore does NOT apply as a pass/fail here and
+  was not expected to: over those rows the block's seven columns take six
+  distinct value tuples, by design, because `is_ranked_a/b` is legitimately
+  per-corner. Recording it explicitly so the difference from Task 11 is on the
+  record: there the property was the evidence of absence of a leak, here the
+  evidence is the coverage profile and the 0.545.
+So the flags were kept in the model for the headline variant, and a variant
+with them held out was measured anyway (below) rather than assumed.
+
+*The signal is real, and better than Elo where it exists.* Among the 1,502
+fights where both corners were ranked at different ranks, the better-ranked
+corner wins **0.563** of the time, while the higher-`elo_diff` corner wins only
+**0.533** on the same rows; the champion wins **0.673** of the 199
+champion-vs-challenger bouts. But `rank_diff` reaches 1,546 of 11,238 rows
+(**0.138**) and where it does it correlates -0.40 with `elo_diff` and -0.54
+with `last5_avg_opp_elo_diff`.
+
+- XGB screen (all three inside the 0.002 threshold, so all three went to
+  torch): `xgb_rankings` **0.6505** (delta -0.0001), `xgb_rankings_noflags`
+  (the two fight-level flags held out) **0.6499** (delta **-0.0007**),
+  `xgb_rankings_diffonly` (flags and per-corner booleans held out, `rank_diff`
+  alone) **0.6509** (delta +0.0003).
+- torch decision, all three WORSE than the incumbent 0.6476:
+
+  | variant | modelled | torch | Δ pooled | worst fold | ships? | slices (debut / womens / five_round / external_missing) |
+  |---|---|---|---|---|---|---|
+  | `rankings` | everything | 0.6493 | **+0.0017** | +0.0037 | no | -0.0019 / +0.0009 / +0.0032 / +0.0009 |
+  | `rankings_noflags` | no fight-level flags | 0.6491 | **+0.0015** | +0.0041 | no | -0.0013 / +0.0025 / +0.0009 / +0.0018 |
+  | `rankings_diffonly` | `rank_diff` only | 0.6487 | **+0.0011** | +0.0035 | no | +0.0011 / +0.0004 / +0.0058 / +0.0040 |
+
+  `bar_check` on every one: `clears_delta: false`, `no_fold_regression: true`,
+  **`ships: false`**. Per-fold for the best variant (`diffonly`): 2018 +0.0018,
+  2019 +0.0035, 2020 +0.0009, 2021 -0.0018, 2022 +0.0030, 2023 -0.0025,
+  2024 -0.0001, 2025 +0.0029.
+- **The shape of the result is the third repetition of the same lesson.** XGB
+  is roughly neutral (-0.0007 at best) and torch is uniformly worse, exactly as
+  for `in_fight` and `opponent_adjusted`: a tree ensemble can ignore a
+  correlated column that is NaN on 86% of rows, while the MLP has to impute a
+  median for it on every one of those rows and spend capacity on the result.
+  Notably the ordering *within* the rankings variants is the reverse of
+  `external`'s -- the fewer rankings columns the model sees, the less it loses
+  -- which is what "the columns are correlated with what is already there"
+  looks like from the other side.
+- Gates before evaluation, all passing on the rankings table (11,238 x 60):
+  `test_no_leakage_truncation_invariance` and both serving-parity tests; the
+  base+external rebuild afterwards stayed byte-identical.
+- Reports kept: `models/walkforward/{xgb,torch}_rankings.json`,
+  `..._rankings_noflags.json`, `..._rankings_diffonly.json`. Block registration
+  reverted (left commented in `mma.feature_blocks` with the numbers) along with
+  the `features.py` / `inference.py` wiring.
+- **Kept and reusable:** `scripts/build_rankings.py`, the committed
+  `data/external/rankings.parquet` and `RANKINGS.md`, and `src/mma/rankings.py`
+  with `tests/test_rankings.py` -- including the serving path, which needs only
+  the two ids, the division and the date and so works for a future card. A
+  later block that can widen the coverage (a continuous divisional standing for
+  everyone rather than a top-15 flag) has the join and the point-in-time rule
+  already written and tested.
+
+**Gate improvement kept from this task (applies to every future block).**
+`tests/test_serving_parity.py::_target_fight` now also requires the target
+fight's committed row to have NO NaN in any enabled block's declared columns
+(`_fully_populated_fights`). The value comparison skips a column that is NaN on
+both sides, so a partially-covered block -- `external` populates
+`pre_ufc_finish_loss_rate_diff` on 30% of rows, `rankings` populates
+`rank_diff` on 14% -- made the `compared == expected` assertion fail on a count
+rather than naming the column, and would previously have let a genuinely
+unpopulated column pass unnoticed on a luckier draw.
 
 **Secondary source (Task 10):** _fights available beyond the Kaggle cutoff: …_
 **Shipped set:** _…_ ; fresh-seed re-score: _…_ ; deployed model hash: _…_

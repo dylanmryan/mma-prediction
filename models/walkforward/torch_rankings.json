@@ -1,0 +1,385 @@
+{
+  "name": "torch_rankings",
+  "config": {
+    "candidate": "torch",
+    "seeds": "0,1,2,3,4",
+    "config": {},
+    "train_start": null,
+    "half_life": null,
+    "fixed_budget_from": null,
+    "budget": {},
+    "drop_columns": [
+      "external_missing",
+      "same_country"
+    ],
+    "n_feature_rows": 11238,
+    "features_max_date": "2026-08-08",
+    "runtime_sec": 44.3
+  },
+  "fold_years": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "folds": {
+    "2018": {
+      "n": 522,
+      "winner_log_loss": 0.6572,
+      "accuracy": 0.6073,
+      "brier": 0.2326,
+      "ece": 0.0337,
+      "joint_log_loss": 2.361,
+      "method_macro_f1": 0.3879,
+      "round_macro_f1": 0.3339,
+      "n_method": 521,
+      "n_round": 280
+    },
+    "2019": {
+      "n": 553,
+      "winner_log_loss": 0.6706,
+      "accuracy": 0.5732,
+      "brier": 0.2394,
+      "ece": 0.0455,
+      "joint_log_loss": 2.3038,
+      "method_macro_f1": 0.3825,
+      "round_macro_f1": 0.29,
+      "n_method": 552,
+      "n_round": 257
+    },
+    "2020": {
+      "n": 492,
+      "winner_log_loss": 0.6543,
+      "accuracy": 0.6301,
+      "brier": 0.231,
+      "ece": 0.0561,
+      "joint_log_loss": 2.3117,
+      "method_macro_f1": 0.3742,
+      "round_macro_f1": 0.3256,
+      "n_method": 490,
+      "n_round": 247
+    },
+    "2021": {
+      "n": 546,
+      "winner_log_loss": 0.6683,
+      "accuracy": 0.5934,
+      "brier": 0.2378,
+      "ece": 0.0325,
+      "joint_log_loss": 2.3534,
+      "method_macro_f1": 0.3687,
+      "round_macro_f1": 0.2585,
+      "n_method": 544,
+      "n_round": 270
+    },
+    "2022": {
+      "n": 582,
+      "winner_log_loss": 0.6452,
+      "accuracy": 0.6203,
+      "brier": 0.2273,
+      "ece": 0.0421,
+      "joint_log_loss": 2.3432,
+      "method_macro_f1": 0.4072,
+      "round_macro_f1": 0.3553,
+      "n_method": 581,
+      "n_round": 318
+    },
+    "2023": {
+      "n": 581,
+      "winner_log_loss": 0.6444,
+      "accuracy": 0.6334,
+      "brier": 0.2267,
+      "ece": 0.0371,
+      "joint_log_loss": 2.3461,
+      "method_macro_f1": 0.3466,
+      "round_macro_f1": 0.2351,
+      "n_method": 578,
+      "n_round": 303
+    },
+    "2024": {
+      "n": 593,
+      "winner_log_loss": 0.6378,
+      "accuracy": 0.6256,
+      "brier": 0.2237,
+      "ece": 0.0319,
+      "joint_log_loss": 2.2245,
+      "method_macro_f1": 0.3949,
+      "round_macro_f1": 0.3574,
+      "n_method": 591,
+      "n_round": 270
+    },
+    "2025": {
+      "n": 935,
+      "winner_log_loss": 0.6314,
+      "accuracy": 0.6471,
+      "brier": 0.221,
+      "ece": 0.042,
+      "joint_log_loss": 2.3343,
+      "method_macro_f1": 0.3721,
+      "round_macro_f1": 0.2893,
+      "n_method": 935,
+      "n_round": 501
+    }
+  },
+  "pooled": {
+    "n": 4804,
+    "winner_log_loss": 0.6493,
+    "accuracy": 0.6189,
+    "brier": 0.2291,
+    "ece": 0.0118,
+    "joint_log_loss": 2.3225,
+    "method_macro_f1": 0.3795,
+    "round_macro_f1": 0.3097,
+    "n_method": 4792,
+    "n_round": 2446
+  },
+  "slices": {
+    "debut": {
+      "n": 983,
+      "winner_log_loss": 0.6506,
+      "accuracy": 0.6226,
+      "brier": 0.2295,
+      "ece": 0.0254,
+      "joint_log_loss": 2.3803,
+      "method_macro_f1": 0.2543,
+      "round_macro_f1": 0.2152,
+      "n_method": 980,
+      "n_round": 559
+    },
+    "womens": {
+      "n": 779,
+      "winner_log_loss": 0.6599,
+      "accuracy": 0.6059,
+      "brier": 0.2337,
+      "ece": 0.0401,
+      "joint_log_loss": 2.1252,
+      "method_macro_f1": 0.377,
+      "round_macro_f1": 0.2843,
+      "n_method": 777,
+      "n_round": 277
+    },
+    "five_round": {
+      "n": 420,
+      "winner_log_loss": 0.6607,
+      "accuracy": 0.5738,
+      "brier": 0.2345,
+      "ece": 0.0596,
+      "joint_log_loss": 2.818,
+      "method_macro_f1": 0.3472,
+      "round_macro_f1": 0.0845,
+      "n_method": 419,
+      "n_round": 233
+    },
+    "external_missing": {
+      "n": 779,
+      "winner_log_loss": 0.6456,
+      "accuracy": 0.6444,
+      "brier": 0.2273,
+      "ece": 0.0564,
+      "joint_log_loss": 2.3921,
+      "method_macro_f1": 0.3092,
+      "round_macro_f1": 0.2469,
+      "n_method": 777,
+      "n_round": 462
+    }
+  },
+  "fit_info": {
+    "best_epoch": [
+      [
+        4,
+        7,
+        7,
+        6,
+        1
+      ],
+      [
+        9,
+        4,
+        3,
+        5,
+        21
+      ],
+      [
+        15,
+        31,
+        16,
+        13,
+        9
+      ],
+      [
+        4,
+        9,
+        5,
+        9,
+        4
+      ],
+      [
+        13,
+        15,
+        13,
+        3,
+        24
+      ],
+      [
+        31,
+        33,
+        3,
+        47,
+        27
+      ],
+      [
+        6,
+        12,
+        4,
+        7,
+        5
+      ],
+      [
+        4,
+        6,
+        7,
+        6,
+        13
+      ]
+    ],
+    "temperature": [
+      [
+        1.32,
+        1.34,
+        1.37,
+        1.22,
+        1.23
+      ],
+      [
+        1.09,
+        1.09,
+        0.99,
+        1.16,
+        1.19
+      ],
+      [
+        1.6,
+        1.55,
+        1.46,
+        1.45,
+        1.54
+      ],
+      [
+        1.1,
+        1.03,
+        1.0,
+        1.11,
+        1.1
+      ],
+      [
+        1.46,
+        1.35,
+        1.38,
+        1.27,
+        1.52
+      ],
+      [
+        1.07,
+        1.16,
+        0.88,
+        1.16,
+        1.17
+      ],
+      [
+        0.92,
+        0.92,
+        0.91,
+        1.0,
+        1.04
+      ],
+      [
+        0.87,
+        0.88,
+        0.95,
+        0.96,
+        0.99
+      ]
+    ],
+    "epochs_run": [
+      [
+        25,
+        28,
+        28,
+        27,
+        22
+      ],
+      [
+        30,
+        25,
+        24,
+        26,
+        42
+      ],
+      [
+        36,
+        52,
+        37,
+        34,
+        30
+      ],
+      [
+        25,
+        30,
+        26,
+        30,
+        25
+      ],
+      [
+        34,
+        36,
+        34,
+        24,
+        45
+      ],
+      [
+        52,
+        54,
+        24,
+        68,
+        48
+      ],
+      [
+        27,
+        33,
+        25,
+        28,
+        26
+      ],
+      [
+        25,
+        27,
+        28,
+        27,
+        34
+      ]
+    ],
+    "n_train": [
+      5949,
+      6434,
+      6956,
+      7509,
+      8001,
+      8547,
+      9129,
+      9710
+    ],
+    "torch_threads": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ]
+  }
+}

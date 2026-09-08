@@ -297,3 +297,36 @@ register(Block(
 #         booleans=("short_notice_7", "short_notice_30", "missed_weight"),
 #         fight_level=("notice_unknown",),
 #     ))
+
+
+
+# --- SP2 block: rankings (MEASURED AND REJECTED) -----------------------------
+# The UFC's own weekly divisional rankings, from the CC0 Kaggle dataset
+# `jerzyszocik/ufc-rankings-history` via `data/external/rankings.parquet`.
+# Deliberately NOT registered: built, evaluated and reverted in SP2 Task 12.
+# All three variants were WORSE on torch (pooled 0.6487-0.6493 against the
+# incumbent 0.6476), so the block ships in no form.
+#
+# The interesting part is that the signal is real and the columns are clean.
+# Unlike `external` this source is contemporaneous and refreshed weekly, so
+# its coverage does not decay: `rank_diff` is populated on 0.19-0.27 of rows in
+# every year from 2015 to 2026, never trending. Among the 1,502 fights where
+# both corners were ranked at different ranks, the better-ranked corner wins
+# 0.563 of the time -- BETTER than `elo_diff` picks the same rows (0.533) --
+# and the champion wins 0.673 of 199 champion-vs-challenger bouts. The per-
+# corner flags are also not the `external` leak in disguise: where exactly one
+# corner is ranked (n=1,300) that corner wins only 0.545 of the time, flat
+# across years, against the unmapped corner's 0.24 in `external`.
+#
+# It still costs, because `rank_diff` reaches 13.8% of the table and correlates
+# -0.40 with `elo_diff` and -0.54 with `last5_avg_opp_elo_diff` on the rows it
+# does reach. Same lesson as `in_fight` and `opponent_adjusted`: a correlated
+# addition that is missing on most rows costs the MLP more than its marginal
+# signal is worth. See the SP2 plan's Task 12 notes.
+#
+#     register(Block(
+#         name="rankings",
+#         differentials=(("rank", "rank"),),
+#         booleans=("is_champion", "is_ranked"),
+#         fight_level=("rank_missing", "ranking_regime_post_2026_06"),
+#     ))
