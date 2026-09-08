@@ -13,6 +13,7 @@ import pandas as pd
 
 from mma.elo import EloParams, expected_score, run_elo
 from mma.evaluate import accuracy, brier_score, log_loss
+from mma.glicko import run_glicko
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
@@ -63,6 +64,23 @@ def main() -> None:
     print(f"\nbest: {best_params} (log-loss {best_loss:.4f})")
 
     ratings = run_elo(fights, stats, best_params)
+    # Glicko-2 rides along in the same table: same row set, same keys, joined
+    # on them so every Elo column keeps its exact values and its position.
+    # Nothing here is tuned -- the system constants are Glickman's (tau 0.5,
+    # initial 1500/350/0.06) and the only MMA-specific choices (one rating
+    # period per event date, RD growth measured in weeks) are documented in
+    # `mma.glicko`. The `post_*` triple is not a feature; it is what
+    # `mma.snapshots` needs to serve a future fight, exactly as `post_overall`
+    # is for Elo.
+    glicko = run_glicko(fights)
+    before = len(ratings)
+    ratings = ratings.merge(
+        glicko, on=["fight_id", "corner", "fighter_id"], how="left",
+        validate="one_to_one",
+    )
+    assert len(ratings) == before, "the Glicko join changed the row count"
+    unmatched = ratings["pre_glicko_mu"].isna().sum()
+    assert not unmatched, f"{unmatched} rated corners have no Glicko row"
     ratings.to_parquet(PROCESSED / "ratings.parquet", index=False)
     (PROCESSED / "elo_params.json").write_text(
         json.dumps(
@@ -86,6 +104,12 @@ def main() -> None:
     print(f"log-loss:  {log_loss(val['y'], val['p_a']):.4f}")
     print(f"brier:     {brier_score(val['y'], val['p_a']):.4f}")
     print(f"(higher-Elo-wins dummy accuracy: {higher_elo_acc:.4f})")
+
+    print("\nGlicko-2 (pre-fight, all rated corners):")
+    for column in ("pre_glicko_mu", "pre_glicko_phi", "pre_glicko_sigma"):
+        series = ratings[column]
+        print(f"  {column:<18} mean {series.mean():8.3f}  "
+              f"min {series.min():8.3f}  max {series.max():8.3f}")
 
     peaks = (
         ratings.groupby("fighter_id")["post_overall"].max().nlargest(10).round(1)
