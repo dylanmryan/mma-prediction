@@ -267,10 +267,13 @@ shows it hurts.
 
 **Status: SP2 DONE (2026-09-08), plan
 `docs/superpowers/plans/2026-09-07-sp2-features-v3.md`.** All eight blocks
-above were built and measured; **one shipped**. The feature table is
+above were built and measured; **one shipped**. The feature table was
 `base,external` (11,238 x 54), the deployed budget was re-derived on it
 (`models/walkforward/refit_decision_v3.json`: XGB 105/61/75 trees, torch 10
 epochs at temperature 1.07) and the models redeployed (hash `b617b96dae45`).
+*(Superseded by SP2.2 on 2026-09-08: the shipped table is now the 87-column
+S1 set and the budgets were re-derived again on it — see that subsection.
+This paragraph is SP2's record and is left as written.)*
 Fresh-seed re-score of the shipped set against a bit-exact paired incumbent:
 pooled 0.6516 -> 0.6473, **delta -0.0043**, worst fold +0.0006, ships.
 
