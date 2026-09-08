@@ -34,7 +34,13 @@
     "southpaw_b",
     "debut_b",
     "debut_matchup",
-    "stance_mismatch"
+    "stance_mismatch",
+    "pre_ufc_wins_diff",
+    "pre_ufc_losses_diff",
+    "pre_ufc_finish_rate_diff",
+    "pre_ufc_finish_loss_rate_diff",
+    "pre_ufc_avg_opp_wins_diff",
+    "days_since_pro_debut_diff"
   ],
   "medians": {
     "title_fight": 0.0,
@@ -71,7 +77,13 @@
     "southpaw_b": 0.0,
     "debut_b": 0.0,
     "debut_matchup": 0.0,
-    "stance_mismatch": 0.0
+    "stance_mismatch": 0.0,
+    "pre_ufc_wins_diff": 0.0,
+    "pre_ufc_losses_diff": 0.0,
+    "pre_ufc_finish_rate_diff": 0.0,
+    "pre_ufc_finish_loss_rate_diff": 0.0,
+    "pre_ufc_avg_opp_wins_diff": 0.0,
+    "days_since_pro_debut_diff": 0.0
   },
   "means": {
     "title_fight": 0.054280121017974726,
@@ -108,7 +120,13 @@
     "southpaw_b": 0.18713294180459156,
     "debut_b": 0.1796583021890016,
     "debut_matchup": 0.18366257341163908,
-    "stance_mismatch": 0.2998754226730735
+    "stance_mismatch": 0.2998754226730735,
+    "pre_ufc_wins_diff": 0.06291155009788219,
+    "pre_ufc_losses_diff": -0.01219078127780744,
+    "pre_ufc_finish_rate_diff": -0.0003284635518018539,
+    "pre_ufc_finish_loss_rate_diff": 0.0011665787693550646,
+    "pre_ufc_avg_opp_wins_diff": -0.011886022232491595,
+    "days_since_pro_debut_diff": 4.312689090585513
   },
   "stds": {
     "title_fight": 0.22656961287924016,
@@ -145,7 +163,13 @@
     "southpaw_b": 0.39001820969815104,
     "debut_b": 0.38390258744057326,
     "debut_matchup": 0.38720877125841735,
-    "stance_mismatch": 0.4582031793317447
+    "stance_mismatch": 0.4582031793317447,
+    "pre_ufc_wins_diff": 6.083132054980748,
+    "pre_ufc_losses_diff": 2.349762853066056,
+    "pre_ufc_finish_rate_diff": 0.22301868326351604,
+    "pre_ufc_finish_loss_rate_diff": 0.3088254601232348,
+    "pre_ufc_avg_opp_wins_diff": 3.437932886834652,
+    "days_since_pro_debut_diff": 1383.941488992781
   },
   "weight_classes": [
     "Bantamweight",

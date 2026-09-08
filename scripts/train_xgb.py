@@ -21,7 +21,7 @@ Why refit is the default: the walk-forward harness (scripts/run_walkforward.py)
 compared early-stopping on a held-out year against a fixed budget on all
 data through the newest year, on the same 2018-2025 eval folds; the fixed
 budget was not worse by more than the seed noise floor, and its pre-
-registered rule then ships it (models/walkforward/refit_decision.json,
+registered rule then ships it (models/walkforward/refit_decision_v3.json,
 ``deployment_recipe: refit_through_latest``). The deployed models thereby
 train on ~5 more years of fights than the pre-2021 split. BUDGET, REPORT and
 REFIT_THROUGH below are that decision's numbers; re-derive them via
@@ -53,10 +53,13 @@ HEADS = ("winner", "method", "round")
 
 MODE_SPLIT, MODE_REFIT = "split", "refit_through"
 DEFAULT_MODE = MODE_REFIT
-# Refit-mode defaults: models/walkforward/refit_decision.json -> xgb.budget.
+# Refit-mode defaults: models/walkforward/refit_decision_v3.json -> xgb.budget.
+# The budget belongs to a FEATURE TABLE: these are the SP2 `base,external`
+# table's numbers; the SP1 46-column table's (82/80/76) stay in
+# refit_decision.json for the record.
 REFIT_THROUGH = "latest"
-BUDGET = {"winner": 82, "method": 80, "round": 76}
-REPORT = ROOT / "models" / "walkforward" / "xgb_refit.json"
+BUDGET = {"winner": 105, "method": 61, "round": 75}
+REPORT = ROOT / "models" / "walkforward" / "xgb_v3_refit.json"
 
 
 def parse_budget(spec) -> dict:

@@ -1,0 +1,187 @@
+{
+  "rule": "B ships as the deployment recipe iff torch B pooled winner log-loss <= torch A + sigma_seed (spec v3 \u00a74 SP1)",
+  "feature_table": "the SP2 shipped 54-column base,external table with external_missing and same_country held out of both model matrices",
+  "xgb": {
+    "A_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6506,
+      "accuracy": 0.6137,
+      "brier": 0.2296,
+      "ece": 0.0153,
+      "joint_log_loss": 2.1866,
+      "method_macro_f1": 0.3329,
+      "round_macro_f1": 0.1781,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "B_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6507,
+      "accuracy": 0.6143,
+      "brier": 0.2297,
+      "ece": 0.0093,
+      "joint_log_loss": 2.1818,
+      "method_macro_f1": 0.325,
+      "round_macro_f1": 0.1748,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "delta_B_minus_A": 0.0001,
+    "sigma_seed": 0.0003464101615137373,
+    "B_not_worse_than_A_by_sigma": true,
+    "per_fold_B_minus_A": {
+      "2018": -0.0067,
+      "2019": 0.0026,
+      "2020": -0.0016,
+      "2021": 0.0016,
+      "2022": -0.0021,
+      "2023": 0.0005,
+      "2024": 0.0045,
+      "2025": 0.0008
+    },
+    "bar_check_B_vs_A": {
+      "bar": 0.003,
+      "sigma_seed": 0.0003464101615137373,
+      "delta": 0.0001,
+      "fold_deltas": {
+        "2018": -0.0067,
+        "2019": 0.0026,
+        "2020": -0.0016,
+        "2021": 0.0016,
+        "2022": -0.0021,
+        "2023": 0.0005,
+        "2024": 0.0045,
+        "2025": 0.0008
+      },
+      "worst_fold_delta": 0.0045,
+      "comparable": true,
+      "missing_folds": [],
+      "clears_delta": false,
+      "no_fold_regression": true,
+      "ships": false
+    },
+    "budget": {
+      "fixed_rounds": {
+        "winner": 105,
+        "method": 61,
+        "round": 75
+      }
+    }
+  },
+  "torch": {
+    "A_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6476,
+      "accuracy": 0.6209,
+      "brier": 0.2283,
+      "ece": 0.0088,
+      "joint_log_loss": 2.3127,
+      "method_macro_f1": 0.387,
+      "round_macro_f1": 0.315,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "B_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.647,
+      "accuracy": 0.623,
+      "brier": 0.228,
+      "ece": 0.013,
+      "joint_log_loss": 2.3145,
+      "method_macro_f1": 0.3835,
+      "round_macro_f1": 0.3169,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "delta_B_minus_A": -0.0006,
+    "sigma_seed": 0.0003464101615137373,
+    "B_not_worse_than_A_by_sigma": true,
+    "per_fold_B_minus_A": {
+      "2018": -0.0029,
+      "2019": 0.0041,
+      "2020": -0.004,
+      "2021": -0.0013,
+      "2022": -0.0047,
+      "2023": -0.0018,
+      "2024": 0.0018,
+      "2025": 0.0022
+    },
+    "bar_check_B_vs_A": {
+      "bar": 0.003,
+      "sigma_seed": 0.0003464101615137373,
+      "delta": -0.0006,
+      "fold_deltas": {
+        "2018": -0.0029,
+        "2019": 0.0041,
+        "2020": -0.004,
+        "2021": -0.0013,
+        "2022": -0.0047,
+        "2023": -0.0018,
+        "2024": 0.0018,
+        "2025": 0.0022
+      },
+      "worst_fold_delta": 0.0041,
+      "comparable": true,
+      "missing_folds": [],
+      "clears_delta": false,
+      "no_fold_regression": true,
+      "ships": false
+    },
+    "budget": {
+      "fixed_epochs": 10,
+      "temperature": 1.07
+    }
+  },
+  "deployment_recipe": "refit_through_latest",
+  "fresh_seed_rescore": {
+    "A_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6473,
+      "accuracy": 0.6189,
+      "brier": 0.2281,
+      "ece": 0.016,
+      "joint_log_loss": 2.3164,
+      "method_macro_f1": 0.3801,
+      "round_macro_f1": 0.3119,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "B_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6475,
+      "accuracy": 0.6197,
+      "brier": 0.2281,
+      "ece": 0.0101,
+      "joint_log_loss": 2.3198,
+      "method_macro_f1": 0.3794,
+      "round_macro_f1": 0.3225,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "delta_B_minus_A": 0.0002,
+    "sigma_seed": 0.0003464101615137373,
+    "B_not_worse_than_A_by_sigma": true,
+    "per_fold_B_minus_A": {
+      "2018": -0.0029,
+      "2019": 0.0052,
+      "2020": -0.0023,
+      "2021": -0.0007,
+      "2022": -0.0035,
+      "2023": -0.0001,
+      "2024": 0.0015,
+      "2025": 0.0025
+    },
+    "verdict": "confirmed"
+  },
+  "notes": [
+    "sigma_seed is an n=3 estimate; its 95% CI (chi-square, 2 dof) is roughly [0.5\u03c3, 6.3\u03c3] (for \u03c3=0.000346: lower \u2248 \u03c3\u00b7sqrt(2/7.378) = 0.000180, upper \u2248 \u03c3\u00b7sqrt(2/0.0506) = 0.002177)",
+    "the torch rule passed by a margin smaller than the 4-dp storage precision of pooled log-loss (\u0394=-0.0006 vs \u03c3=0.00035)",
+    "bar_check is informational here: ships=False is expected because B is a deployment recipe that must only be not-worse than A, not a challenger that must beat it",
+    "this set re-derives the deployment budget on the SP2 feature table; the v1 budget (14 epochs / T 1.1; 82/80/76 trees) was derived from a different table and does not carry over (models/walkforward/refit_decision.json)",
+    "Fresh-seed re-scoring (spec \u00a74 SP1): B and A both re-run with seeds 5\u20139; see fresh_seed_rescore."
+  ],
+  "sigma_ci_95": [
+    0.00018036131426059986,
+    0.0021770959612804892
+  ]
+}

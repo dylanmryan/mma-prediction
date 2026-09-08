@@ -62,6 +62,9 @@ class XGBCandidate:
     # int applies to all three heads; a dict {"winner": n, "method": n, "round": n}
     # sets a per-head budget (see fixed_budget_from in scripts/run_walkforward.py).
     fixed_rounds: int | dict | None = None
+    # Feature columns held out of the model matrix for this run only; the
+    # columns stay in `features`, so the walk-forward slices still see them.
+    drop_columns: tuple = ()
 
     def _head_rounds(self, head: str):
         if isinstance(self.fixed_rounds, dict):
@@ -69,7 +72,7 @@ class XGBCandidate:
         return self.fixed_rounds
 
     def fit_predict(self, features: pd.DataFrame, fold: Fold, sample_weight=None):
-        x = feature_frame(features)
+        x = feature_frame(features, self.drop_columns)
         fixed = self.fixed_rounds is not None
         train = (fold.train | fold.inner_val) if fixed else fold.train
         w = None if sample_weight is None else np.asarray(sample_weight, dtype=float)
@@ -130,6 +133,8 @@ class TorchCandidate:
     patience: int = 20
     fixed_epochs: int | None = None
     temperature: float | None = None  # fixed-epoch mode only (no inner val to fit on)
+    # As XGBCandidate.drop_columns: excluded from the tensor, kept in the table.
+    drop_columns: tuple = ()
 
     def fit_predict(self, features: pd.DataFrame, fold: Fold, sample_weight=None):
         # Torch predictions vary slightly across intra-op thread counts, so
@@ -138,7 +143,7 @@ class TorchCandidate:
         torch.set_num_threads(1)
         fixed = self.fixed_epochs is not None
         train = (fold.train | fold.inner_val) if fixed else fold.train
-        prep = Preprocessor.fit(features, train_mask=train)
+        prep = Preprocessor.fit(features, train_mask=train, drop_columns=self.drop_columns)
         x, wc = prep.transform(features)
         targets = encode_targets(features)
         w = None if sample_weight is None else np.asarray(sample_weight, dtype=np.float32)
