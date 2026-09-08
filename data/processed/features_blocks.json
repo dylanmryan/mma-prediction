@@ -1,12 +1,8 @@
 {
   "blocks": [
     "base",
-    "external",
-    "notice",
-    "trajectory",
-    "context",
-    "opponent_adjusted"
+    "external"
   ],
   "n_rows": 11238,
-  "n_columns": 87
+  "n_columns": 54
 }

@@ -296,11 +296,9 @@ register(Block(
 
 
 
-# --- SP2 block: notice (MEASURED AND REJECTED IN SP2; RESTORED FOR SP2.1) ----
+# --- SP2 block: notice (MEASURED AND REJECTED IN SP2, AND AGAIN IN SP2.1) ---
 # Short notice and missed weight, from the Bet MMA tables in the same
-# `ehan03/jds-mma-data` snapshot. Registered again as one of the four blocks
-# the SP2.1 capacity experiment combines
-# (docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md); it was
+# `ehan03/jds-mma-data` snapshot. Deliberately NOT registered: it was
 # built, evaluated and reverted in SP2 Task 12, where it did not clear the bar
 # (torch pooled 0.6472 against the incumbent 0.6476 with the coverage flag held
 # out of the model, 0.6482 with it in -- a fifth of the 0.003 bar at best), and
@@ -316,21 +314,45 @@ register(Block(
 # the loader `mma.notice`, and `mma.wiki_cards.parse_background`, which is the
 # only route to these facts for a FUTURE event.
 #
-# SHIPPING FORM (`notice_noflag`, the better of the two SP2 variants): the
-# fight-level `notice_unknown` stays in the TABLE -- something has to record
-# that the source has not seen a fight -- and is held out of both model
-# matrices via `mma.tensors.DROPPED` and `mma.models.xgb.MODEL_EXCLUDED`,
-# exactly as `external`'s two flags are. Modelling it cost 0.0010 on torch
-# (0.6482 against 0.6472).
+# SHIPPING FORM, if it is ever registered again (`notice_noflag`, the better
+# of the two SP2 variants): the fight-level `notice_unknown` stays in the
+# TABLE -- something has to record that the source has not seen a fight -- and
+# is held out of both model matrices via `mma.tensors.DROPPED` and
+# `mma.models.xgb.MODEL_EXCLUDED`, exactly as `external`'s two flags are.
+# Modelling it cost 0.0010 on torch (0.6482 against 0.6472). Both exclusion
+# lists still name it, so re-registering the block needs no change there.
+#
+# SP2.1 RESULT (2026-09-08): UNREGISTERED AGAIN. The pre-registered capacity
+# experiment combined this block with the other three whose torch point
+# estimate was negative or whose scorers disagreed into S1 (11,238 x 87) and
+# ran one 25-configuration torch architecture search over both S1 (arm T) and
+# the shipped S0 (arm C, the control that separates a feature effect from an
+# architecture effect). Neither arm cleared the 0.003 bar against the deployed
+# incumbent -- C -0.0013, T -0.0012 -- and T - C = +0.0001 is inside
+# sigma_seed = 0.000346, so the pre-registration's fourth attribution branch
+# applied: the blocks are dead and the architecture is adequate; record and
+# revert. The only result that cleared any bar, A1 on XGBoost at -0.0039 on
+# seed 0, failed its fresh-seed confirmation (mean -0.0024 over seeds 1-3
+# against a newly measured XGB sigma_seed of 0.00087-0.00125). Nothing shipped
+# and nothing was redeployed. See
+# docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md and
+# models/walkforward/sp2_1_decision.json.
+#
+# UNREGISTERED BUT LIVE: the name constant below is still defined and the
+# block's wiring is still in place and inert -- `notice.attach` and
+# `notice.fight_context` in `mma.features._side_frame` / `build_features`, and
+# the `notice_a` / `notice_b` arguments to `mma.inference.build_matchup`, each
+# behind an `if NOTICE_BLOCK in resolved` guard that is now always False.
+# Re-registering the block is uncommenting the four lines below.
 NOTICE_BLOCK = "notice"
 
-register(Block(
-    name=NOTICE_BLOCK,
-    differentials=(("notice_shortfall_days", "notice_shortfall_days"),
-                   ("missed_weight_over_lbs", "missed_weight_over_lbs")),
-    booleans=("short_notice_7", "short_notice_30", "missed_weight"),
-    fight_level=("notice_unknown",),
-))
+#     register(Block(
+#         name=NOTICE_BLOCK,
+#         differentials=(("notice_shortfall_days", "notice_shortfall_days"),
+#                        ("missed_weight_over_lbs", "missed_weight_over_lbs")),
+#         booleans=("short_notice_7", "short_notice_30", "missed_weight"),
+#         fight_level=("notice_unknown",),
+#     ))
 
 
 
@@ -366,13 +388,13 @@ register(Block(
 #     ))
 
 
-# --- SP2 block: trajectory (REJECTED IN SP2; RESTORED FOR SP2.1) -------------
+# --- SP2 block: trajectory (REJECTED IN SP2, AND AGAIN IN SP2.1) ------------
 # Rating DYNAMICS on top of the base block's rating LEVELS: Glicko-2's
 # deviation and volatility, recent Elo momentum, the drawdown from a
 # fighter's own peak, tenure, and two age interactions. Built, evaluated and
-# reverted in SP2 Task 7; registered again for the SP2.1 capacity experiment
-# (docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md), because it
-# is one of the blocks whose two scorers disagreed by the most.
+# reverted in SP2 Task 7; restored and re-measured inside the SP2.1 combined
+# set because it is one of the blocks whose two scorers disagreed by the most,
+# then unregistered again when that set did not clear the bar either.
 #
 # XGB liked it (pooled 0.6486 against the incumbent 0.6506, delta -0.0020) and
 # torch barely moved (0.6472 against 0.6476, delta **-0.0004** -- a seventh of
@@ -396,29 +418,52 @@ register(Block(
 # `mma.inference.build_matchup` (which grows the served Glicko deviation over
 # the days since the fighter's last bout, so the served value equals the
 # trained one). See the SP2 plan's Task 7 notes.
+#
+# SP2.1 RESULT (2026-09-08): UNREGISTERED AGAIN. The pre-registered capacity
+# experiment combined this block with the other three whose torch point
+# estimate was negative or whose scorers disagreed into S1 (11,238 x 87) and
+# ran one 25-configuration torch architecture search over both S1 (arm T) and
+# the shipped S0 (arm C, the control that separates a feature effect from an
+# architecture effect). Neither arm cleared the 0.003 bar against the deployed
+# incumbent -- C -0.0013, T -0.0012 -- and T - C = +0.0001 is inside
+# sigma_seed = 0.000346, so the pre-registration's fourth attribution branch
+# applied: the blocks are dead and the architecture is adequate; record and
+# revert. The only result that cleared any bar, A1 on XGBoost at -0.0039 on
+# seed 0, failed its fresh-seed confirmation (mean -0.0024 over seeds 1-3
+# against a newly measured XGB sigma_seed of 0.00087-0.00125). Nothing shipped
+# and nothing was redeployed. See
+# docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md and
+# models/walkforward/sp2_1_decision.json.
+#
+# UNREGISTERED BUT LIVE: all of the wiring named above stayed in the tree
+# after SP2.1 -- the accumulators are computed unconditionally in
+# `mma.history`, and the `features` / `inference` derivations sit behind an
+# `if TRAJECTORY_BLOCK in resolved` guard that is now always False -- so
+# re-registering the block is uncommenting the lines below and nothing else.
 TRAJECTORY_BLOCK = "trajectory"
 
-register(Block(
-    name=TRAJECTORY_BLOCK,
-    differentials=(
-        ("pre_glicko_mu", "glicko_mu"),
-        ("pre_glicko_phi", "glicko_phi"),
-        ("pre_glicko_sigma", "glicko_sigma"),
-        ("elo_delta_3", "elo_delta_3"),
-        ("elo_delta_5", "elo_delta_5"),
-        ("elo_peak_minus_current", "elo_peak_minus_current"),
-        ("years_since_ufc_debut", "years_since_ufc_debut"),
-        ("age_x_fights", "age_x_fights"),
-    ),
-    absolutes=("age_squared",),
-))
+#     register(Block(
+#         name=TRAJECTORY_BLOCK,
+#         differentials=(
+#             ("pre_glicko_mu", "glicko_mu"),
+#             ("pre_glicko_phi", "glicko_phi"),
+#             ("pre_glicko_sigma", "glicko_sigma"),
+#             ("elo_delta_3", "elo_delta_3"),
+#             ("elo_delta_5", "elo_delta_5"),
+#             ("elo_peak_minus_current", "elo_peak_minus_current"),
+#             ("years_since_ufc_debut", "years_since_ufc_debut"),
+#             ("age_x_fights", "age_x_fights"),
+#         ),
+#         absolutes=("age_squared",),
+#     ))
 
 
-# --- SP2 block: context (REJECTED IN SP2; RESTORED FOR SP2.1) ----------------
+# --- SP2 block: context (REJECTED IN SP2, AND AGAIN IN SP2.1) ---------------
 # The fight's SETTING rather than either fighter's record: referee tendency,
 # home advantage, and how often a fighter's wins carried a post-fight bonus.
-# Built, evaluated and reverted in SP2 Task 8; registered again for the SP2.1
-# capacity experiment in its best-measured `context_nohome` form.
+# Built, evaluated and reverted in SP2 Task 8; restored in its best-measured
+# `context_nohome` form for the SP2.1 capacity experiment, then unregistered
+# again when that experiment's combined set did not clear the bar either.
 # Three variants were measured and all three are worse than or level with the
 # incumbent on torch (0.6474 to 0.6483 against 0.6476); the best,
 # `context_nohome`, is -0.0002, a fifteenth of the 0.003 bar.
@@ -454,19 +499,42 @@ register(Block(
 # vector leak check -- over the rows where exactly one corner is mapped by the
 # `external` snapshot the pair takes three distinct values and the mapped
 # corner wins 0.745 of them. That is not a tuning choice; it is the same
-# coverage-selection leak `external_missing_a`/`_b` was corrected for.
+# coverage-selection leak `external_missing_a`/`_b` was corrected for. Both
+# exclusion lists still name the pair, so re-registering needs no change there.
+#
+# SP2.1 RESULT (2026-09-08): UNREGISTERED AGAIN. The pre-registered capacity
+# experiment combined this block with the other three whose torch point
+# estimate was negative or whose scorers disagreed into S1 (11,238 x 87) and
+# ran one 25-configuration torch architecture search over both S1 (arm T) and
+# the shipped S0 (arm C, the control that separates a feature effect from an
+# architecture effect). Neither arm cleared the 0.003 bar against the deployed
+# incumbent -- C -0.0013, T -0.0012 -- and T - C = +0.0001 is inside
+# sigma_seed = 0.000346, so the pre-registration's fourth attribution branch
+# applied: the blocks are dead and the architecture is adequate; record and
+# revert. The only result that cleared any bar, A1 on XGBoost at -0.0039 on
+# seed 0, failed its fresh-seed confirmation (mean -0.0024 over seeds 1-3
+# against a newly measured XGB sigma_seed of 0.00087-0.00125). Nothing shipped
+# and nothing was redeployed. See
+# docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md and
+# models/walkforward/sp2_1_decision.json.
+#
+# UNREGISTERED BUT LIVE: `mma.context` and the wiring named above stayed in
+# the tree, behind an `if CONTEXT_BLOCK in resolved` guard that is now always
+# False. `tests/test_context.py` exercises `mma.context` directly and so keeps
+# passing on the reverted table, including the per-corner coverage-channel
+# assertion.
 CONTEXT_BLOCK = "context"
 
-register(Block(
-    name=CONTEXT_BLOCK,
-    differentials=(("bonus_rate", "bonus_rate"),),
-    booleans=("home_country",),
-    fight_level=("referee_finish_rate", "referee_decision_rate",
-                 "referee_missing", "home_country_unknown"),
-))
+#     register(Block(
+#         name=CONTEXT_BLOCK,
+#         differentials=(("bonus_rate", "bonus_rate"),),
+#         booleans=("home_country",),
+#         fight_level=("referee_finish_rate", "referee_decision_rate",
+#                      "referee_missing", "home_country_unknown"),
+#     ))
 
 
-# --- SP2 block: opponent_adjusted (REJECTED IN SP2; RESTORED FOR SP2.1) ------
+# --- SP2 block: opponent_adjusted (REJECTED IN SP2, AND AGAIN IN SP2.1) -----
 # Each core rate priced against the opposition it was produced against: the
 # career mean of (own value in a fight) minus (what that fight's opponent had
 # historically ALLOWED before it), plus the mean pre-fight Elo of the
@@ -485,17 +553,45 @@ register(Block(
 # updated, so the value used is the opponent's PRE-fight one. `mma.snapshots`
 # carries the same fields for serving, which is why no separate serving
 # derivation is needed here.
+#
+# SP2.1 RESULT (2026-09-08): UNREGISTERED AGAIN. The pre-registered capacity
+# experiment combined this block with the other three whose torch point
+# estimate was negative or whose scorers disagreed into S1 (11,238 x 87) and
+# ran one 25-configuration torch architecture search over both S1 (arm T) and
+# the shipped S0 (arm C, the control that separates a feature effect from an
+# architecture effect). Neither arm cleared the 0.003 bar against the deployed
+# incumbent -- C -0.0013, T -0.0012 -- and T - C = +0.0001 is inside
+# sigma_seed = 0.000346, so the pre-registration's fourth attribution branch
+# applied: the blocks are dead and the architecture is adequate; record and
+# revert. The only result that cleared any bar, A1 on XGBoost at -0.0039 on
+# seed 0, failed its fresh-seed confirmation (mean -0.0024 over seeds 1-3
+# against a newly measured XGB sigma_seed of 0.00087-0.00125). Nothing shipped
+# and nothing was redeployed. See
+# docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md and
+# models/walkforward/sp2_1_decision.json.
+#
+# UNREGISTERED BUT LIVE, and deliberately so. SP2's revert of this block was
+# total: the accumulators survive in NO git tree, and SP2.1 Task 1 had to
+# reconstruct them from the plan's written contract rather than recover them
+# with `git show`. They are not being deleted a second time. The
+# implementation stays in `mma.history` (`VS_EXPECTATION_RATES`,
+# `_FighterState.allowed` and the `*_vs_exp` / `avg_opp_elo_*` accumulators)
+# and in `mma.snapshots`, where it is computed unconditionally like every base
+# rate, and it is covered by unit tests in `tests/test_history.py` and
+# `tests/test_snapshots.py` that call `build_history` / `build_snapshots`
+# directly and therefore stand alone without the registration. Only the eight
+# lines below are commented out.
 OPPONENT_ADJUSTED_BLOCK = "opponent_adjusted"
 
-register(Block(
-    name=OPPONENT_ADJUSTED_BLOCK,
-    differentials=(
-        ("sig_pm_vs_exp", "sig_pm_vs_exp"),
-        ("sig_absorbed_pm_vs_exp", "sig_absorbed_pm_vs_exp"),
-        ("td_landed_pf_vs_exp", "td_landed_pf_vs_exp"),
-        ("td_def_vs_exp", "td_def_vs_exp"),
-        ("ctrl_share_vs_exp", "ctrl_share_vs_exp"),
-        ("avg_opp_elo_wins", "avg_opp_elo_wins"),
-        ("avg_opp_elo_losses", "avg_opp_elo_losses"),
-    ),
-))
+#     register(Block(
+#         name=OPPONENT_ADJUSTED_BLOCK,
+#         differentials=(
+#             ("sig_pm_vs_exp", "sig_pm_vs_exp"),
+#             ("sig_absorbed_pm_vs_exp", "sig_absorbed_pm_vs_exp"),
+#             ("td_landed_pf_vs_exp", "td_landed_pf_vs_exp"),
+#             ("td_def_vs_exp", "td_def_vs_exp"),
+#             ("ctrl_share_vs_exp", "ctrl_share_vs_exp"),
+#             ("avg_opp_elo_wins", "avg_opp_elo_wins"),
+#             ("avg_opp_elo_losses", "avg_opp_elo_losses"),
+#         ),
+#     ))
