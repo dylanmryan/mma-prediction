@@ -12,7 +12,7 @@ import torch.nn as nn
 
 from mma import external, serving
 from mma.feature_blocks import (
-    BASE_BLOCK, EXTERNAL_BLOCK, resolve_blocks, state_key_blocks, state_keys,
+    EXTERNAL_BLOCK, resolve_blocks, state_key_blocks, state_keys, table_blocks,
 )
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
@@ -307,7 +307,7 @@ def build_matchup(
     bio_a: pd.Series, bio_b: pd.Series,
     weight_class: str, title_fight: bool, scheduled_rounds: int,
     as_of: pd.Timestamp,
-    blocks=(BASE_BLOCK,),
+    blocks=None,
 ) -> pd.DataFrame:
     """One feature row matching the training feature contract (A vs B, no swap).
 
@@ -321,7 +321,10 @@ def build_matchup(
     `feature_blocks.state_keys(blocks)`, not a tuple maintained here: a key a
     block declares that neither the derived extras below nor the snapshot nor
     the bio row can supply raises, rather than silently becoming NaN. `blocks`
-    defaults to the v1 `base` contract, so existing callers are unchanged.
+    defaults to `feature_blocks.table_blocks()` -- the blocks the deployed
+    model's own feature table was built from -- so the served row matches the
+    trained one without every caller having to name them; pass an explicit
+    list only to serve a different contract than the one on disk.
 
     The `external` block is the one place this function needs a fighter's
     IDENTITY rather than just their state: its table is joined by ufcstats
@@ -338,6 +341,7 @@ def build_matchup(
     single current-state snapshot, so both coincide exactly; the difference
     is negligible after standardization (Preprocessor.transform).
     """
+    blocks = table_blocks() if blocks is None else blocks
     keys = state_keys(blocks)
     owners = state_key_blocks(blocks)
 

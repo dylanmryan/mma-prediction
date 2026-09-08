@@ -21,10 +21,17 @@ all-NaN column that then measures as "no improvement".
 """
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 
 BASE_BLOCK = "base"
+
+# The sidecar `scripts/build_features.py` writes next to the table it built.
+BLOCKS_SIDECAR = (
+    Path(__file__).resolve().parents[2] / "data" / "processed" / "features_blocks.json"
+)
 
 
 @dataclass(frozen=True)
@@ -118,6 +125,25 @@ def resolve_blocks(names) -> tuple[str, ...]:
     if unknown:
         raise ValueError(f"unknown feature block(s): {unknown}; known: {sorted(BLOCKS)}")
     return tuple([BASE_BLOCK] + [n for n in BLOCKS if n != BASE_BLOCK and n in requested])
+
+
+def table_blocks(sidecar=BLOCKS_SIDECAR) -> tuple[str, ...]:
+    """The blocks `data/processed/features.parquet` was built from.
+
+    This is the SERVING contract as well as the training one: the deployed
+    model's preprocessor was fitted on that table, so a row served with fewer
+    blocks is missing columns the preprocessor asks for (a loud KeyError) and
+    one served with more just carries columns it ignores. Reading the sidecar
+    is what stops `build_matchup`'s callers -- the app, the prospective run,
+    the explainer -- from each having to remember which blocks shipped.
+
+    Falls back to the v1 `base` contract when no sidecar exists, which is the
+    state of a checkout that has not run `scripts/build_features.py` yet.
+    """
+    path = Path(sidecar)
+    if not path.exists():
+        return (BASE_BLOCK,)
+    return resolve_blocks(json.loads(path.read_text())["blocks"])
 
 
 def spec_for(names) -> Spec:

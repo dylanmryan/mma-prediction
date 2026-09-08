@@ -112,6 +112,15 @@ FEATURE_LABELS: dict[str, str] = {
     "debut_b": "Fighter B is a UFC debutant",
     "debut_matchup": "Debut-fight dynamics",
     "stance_mismatch": "Stance mismatch (orthodox vs. southpaw)",
+    # SP2's `external` block: the record each fighter brought INTO the UFC,
+    # from the jds-mma-data snapshot. NaN (and so absent from the explanation)
+    # whenever either corner is unmapped.
+    "pre_ufc_wins_diff": "Pre-UFC wins edge",
+    "pre_ufc_losses_diff": "Pre-UFC losses edge",
+    "pre_ufc_finish_rate_diff": "Pre-UFC finishing rate edge",
+    "pre_ufc_finish_loss_rate_diff": "Pre-UFC rate of being finished",
+    "pre_ufc_avg_opp_wins_diff": "Pre-UFC strength of schedule",
+    "days_since_pro_debut_diff": "Time as a professional",
 }
 
 

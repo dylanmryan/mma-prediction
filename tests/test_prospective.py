@@ -165,7 +165,7 @@ def _snapshots():
             "elo_grappling": [1570.0, 1430.0],
             "last_date": pd.to_datetime(["2025-06-01", "2025-05-01"]),
         },
-        index=pd.Index(["fid_a", "fid_b"], name="fighter_id"),
+        index=pd.Index(["0f1d0a0000000000", "0f1d0b0000000000"], name="fighter_id"),
     )
 
 
@@ -177,7 +177,7 @@ def _fighters_bio():
             "reach_cm": [185.0, 180.0],
             "stance": ["Orthodox", "Southpaw"],
         },
-        index=pd.Index(["fid_a", "fid_b"], name="fighter_id"),
+        index=pd.Index(["0f1d0a0000000000", "0f1d0b0000000000"], name="fighter_id"),
     )
 
 
@@ -185,7 +185,7 @@ def _name_index():
     return build_name_index(
         pd.DataFrame(
             {
-                "fighter_id": ["fid_a", "fid_b", "dup1", "dup2"],
+                "fighter_id": ["0f1d0a0000000000", "0f1d0b0000000000", "dup1", "dup2"],
                 "name": ["Fighter A", "Fighter B", "Duplicate Name", "Duplicate Name"],
             }
         )
@@ -202,8 +202,8 @@ def test_predict_fight_success_case():
         _FakeEnsemble(), as_of=pd.Timestamp("2026-07-18"),
     )
     assert result["skipped"] is False
-    assert result["fighter_a_id"] == "fid_a"
-    assert result["fighter_b_id"] == "fid_b"
+    assert result["fighter_a_id"] == "0f1d0a0000000000"
+    assert result["fighter_b_id"] == "0f1d0b0000000000"
     assert result["match_tier"] == "exact"
     assert 0.0 <= result["p_a_wins"] <= 1.0
     assert result["p_a_wins"] > 0.5  # A has the higher Elo
@@ -246,7 +246,7 @@ def test_predict_fight_accent_folded_match_records_tier():
     name_index = build_name_index(
         pd.DataFrame(
             {
-                "fighter_id": ["fid_a", "fid_b"],
+                "fighter_id": ["0f1d0a0000000000", "0f1d0b0000000000"],
                 # stored ASCII; Wikipedia will render "Fíghter A" with an accent
                 "name": ["Fighter A", "Fighter B"],
             }
@@ -261,7 +261,7 @@ def test_predict_fight_accent_folded_match_records_tier():
         _FakeEnsemble(), as_of=pd.Timestamp("2026-07-18"),
     )
     assert result["skipped"] is False
-    assert result["fighter_a_id"] == "fid_a"
+    assert result["fighter_a_id"] == "0f1d0a0000000000"
     assert result["match_tier"] == "accent_folded"
 
 

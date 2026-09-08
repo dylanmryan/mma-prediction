@@ -71,9 +71,12 @@ def test_snapshots_supply_every_state_key_the_served_row_needs():
     snapshots = build_snapshots(_fights(), _stats(), _ratings())
     bio = pd.Series({"dob": pd.Timestamp("1990-01-01"), "height_cm": 180.0,
                      "reach_cm": 183.0, "stance": "Orthodox"})
+    # The base contract is what a SNAPSHOT has to satisfy; blocks joined from
+    # an external table by fighter id are that table's job, not this one's.
     served = build_matchup(
         snapshots.loc["x"], snapshots.loc["y"], bio, bio,
         "Lightweight", False, 3, as_of=pd.Timestamp("2025-01-01"),
+        blocks=(BASE_BLOCK,),
     )
     assert len(served) == 1
     assert set(columns_for([BASE_BLOCK])) <= set(served.columns)
