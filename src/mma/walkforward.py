@@ -14,7 +14,9 @@ present) reported for every candidate; `pool` concatenates per-fold
 (mask, prediction) pairs into one row-aligned frame and prediction dict
 for pooled scoring; `build_report` assembles the full JSON report for a
 candidate; `bar_check` applies the pre-registered winner bar to a
-candidate/incumbent report pair; `paired_delta` computes the plain B-minus-A
+candidate/incumbent report pair; `slice_comparison` lines up the two
+reports' slice metrics so a regression concentrated in one slice is
+visible; `paired_delta` computes the plain B-minus-A
 pooled/per-fold delta and the refit deployment-recipe gate (no bar, no
 comparability check) shared by `scripts/refit_decision.py`. A report has the shape `{name, config,
 fold_years, folds: {year: metrics}, pooled: metrics, slices: {name:
@@ -237,6 +239,34 @@ def bar_check(candidate: dict, incumbent: dict, sigma_seed: float) -> dict:
         "clears_delta": bool(clears), "no_fold_regression": bool(no_regression),
         "ships": bool(comparable and clears and no_regression),
     }
+
+
+def slice_comparison(candidate: dict, incumbent: dict) -> list[dict]:
+    """Per-slice winner log-loss for a candidate/incumbent report pair.
+
+    One row per slice present in either report -- candidate slices first in
+    the candidate's own order, then any the incumbent has and it does not.
+    A slice only one side reports (`external_missing` when only the
+    candidate carries the external-data block, say) keeps the side it has
+    and gets `None` for the other and for `delta`, rather than being
+    dropped: a slice the candidate alone can score is itself worth seeing.
+    `delta` is candidate - incumbent, negative = candidate better, matching
+    `bar_check`."""
+    cand_slices = candidate.get("slices") or {}
+    inc_slices = incumbent.get("slices") or {}
+    rows = []
+    for name in list(cand_slices) + [n for n in inc_slices if n not in cand_slices]:
+        cand, inc = cand_slices.get(name), inc_slices.get(name)
+        cand_ll = cand["winner_log_loss"] if cand else None
+        inc_ll = inc["winner_log_loss"] if inc else None
+        rows.append({
+            "slice": name,
+            "n": (cand or inc).get("n"),
+            "candidate_winner_log_loss": cand_ll,
+            "incumbent_winner_log_loss": inc_ll,
+            "delta": round(cand_ll - inc_ll, 4) if cand and inc else None,
+        })
+    return rows
 
 
 def paired_delta(report_a: dict, report_b: dict, sigma_seed: float) -> dict:
