@@ -27,10 +27,24 @@ IDENTIFIERS = ("fight_id", "date", "swapped")
 #     the block is +0.0006 row-weighted on 2024-2025, without them -0.0006.
 #     See the SP2 plan's Task 11 shipping note
 #     (docs/superpowers/plans/2026-09-07-sp2-features-v3.md) and the twin
-#     exclusion in `mma.models.xgb.NON_FEATURES`.
+#     exclusion in `mma.models.xgb.NON_FEATURES`;
+#   * `notice_unknown`: the `notice` block's fight-level coverage flag. Held
+#     out for the same reason and by the same measurement -- the source's bout
+#     list ends 2024-12-14, so modelling the flag is modelling the calendar
+#     (torch 0.6482 with it, 0.6472 without). The block ships in its
+#     `notice_noflag` form;
+#   * `home_country_a` / `home_country_b`: the `context` block's per-corner
+#     home-advantage pair. This one is not a preference at all -- it FAILS the
+#     constant-vector leak check. A per-corner boolean is False when the
+#     corner's nationality is unknown, and nationality exists only for
+#     fighters the `external` snapshot mapped, so over the 1,448 rows where
+#     exactly one corner is mapped the pair takes three distinct value tuples
+#     and the mapped corner wins 0.745 of them: the `external` coverage-
+#     selection leak in a second channel. The block ships as `context_nohome`.
 DROPPED = (
     "reach_missing_a", "reach_missing_b", "dob_missing_a", "dob_missing_b",
     "external_missing", "same_country",
+    "notice_unknown", "home_country_a", "home_country_b",
 )
 CATEGORICAL = "weight_class"
 

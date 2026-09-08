@@ -1,5 +1,7 @@
 import pandas as pd
+import pytest
 
+from mma.feature_blocks import Block
 from mma.snapshots import build_snapshots
 
 
@@ -40,6 +42,13 @@ def _ratings():
             "pre_grappling": [1500.0] * 4,
             "post_grappling": [1505.0, 1495.0, 1500.0, 1510.0],
             "pre_fights": [0, 0, 1, 0],
+            # the Glicko triple rides in the same table (scripts/build_ratings.py)
+            "pre_glicko_mu": [1500.0, 1500.0, 1530.0, 1500.0],
+            "post_glicko_mu": [1530.0, 1470.0, 1505.0, 1525.0],
+            "pre_glicko_phi": [350.0, 350.0, 180.0, 350.0],
+            "post_glicko_phi": [180.0, 180.0, 150.0, 190.0],
+            "pre_glicko_sigma": [0.06] * 4,
+            "post_glicko_sigma": [0.0599] * 4,
         }
     )
 
@@ -80,3 +89,103 @@ def test_snapshots_supply_every_state_key_the_served_row_needs():
     )
     assert len(served) == 1
     assert set(columns_for([BASE_BLOCK])) <= set(served.columns)
+
+
+# The three blocks SP2.1 restored, measured and then unregistered again. Their
+# registrations are commented out in `mma.feature_blocks` (the SP2 precedent
+# for a rejected block), but the accumulators, the snapshot fields and the
+# serving derivations are all still live and unguarded -- `opponent_adjusted`
+# especially, because SP2's revert of it was total and SP2.1 had to rebuild it
+# from a written contract rather than recover it from git. This mirror of the
+# commented-out specs is what keeps that serving path under test: register
+# them into a throwaway registry and build a real row.
+_ARCHIVED_BLOCKS = (
+    Block(
+        name="trajectory",
+        differentials=(
+            ("pre_glicko_mu", "glicko_mu"),
+            ("pre_glicko_phi", "glicko_phi"),
+            ("pre_glicko_sigma", "glicko_sigma"),
+            ("elo_delta_3", "elo_delta_3"),
+            ("elo_delta_5", "elo_delta_5"),
+            ("elo_peak_minus_current", "elo_peak_minus_current"),
+            ("years_since_ufc_debut", "years_since_ufc_debut"),
+            ("age_x_fights", "age_x_fights"),
+        ),
+        absolutes=("age_squared",),
+    ),
+    Block(
+        name="context",
+        differentials=(("bonus_rate", "bonus_rate"),),
+        booleans=("home_country",),
+        fight_level=("referee_finish_rate", "referee_decision_rate",
+                     "referee_missing", "home_country_unknown"),
+    ),
+    Block(
+        name="opponent_adjusted",
+        differentials=(
+            ("sig_pm_vs_exp", "sig_pm_vs_exp"),
+            ("sig_absorbed_pm_vs_exp", "sig_absorbed_pm_vs_exp"),
+            ("td_landed_pf_vs_exp", "td_landed_pf_vs_exp"),
+            ("td_def_vs_exp", "td_def_vs_exp"),
+            ("ctrl_share_vs_exp", "ctrl_share_vs_exp"),
+            ("avg_opp_elo_wins", "avg_opp_elo_wins"),
+            ("avg_opp_elo_losses", "avg_opp_elo_losses"),
+        ),
+    ),
+)
+
+
+def test_snapshots_carry_the_archived_blocks_state_and_serve_a_row():
+    """The serving half of the SP2.1 restoration, kept after the revert.
+
+    `build_matchup` builds its state dict from the block spec and raises on a
+    key nothing supplies, so the check that a snapshot can serve `trajectory`,
+    `context` and `opponent_adjusted` is simply building the row. The two
+    date-dependent fields are the ones worth naming: `first_date` replaces
+    `years_since_ufc_debut` here for the same reason `last_date` replaces
+    `days_since_last` -- both need an as-of date the snapshot does not have.
+
+    The blocks are unregistered on `main`, so this registers the archived
+    specs into a throwaway registry rather than asking for them by name.
+    """
+    from mma.feature_blocks import BASE_BLOCK, columns_for, register, registry
+    from mma.inference import build_matchup
+
+    snapshots = build_snapshots(_fights(), _stats(), _ratings())
+    x = snapshots.loc["x"]
+    assert x["first_date"] == pd.Timestamp("2024-01-01")
+    assert x["last_date"] == pd.Timestamp("2024-06-01")
+    assert "years_since_ufc_debut" not in snapshots.columns
+    assert "days_since_last" not in snapshots.columns
+    assert x["glicko_mu"] == 1505.0        # last post_glicko_mu
+    assert x["glicko_phi"] == 150.0
+
+    blocks = (BASE_BLOCK, "trajectory", "context", "opponent_adjusted")
+    bio = pd.Series({"dob": pd.Timestamp("1990-01-01"), "height_cm": 180.0,
+                     "reach_cm": 183.0, "stance": "Orthodox"})
+    as_of = pd.Timestamp("2025-01-01")
+    # x debuted at f1 and z at f2, so their tenures differ by the gap between
+    # the two cards -- the column has to see that, measured from `first_date`
+    with registry():
+        for block in _ARCHIVED_BLOCKS:
+            register(block)
+        served = build_matchup(
+            snapshots.loc["x"], snapshots.loc["z"], bio, bio,
+            "Lightweight", False, 3, as_of=as_of, blocks=blocks,
+        )
+        assert set(columns_for(blocks)) <= set(served.columns)
+    assert served["years_since_ufc_debut_diff"].iloc[0] == pytest.approx(
+        (as_of - pd.Timestamp("2024-01-01")).days / 365.25
+        - (as_of - pd.Timestamp("2024-06-01")).days / 365.25
+    )
+    # the served deviation is the post-fight one GROWN over the lay-off
+    # (mma.glicko.decay_days), not the stale post-fight number -- which is
+    # what makes the served value equal the one the same fight would train on
+    from mma import glicko
+
+    days = (as_of - pd.Timestamp("2024-06-01")).days
+    grown = [glicko.decay_days(glicko.Rating(1500.0, phi, 0.0599), days).rd
+             for phi in (150.0, 190.0)]
+    assert served["glicko_phi_diff"].iloc[0] == pytest.approx(grown[0] - grown[1])
+    assert grown[0] > 150.0
