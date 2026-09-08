@@ -17,9 +17,13 @@ walk-forward over 2018–2026, plus an interactive Streamlit matchup explorer.
   from data available before each fight; a truncation-invariance test proves
   no feature can see the future.
 - **Baseline ladder**: coin flip → Elo (0.553 acc, 0.683 log-loss) →
-  XGBoost (0.613, 0.654) → 5-seed calibrated neural ensemble (0.610, 0.651)
+  XGBoost (0.614, 0.651) → 5-seed calibrated neural ensemble (0.621, 0.648)
   on 4,804 walk-forward fights, each scored by a model that had never seen
   its year.
+- **Features earned, not assumed**: eight feature blocks measured against a
+  pre-registered bar, one shipped, seven documented as negative results — and
+  a selection leak in per-corner missingness flags found and removed along the
+  way ([Features](#features)).
 - **Uncertainty done properly**: deep-ensemble spread + MC dropout, per-seed
   temperature scaling, display probabilities recalibrated to historical base rates.
 - **Self-updating**: a weekly GitHub Action refreshes the dataset and rebuilds
@@ -66,6 +70,120 @@ challenge; `src/mma/parsing.py` now supplies the string parsers the new
 layout needs. The `.github/workflows/refresh-data.yml` Action runs this
 refresh weekly and commits any rebuilt artifacts automatically.
 
+## Features
+
+The feature table is assembled from named **blocks** (`src/mma/feature_blocks.py`,
+`scripts/build_features.py --blocks`), and a block only ships if it clears the
+pre-registered walk-forward bar. The table on disk is
+**11,238 fights × 54 columns**, built from `base,external`
+(`data/processed/features_blocks.json` records which blocks produced it, and the
+serving path reads the same sidecar so a trained column cannot go missing at
+prediction time).
+
+- **`base`** — the v1 feature set: career volume and win/finish rates,
+  per-fight and per-minute striking, takedown and control rates, streak and
+  layoff, last-5 form and strength of schedule, the three Elo ratings
+  (overall / striking / grappling) and Elo-tracked experience, plus physical
+  differentials (height, reach, age), per-corner age and fight count, and the
+  stance / debut / missingness flags. All built inside the chronological
+  accumulators in `src/mma/history.py`, so every value is strictly pre-fight.
+- **`external`** — what each fighter brought *into* the UFC, from the
+  `ehan03/jds-mma-data` snapshot joined by ufcstats fighter id and never by
+  name: `pre_ufc_wins`, `pre_ufc_losses`, `pre_ufc_finish_rate`,
+  `pre_ufc_finish_loss_rate`, `pre_ufc_avg_opp_wins` and
+  `days_since_pro_debut` as A-minus-B differentials. This is the only signal
+  in the table that is not a recombination of the fight history: it is the
+  regional career the UFC record cannot see. Worth **−0.0034** pooled
+  log-loss to the neural net, and **−0.0043** on fresh seeds.
+
+### Block results
+
+Eight blocks were measured; **one shipped**. Every rejected block's harness
+report is committed under `models/walkforward/` — negative results are
+deliverables here, not deleted branches. Pooled winner log-loss, torch
+deciding (the deployed scorer), against that block's incumbent:
+
+| Block | What it added | XGB | torch | Δ vs incumbent | Ships? |
+|---|---|---|---|---|---|
+| `external` | pre-UFC career and origin | 0.6506 | **0.6476** | **−0.0034** | **yes** |
+| `recency` | training window + recency weights | 0.6525 | 0.6499 | −0.0011 | no |
+| `notice` | short-notice replacement, missed weight | 0.6501 | 0.6472 | −0.0004 | no |
+| `trajectory` | Glicko-2, Elo momentum, peak-minus-current | 0.6486 | 0.6472 | −0.0004 | no |
+| `context` | referee rates, home country, bonus history | 0.6499 | 0.6474 | −0.0002 | no |
+| `rankings` | official weekly divisional rank | 0.6499 | 0.6487 | +0.0011 | no |
+| `in_fight` | per-round and strike-target profile | 0.6540 | 0.6528 | +0.0018 | no |
+| `opponent_adjusted` | rates versus what opponents allowed | 0.6519 | 0.6532 | +0.0022 | no |
+
+Seven of eight fail, and mostly in the same shape: the tree ensemble is
+roughly neutral or slightly better while the neural net — the scorer that
+decides — is worse. A tree can ignore a correlated column that is NaN on most
+rows; the MLP has to impute a median for it on every one of those rows and
+spend capacity on the result. `in_fight`, `opponent_adjusted`, `trajectory`
+and `rankings` are all recombinations of information the base table already
+carries. The box score, in other words, is close to tapped out.
+
+Two blocks failed a *serving* gate rather than the accuracy bar, which is
+worth recording separately: `context`'s referee columns are present on 97.7%
+of training rows and **0%** of the rows the deployed model will ever score
+(Wikipedia cards do not name a referee), and `notice`'s source stops at
+2024-12-14, so "unknown" is the served state for every future fight by
+construction.
+
+### The leak in the `external` block
+
+The most interesting finding in this pass is a bug we shipped past. As
+specified, the block carried a **per-corner** missingness flag. Measured that
+way it looked spectacular — torch 0.6367, Δ −0.0143, the debut slice −0.0846
+— and it was wrong.
+
+Membership of the snapshot's cross-source fighter mapping is a function of how
+long a fighter's UFC career turned out to be: among fighters debuting
+2013–2022, the mapped share is 0.241 for those with one UFC bout ever, 0.813
+at two, 0.940 at three and 1.000 at eleven or more. So "this corner is missing
+from the external table" means "this fighter did not go on to have a career."
+Over the 1,445 fights where exactly one corner is unmapped, that corner loses
+**76%** of the time — and 90% in the debut slice. Meanwhile the actual pre-UFC
+differentials carry almost nothing on their own.
+
+The walk-forward signature is what a leak looks like when the harness catches
+it: folds 2018–2023 improved by −0.026 to −0.046 while **2025 cost +0.0487**,
+because in 2025 missingness stops meaning "short career" and starts meaning
+"debuted after the snapshot". `no_fold_regression` failed and the variant did
+not ship.
+
+The fix keeps the flags in the **table** and out of both **model matrices**
+(`mma.tensors.DROPPED`, `mma.models.xgb.MODEL_EXCLUDED`): without
+`external_missing` in the table there is no `external_missing` evaluation
+slice, and the coverage decay below becomes unmeasurable. The differentials
+are NaN whenever either corner is unmapped, so no per-corner channel survives
+— and the property asserted is a data-level one, not a rule about column
+names: over those 1,445 rows the block's eight columns take **exactly one
+distinct value tuple**, so the selection effect is unreachable rather than
+merely unmodelled (`tests/test_external.py`).
+
+**Coverage caveat, and why the block is provisional.** The snapshot is static
+(UFC coverage ends 2024-12-14). `external_missing` is 0.201 of all rows but
+0.359 of 2025 and 0.534 of 2026, and the block's gain follows: −0.0047
+row-weighted on 2018–2023 against −0.0006 on 2024–2025. It pays where the
+snapshot has seen the fighters and does nothing where it has not, and the
+share it has not seen only grows. Keeping this block paying needs a
+refreshable source — an SP4 follow-up, not a solved problem.
+
+### Data sources and licences
+
+| Source | Used for | Licence |
+|---|---|---|
+| [Kaggle UFC dataset](https://www.kaggle.com/datasets/neelagiriaditya/ufc-datasets-1994-2025) (`neelagiriaditya`) | the primary fights / fighters / round-stats tables | per the dataset page |
+| [`ehan03/jds-mma-data`](https://github.com/ehan03/jds-mma-data) | pre-UFC career, nationality, notice and weigh-in tables (`data/external/`) | **MIT** (notice vendored as `data/external/LICENSE-jds-mma-data`) |
+| [`jerzyszocik/ufc-rankings-history`](https://www.kaggle.com/datasets/jerzyszocik/ufc-rankings-history) | the weekly divisional rankings (`data/external/rankings.parquet`) | **CC0** |
+| [`jerzyszocik/ufc-betting-odds-daily-dataset`](https://www.kaggle.com/datasets/jerzyszocik/ufc-betting-odds-daily-dataset) | the market benchmark only — never a model feature | **CC0** |
+| [`Greco1899/scrape_ufc_stats`](https://github.com/Greco1899/scrape_ufc_stats) | secondary daily gap-filler (`scripts/refresh_secondary.py`) | **GPL-3.0** — used as a *data* source only (its published CSVs are fetched over HTTPS; no GPL code is vendored), writes off by default, report-only in CI |
+| Wikipedia event pages | upcoming fight cards, and the withdrawal / missed-weight parser | CC BY-SA 4.0 |
+
+Only *derived*, compact tables are committed (a few MB); the raw snapshots
+are never vendored and are regenerated by `scripts/build_external.py` and
+`scripts/build_rankings.py`.
+
 ## Results so far
 
 Every model is evaluated by **expanding-window walk-forward** over
@@ -87,18 +205,22 @@ temperatures) on *Y−1*, and score *Y*; the last fold also absorbs the
 its year, and the eight folds pool to **4,804 fights**. Elo carries no
 tuning step: its ratings are recomputed point-in-time and scored directly.
 
-**Winner prediction** (4,804 pooled walk-forward fights, 2018–2026):
+**Winner prediction** (4,804 pooled walk-forward fights, 2018–2026), on the
+shipped `base,external` feature table:
 
 | Model | Accuracy | Log-loss | Brier |
 |---|---|---|---|
 | Elo baseline | 0.553 | 0.683 | 0.245 |
-| XGBoost (46 features) | 0.613 | 0.654 | 0.231 |
-| **Neural net** (5-seed ensemble, calibrated) | **0.610** | **0.651** | **0.230** |
+| XGBoost (46 modelled features) | 0.614 | 0.651 | 0.230 |
+| **Neural net** (5-seed ensemble, calibrated) | **0.621** | **0.648** | **0.228** |
 
-Pooled method macro-F1: XGBoost 0.330, neural net 0.391; finish-round
-macro-F1 (finishes only, 2,446 fights): XGBoost 0.183, neural net 0.305 —
+Pooled method macro-F1: XGBoost 0.333, neural net 0.387; finish-round
+macro-F1 (finishes only, 2,446 fights): XGBoost 0.178, neural net 0.315 —
 the same trade-off as before: the class-weighted neural heads identify
 submissions and early finishes instead of defaulting to the majority class.
+On the v1 46-column table the same protocol gave XGBoost 0.6537 and the
+neural net 0.6510 (`models/walkforward/{xgb,torch}_v1.json`), so the
+`external` block is worth −0.0034 to the scorer that ships.
 
 **Noise floor and pre-registered bar.** Re-running the neural walk-forward
 with three disjoint 5-seed sets gives pooled log-losses of 0.6510 / 0.6516 /
@@ -108,22 +230,33 @@ bar for a challenger to *replace* the incumbent is **0.003 pooled log-loss**
 — roughly 9σ, so a change has to be far larger than seed-to-seed wobble, and
 must not regress any single fold, before it ships.
 
+**Fresh-seed re-score.** The shipped feature set was re-run on seeds 5–9
+against a paired incumbent — the v1 recipe on the *same* 54-column table
+with the eight external columns held out of the model, which reproduces
+`torch_v1_seeds5.json` bit-exactly. Pooled **0.6516 → 0.6473, Δ −0.0043**,
+worst fold +0.0006: the block clears the bar on seeds it was never chosen
+on, by more than it did on seeds 0–4.
+
 **Refit strategy.** The harness then asked whether early-stopping on a
 held-out year (protocol A) is actually necessary, or whether a fixed budget
 taken from those early-stopping runs, trained on *all* data through the
-newest year (protocol B), does as well. On the same folds: XGBoost
-0.6537 → 0.6524, neural net 0.6510 → 0.6512 — both within the noise floor
-(`models/walkforward/refit_decision.json`). Since B is not worse and uses
-every available fight, the deployed models are therefore trained on all
+newest year (protocol B), does as well. On the same folds and the shipped
+table: XGBoost 0.6506 → 0.6507, neural net 0.6476 → 0.6470 — both within the
+noise floor (`models/walkforward/refit_decision_v3.json`). Since B is not
+worse and uses every available fight, the deployed models are trained on all
 **11,238 decisive fights through 2026-08-08** with that fixed budget (neural
-net: 14 epochs, temperature 1.1 on every seed; XGBoost: 82/80/76 trees for
-the winner/method/round heads). `models/torch/metrics_val.json` and
+net: 10 epochs, temperature 1.07 on every seed; XGBoost: 105/61/75 trees for
+the winner/method/round heads). The budget belongs to a *feature table*, not
+to the recipe: the v1 table's budget was 14 epochs at temperature 1.1 and
+82/80/76 trees (`refit_decision.json`), and both files record which table
+they were taken on. `models/torch/metrics_val.json` and
 `models/xgb_metrics_val.json` record the recipe and quote the harness
-numbers as their evidence. A fresh-seed re-score of the shipped neural-net
-recipe (seeds 5–9 instead of 0–4) reproduced the same result — pooled
-0.6516 → 0.6518, Δ +0.0002, still inside σ_seed — confirming the recipe
+numbers as their evidence. A fresh-seed re-score of the shipped recipe
+(seeds 5–9 instead of 0–4) reproduced the same result — pooled
+0.6473 → 0.6475, Δ +0.0002, still inside σ_seed — confirming the recipe
 choice wasn't a seed-lucky fluke (`fresh_seed_rescore` in
-`models/walkforward/refit_decision.json`).
+`models/walkforward/refit_decision_v3.json`).
+
 
 ### Original validation window (2021–2023, for continuity)
 
@@ -194,7 +327,7 @@ The neural net is a multi-task network (shared trunk; winner, method, and
 finish-round heads) trained as a deterministic 5-seed ensemble with per-seed
 temperature scaling — in the original split protocol the fitted temperatures
 all landed near 1.0, i.e. the raw model was already well calibrated; the
-deployed refit applies the harness-derived temperature 1.1 to every seed.
+deployed refit applies the harness-derived temperature 1.07 to every seed.
 Uncertainty comes from ensemble spread (mean 0.087 on the original
 validation window) and MC dropout. Per the Phase 3 ablation, the era-proxy
 `*_missing` flags are excluded from its inputs.
@@ -286,7 +419,11 @@ stays gradeable even as ratings keep moving). Aggregate stats land in
 
 21 of the 78 predicted fights have been graded so far (events through
 2026-08-08): 0.667 accuracy, 0.616 log-loss, 0.213 Brier — against a
-coin-flip baseline of 0.476 accuracy on the same fights. 29 further
+coin-flip baseline of 0.476 accuracy on the same fights. Those 78 predictions
+were made by model `40df77ec43c7`, the SP1 model trained on the 46-column
+table; the SP2 feature set and re-derived budget produce a different scorer
+(`b617b96dae45`), so the next weekly run opens a new section rather than
+mixing the two models' predictions into one row. 29 further
 predictions are awaiting results, and the rest cover events that haven't
 happened yet. Grading itself can lag a finished event by days to weeks,
 because it depends on the Kaggle mirror picking up the result — the same
@@ -415,10 +552,11 @@ and the full ROI sweep at 0%/5%/10% thresholds) are in the committed
   dataset yields an unchanged version. The evidence behind each deployed
   model lives in `models/walkforward/` (the harness reports, noise floor,
   and refit decision), and the metrics files quote it. After a weekly data
-  refresh the refit reuses the committed budget (14 epochs / T 1.1;
-  82/80/76 trees) on the newer data, but the harness reports are *not*
+  refresh the refit reuses the committed budget (10 epochs / T 1.07;
+  105/61/75 trees) on the newer data, but the harness reports are *not*
   re-run by the Action — re-run `scripts/run_walkforward.py`,
-  `scripts/noise_floor.py`, and `scripts/refit_decision.py` by hand to
+  `scripts/noise_floor.py`, and `scripts/refit_decision.py --reports v3` by
+  hand to
   refresh the evidence (the train scripts warn when the harness's data is
   older than the training cutoff). Automating that is SP4.
 

@@ -1,7 +1,9 @@
 # Predictor v3: Simulated Fights, Expanded Data, Walk-Forward Evaluation — Design
 
 **Date:** 2026-09-06
-**Status:** Approved 2026-09-06; amended the same day after SP0 (recency, data leads)
+**Status:** Approved 2026-09-06; amended the same day after SP0 (recency, data leads).
+SP0, SP1 and **SP2 done** (SP2 signed off 2026-09-08 — see its section below);
+SP3 and SP4 outstanding.
 **Scope:** Predictions only. The value-betting / odds-analysis layer is a
 later, separate spec (see "Out of scope").
 
@@ -256,6 +258,68 @@ shows it hurts.
   table is the union of blocks that cleared the bar; `features.parquet`
   rebuilt; truncation test green over every column; README feature section
   updated.
+
+**Status: SP2 DONE (2026-09-08), plan
+`docs/superpowers/plans/2026-09-07-sp2-features-v3.md`.** All eight blocks
+above were built and measured; **one shipped**. The feature table is
+`base,external` (11,238 x 54), the deployed budget was re-derived on it
+(`models/walkforward/refit_decision_v3.json`: XGB 105/61/75 trees, torch 10
+epochs at temperature 1.07) and the models redeployed (hash `b617b96dae45`).
+Fresh-seed re-score of the shipped set against a bit-exact paired incumbent:
+pooled 0.6516 -> 0.6473, **delta -0.0043**, worst fold +0.0006, ships.
+
+| block | torch pooled | Δ vs incumbent | ships |
+|---|---|---|---|
+| external | 0.6476 | **-0.0034** | **yes** |
+| recency | 0.6499 | -0.0011 | no |
+| notice | 0.6472 | -0.0004 | no |
+| trajectory | 0.6472 | -0.0004 | no |
+| context | 0.6474 | -0.0002 | no |
+| rankings | 0.6487 | +0.0011 | no |
+| in_fight | 0.6528 | +0.0018 | no |
+| opponent_adjusted | 0.6532 | +0.0022 | no |
+
+**What seven rejections imply for SP3.** The one block that paid is the one
+whose information is *not* in the fight table: pre-UFC career, from an outside
+source. Every block that recombines what the box score already carries --
+per-round and strike-target profile, opponent-adjusted rates, Glicko-2 and
+Elo dynamics, official rankings -- lands within a third of the bar or worse,
+and mostly in the same shape: XGBoost neutral-to-better, the neural net (the
+scorer that decides) worse, because a tree can ignore a correlated column
+that is NaN on most rows while the MLP must impute and spend capacity on it.
+The box-score data is close to tapped out. **SP3's value therefore has to come
+from the paradigm, not from new columns**: a coherent joint distribution over
+(winner, method, round) produced by simulating the fight, which is a different
+object from three independent marginal heads and is judged on joint log-loss,
+not on whether one more feature moves the winner marginal. E1 (hazard +
+decision on v1 features) is the load-bearing experiment for exactly this
+reason -- it isolates the paradigm from the data -- and E4's latent in-fight
+state is the one remaining route to information the current columns do not
+express, since it models the *sequence* rather than another aggregate of it.
+
+**Two methodological results SP3 and SP4 inherit.** (1) A selection leak was
+found and removed: per-corner "data missing" flags encoded future career
+length (the unmapped corner lost 76% of its fights, 90% in the debut slice),
+and the shipped form keeps such flags in the TABLE and out of both model
+matrices, verified by a data-level property (over the rows where exactly one
+corner is unmapped, the block's columns take exactly one distinct value
+tuple) rather than by a rule about column names. Any SP3 feature joined from
+an external source inherits that check. (2) A budget belongs to a FEATURE
+TABLE, not to a recipe -- the v1 table's 14 epochs at temperature 1.1 did not
+carry over -- so a simulator shipping on a new table re-derives its own
+through `scripts/refit_decision.py --reports <set>`.
+
+**Carried forward from SP2** (full list in the plan's Completion notes): the
+external snapshot is static and its coverage decays (0.534 of 2026 rows
+already unmapped), so SP4 needs a refreshable source or the only shipped
+block drifts to neutral; the secondary daily source has four prerequisites
+before its writes can be enabled (fighter-table adaptation, the
+`make_dataset.py` rebuild collision, a provenance column, `round_stats`);
+`mma.wiki_cards.parse_background` is built and fixture-tested but deliberately
+unwired from `prospective.predict_event`; three rankings name-match misses
+would close by extending `mma.prospective.fold_accents`; and one row carries a
+`dob` error giving age 4.6, harmless to a linear age term but not to a
+quadratic one, which SP3's hazard model may well want.
 
 ### SP3 — Fight simulator
 
