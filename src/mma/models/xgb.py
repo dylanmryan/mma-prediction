@@ -22,7 +22,16 @@ TARGETS = ("y_winner", "y_method", "y_finish_round")
 # without. The twin exclusion for the torch path is `mma.tensors.DROPPED`,
 # which carries the full argument; see also the SP2 plan's Task 11 shipping
 # note (docs/superpowers/plans/2026-09-07-sp2-features-v3.md).
-MODEL_EXCLUDED = ("external_missing", "same_country")
+# `notice_unknown` and the `home_country_a`/`_b` pair join them for the SP2.1
+# restoration: the first is the `notice` block's coverage flag (the source's
+# bout list ends 2024-12-14, so modelling it is modelling the calendar) and
+# the second FAILS the constant-vector leak check outright -- it is the
+# `external` coverage-selection artifact in a second channel. See
+# `mma.tensors.DROPPED`, which carries the full argument for all five.
+MODEL_EXCLUDED = (
+    "external_missing", "same_country",
+    "notice_unknown", "home_country_a", "home_country_b",
+)
 NON_FEATURES = {"fight_id", "date", "swapped", *TARGETS, *MODEL_EXCLUDED}
 
 BASE_PARAMS = {

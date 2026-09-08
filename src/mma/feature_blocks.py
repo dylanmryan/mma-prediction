@@ -296,10 +296,12 @@ register(Block(
 
 
 
-# --- SP2 block: notice (MEASURED AND REJECTED) -------------------------------
+# --- SP2 block: notice (MEASURED AND REJECTED IN SP2; RESTORED FOR SP2.1) ----
 # Short notice and missed weight, from the Bet MMA tables in the same
-# `ehan03/jds-mma-data` snapshot. Deliberately NOT registered: the block was
-# built, evaluated and reverted in SP2 Task 12. It did not clear the bar
+# `ehan03/jds-mma-data` snapshot. Registered again as one of the four blocks
+# the SP2.1 capacity experiment combines
+# (docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md); it was
+# built, evaluated and reverted in SP2 Task 12, where it did not clear the bar
 # (torch pooled 0.6472 against the incumbent 0.6476 with the coverage flag held
 # out of the model, 0.6482 with it in -- a fifth of the 0.003 bar at best), and
 # the reason is coverage rather than signal: the source's bout list ends
@@ -312,17 +314,23 @@ register(Block(
 # What was kept, because it is reusable and correct: the derivation in
 # `scripts/build_external.py`, the committed `data/external/fight_notice.parquet`,
 # the loader `mma.notice`, and `mma.wiki_cards.parse_background`, which is the
-# only route to these facts for a FUTURE event. Registering the block again
-# means restoring the four lines below plus the `_side_frame` / `build_matchup`
-# wiring; see the SP2 plan's Task 12 notes.
+# only route to these facts for a FUTURE event.
 #
-#     register(Block(
-#         name="notice",
-#         differentials=(("notice_shortfall_days", "notice_shortfall_days"),
-#                        ("missed_weight_over_lbs", "missed_weight_over_lbs")),
-#         booleans=("short_notice_7", "short_notice_30", "missed_weight"),
-#         fight_level=("notice_unknown",),
-#     ))
+# SHIPPING FORM (`notice_noflag`, the better of the two SP2 variants): the
+# fight-level `notice_unknown` stays in the TABLE -- something has to record
+# that the source has not seen a fight -- and is held out of both model
+# matrices via `mma.tensors.DROPPED` and `mma.models.xgb.MODEL_EXCLUDED`,
+# exactly as `external`'s two flags are. Modelling it cost 0.0010 on torch
+# (0.6482 against 0.6472).
+NOTICE_BLOCK = "notice"
+
+register(Block(
+    name=NOTICE_BLOCK,
+    differentials=(("notice_shortfall_days", "notice_shortfall_days"),
+                   ("missed_weight_over_lbs", "missed_weight_over_lbs")),
+    booleans=("short_notice_7", "short_notice_30", "missed_weight"),
+    fight_level=("notice_unknown",),
+))
 
 
 
@@ -358,11 +366,13 @@ register(Block(
 #     ))
 
 
-# --- SP2 block: trajectory (MEASURED AND REJECTED) ---------------------------
+# --- SP2 block: trajectory (REJECTED IN SP2; RESTORED FOR SP2.1) -------------
 # Rating DYNAMICS on top of the base block's rating LEVELS: Glicko-2's
 # deviation and volatility, recent Elo momentum, the drawdown from a
-# fighter's own peak, tenure, and two age interactions. Deliberately NOT
-# registered: built, evaluated and reverted in SP2 Task 7.
+# fighter's own peak, tenure, and two age interactions. Built, evaluated and
+# reverted in SP2 Task 7; registered again for the SP2.1 capacity experiment
+# (docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md), because it
+# is one of the blocks whose two scorers disagreed by the most.
 #
 # XGB liked it (pooled 0.6486 against the incumbent 0.6506, delta -0.0020) and
 # torch barely moved (0.6472 against 0.6476, delta **-0.0004** -- a seventh of
@@ -376,34 +386,39 @@ register(Block(
 # tested Glicko-2 implementation pinned to the worked example in Glickman's
 # paper -- and the `run_glicko` pass in `scripts/build_ratings.py`, so
 # `data/processed/ratings.parquet` carries `{pre,post}_glicko_{mu,phi,sigma}`
-# whether or not anything models them. Registering the block again means
-# restoring the lines below plus the four accumulator fields in
+# whether or not anything models them.
+#
+# The block's own wiring: the four accumulator fields in
 # `mma.history._FighterState` (`elo_delta_3`, `elo_delta_5`,
 # `elo_peak_minus_current`, `years_since_ufc_debut`), the `first_date` and
 # Glicko pass-through in `mma.snapshots`, the two age interactions in
 # `mma.features._side_frame`, and the as-of derivations in
-# `mma.inference.build_matchup`; see the SP2 plan's Task 7 notes.
-#
-#     register(Block(
-#         name="trajectory",
-#         differentials=(
-#             ("pre_glicko_mu", "glicko_mu"),
-#             ("pre_glicko_phi", "glicko_phi"),
-#             ("pre_glicko_sigma", "glicko_sigma"),
-#             ("elo_delta_3", "elo_delta_3"),
-#             ("elo_delta_5", "elo_delta_5"),
-#             ("elo_peak_minus_current", "elo_peak_minus_current"),
-#             ("years_since_ufc_debut", "years_since_ufc_debut"),
-#             ("age_x_fights", "age_x_fights"),
-#         ),
-#         absolutes=("age_squared",),
-#     ))
+# `mma.inference.build_matchup` (which grows the served Glicko deviation over
+# the days since the fighter's last bout, so the served value equals the
+# trained one). See the SP2 plan's Task 7 notes.
+TRAJECTORY_BLOCK = "trajectory"
+
+register(Block(
+    name=TRAJECTORY_BLOCK,
+    differentials=(
+        ("pre_glicko_mu", "glicko_mu"),
+        ("pre_glicko_phi", "glicko_phi"),
+        ("pre_glicko_sigma", "glicko_sigma"),
+        ("elo_delta_3", "elo_delta_3"),
+        ("elo_delta_5", "elo_delta_5"),
+        ("elo_peak_minus_current", "elo_peak_minus_current"),
+        ("years_since_ufc_debut", "years_since_ufc_debut"),
+        ("age_x_fights", "age_x_fights"),
+    ),
+    absolutes=("age_squared",),
+))
 
 
-# --- SP2 block: context (MEASURED AND REJECTED) ------------------------------
+# --- SP2 block: context (REJECTED IN SP2; RESTORED FOR SP2.1) ----------------
 # The fight's SETTING rather than either fighter's record: referee tendency,
 # home advantage, and how often a fighter's wins carried a post-fight bonus.
-# Deliberately NOT registered: built, evaluated and reverted in SP2 Task 8.
+# Built, evaluated and reverted in SP2 Task 8; registered again for the SP2.1
+# capacity experiment in its best-measured `context_nohome` form.
 # Three variants were measured and all three are worse than or level with the
 # incumbent on torch (0.6474 to 0.6483 against 0.6476); the best,
 # `context_nohome`, is -0.0002, a fifteenth of the 0.003 bar.
@@ -426,20 +441,61 @@ register(Block(
 #     97.7% of training rows and on 0% of servable ones, because Wikipedia
 #     cards do not name a referee.
 #
-# What was kept, because it is reusable and correct: `mma.context` -- the
-# prior-fights-only referee pass, the event-country parser and its
-# nationality/location normalisation, and the bonus fight-id loader -- plus
-# `tests/test_context.py`. Registering the block again means restoring the
-# lines below plus `bonus_wins` in `mma.history._FighterState`, the
-# `home_country`/`event_country` derivations in `mma.features._side_frame`,
-# the referee and home-advantage context in `build_features`, and the
-# `referee` / `referee_rates` / `event_country` arguments to
-# `mma.inference.build_matchup`; see the SP2 plan's Task 8 notes.
+# `mma.context` owns the derivations: the prior-fights-only referee pass, the
+# event-country parser and its nationality/location normalisation, and the
+# bonus fight-id loader. The rest of the wiring is `bonus_wins` in
+# `mma.history._FighterState`, the `home_country`/`event_country` derivations
+# in `mma.features._side_frame`, the referee and home-advantage context in
+# `build_features`, and the `referee` / `referee_rates` / `event_country`
+# arguments to `mma.inference.build_matchup`; see the SP2 plan's Task 8 notes.
 #
-#     register(Block(
-#         name="context",
-#         differentials=(("bonus_rate", "bonus_rate"),),
-#         booleans=("home_country",),
-#         fight_level=("referee_finish_rate", "referee_decision_rate",
-#                      "referee_missing", "home_country_unknown"),
-#     ))
+# SHIPPING FORM (`context_nohome`): `home_country_a`/`_b` stay in the TABLE
+# and are held out of both model matrices, because they FAIL the constant-
+# vector leak check -- over the rows where exactly one corner is mapped by the
+# `external` snapshot the pair takes three distinct values and the mapped
+# corner wins 0.745 of them. That is not a tuning choice; it is the same
+# coverage-selection leak `external_missing_a`/`_b` was corrected for.
+CONTEXT_BLOCK = "context"
+
+register(Block(
+    name=CONTEXT_BLOCK,
+    differentials=(("bonus_rate", "bonus_rate"),),
+    booleans=("home_country",),
+    fight_level=("referee_finish_rate", "referee_decision_rate",
+                 "referee_missing", "home_country_unknown"),
+))
+
+
+# --- SP2 block: opponent_adjusted (REJECTED IN SP2; RESTORED FOR SP2.1) ------
+# Each core rate priced against the opposition it was produced against: the
+# career mean of (own value in a fight) minus (what that fight's opponent had
+# historically ALLOWED before it), plus the mean pre-fight Elo of the
+# opponents a fighter has beaten and lost to.
+#
+# Built, evaluated and reverted in SP2 Task 6, and the block the SP2.1
+# capacity hypothesis is really about: XGB screened at pooled winner LL 0.6519
+# against a 0.6537 incumbent (-0.0018, better) while torch came in at 0.6532
+# against 0.6510 (+0.0022, worse), with seven of eight folds regressing. Seven
+# columns heavily collinear with the base rates they derive from is exactly
+# the shape a tree ensemble can exploit per split and a fixed-width MLP cannot.
+#
+# The accumulators live in `mma.history._FighterState`: `allowed()` is the
+# expectation side (what a fighter's opponents have achieved on them, mirrored
+# rate by rate) and both corners' `allowed()` are read before either corner is
+# updated, so the value used is the opponent's PRE-fight one. `mma.snapshots`
+# carries the same fields for serving, which is why no separate serving
+# derivation is needed here.
+OPPONENT_ADJUSTED_BLOCK = "opponent_adjusted"
+
+register(Block(
+    name=OPPONENT_ADJUSTED_BLOCK,
+    differentials=(
+        ("sig_pm_vs_exp", "sig_pm_vs_exp"),
+        ("sig_absorbed_pm_vs_exp", "sig_absorbed_pm_vs_exp"),
+        ("td_landed_pf_vs_exp", "td_landed_pf_vs_exp"),
+        ("td_def_vs_exp", "td_def_vs_exp"),
+        ("ctrl_share_vs_exp", "ctrl_share_vs_exp"),
+        ("avg_opp_elo_wins", "avg_opp_elo_wins"),
+        ("avg_opp_elo_losses", "avg_opp_elo_losses"),
+    ),
+))

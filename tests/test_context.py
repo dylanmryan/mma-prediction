@@ -203,3 +203,25 @@ def test_a_per_corner_home_country_pair_is_a_coverage_channel():
         | (half["fighter_b_id"].isin(nationality) & (half["winner"] == "b"))
     ).mean()
     assert known_corner_wins > 0.65, known_corner_wins
+
+
+def test_the_home_country_pair_is_produced_but_never_modelled():
+    """The block's shipping form (`context_nohome`), asserted structurally.
+
+    Unlike `notice_unknown` this is not a tuning preference: the pair FAILS
+    the constant-vector leak check (see
+    `test_a_per_corner_home_country_pair_is_a_coverage_channel` above, and the
+    whole-table version in `tests/test_external.py`), because a per-corner
+    boolean is False when the corner's nationality is unknown and nationality
+    exists only for fighters the `external` snapshot mapped. The columns stay
+    in the table -- something has to be able to read them -- and are held out
+    of both model matrices.
+    """
+    from mma.feature_blocks import BLOCKS, CONTEXT_BLOCK
+    from mma.models.xgb import NON_FEATURES
+    from mma.tensors import DROPPED
+
+    pair = {"home_country_a", "home_country_b"}
+    assert "home_country" in BLOCKS[CONTEXT_BLOCK].booleans, "must still be produced"
+    assert pair <= NON_FEATURES, "xgb must not model them"
+    assert pair <= set(DROPPED), "torch must not model them"

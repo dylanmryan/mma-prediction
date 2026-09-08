@@ -13,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from mma import context, notice
 from mma.feature_blocks import columns_for, spec_for
 from mma.features import build_features
 from mma.history import build_history
@@ -34,6 +35,28 @@ def tables():
     return {
         name: pd.read_parquet(PROCESSED / f"{name}.parquet")
         for name in ("fights", "fight_stats", "fighters", "ratings")
+    }
+
+
+def _card_facts(target: pd.Series, past: pd.DataFrame) -> dict:
+    """The card-level facts a real caller supplies to `build_matchup`.
+
+    A snapshot describes a fighter; these describe the BOUT, and without them
+    the served row cannot match the trained one on the blocks that read them:
+    `context` needs the referee (plus their rates over the fights known so
+    far) and the event's country, `notice` needs each corner's camp. Passing
+    them here is not cheating on the asymmetry -- serving a FUTURE card really
+    does have the venue, and really does not have a referee or a Bet MMA row,
+    which is why those paths default to "unknown" in `build_matchup` and are
+    exercised by the blocks' own tests. What this test pins is the other
+    half: given the same known facts, the two paths agree value for value.
+    """
+    return {
+        "referee": target["referee"],
+        "referee_rates": context.referee_rates(past),
+        "event_country": context.event_country(target["location"]),
+        "notice_a": notice.state_for(target["fight_id"], target["fighter_a_id"]),
+        "notice_b": notice.state_for(target["fight_id"], target["fighter_b_id"]),
     }
 
 
@@ -119,6 +142,7 @@ def test_served_row_equals_training_row(tables):
         indexed.loc[target["fighter_a_id"]], indexed.loc[target["fighter_b_id"]],
         target["weight_class"], bool(target["title_fight"]),
         int(target["scheduled_rounds"]), target["date"], blocks=table_blocks(),
+        **_card_facts(target, past),
     )
 
     history = build_history(fights, stats, ratings)
@@ -211,6 +235,7 @@ def test_training_table_and_served_row_have_the_same_columns(tables):
         indexed.loc[target["fighter_a_id"]], indexed.loc[target["fighter_b_id"]],
         target["weight_class"], bool(target["title_fight"]),
         int(target["scheduled_rounds"]), target["date"], blocks=table_blocks(),
+        **_card_facts(target, past),
     )
     trained = pd.read_parquet(PROCESSED / "features.parquet")
     identifiers = {"fight_id", "date", "swapped", "y_winner", "y_method", "y_finish_round"}

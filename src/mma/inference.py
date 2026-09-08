@@ -10,9 +10,11 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from mma import external, serving
+from mma import context as fight_context_module
+from mma import external, glicko, notice, serving
 from mma.feature_blocks import (
-    EXTERNAL_BLOCK, resolve_blocks, state_key_blocks, state_keys, table_blocks,
+    CONTEXT_BLOCK, EXTERNAL_BLOCK, NOTICE_BLOCK, TRAJECTORY_BLOCK,
+    resolve_blocks, state_key_blocks, state_keys, table_blocks,
 )
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
@@ -308,6 +310,8 @@ def build_matchup(
     weight_class: str, title_fight: bool, scheduled_rounds: int,
     as_of: pd.Timestamp,
     blocks=None,
+    referee=None, referee_rates=None, event_country=None,
+    notice_a=None, notice_b=None,
 ) -> pd.DataFrame:
     """One feature row matching the training feature contract (A vs B, no swap).
 
@@ -333,6 +337,27 @@ def build_matchup(
     a bio row without one raises rather than silently serving an unmatched,
     all-NaN external corner.
 
+    The blocks beyond `base`/`external` need card-level facts a snapshot
+    cannot carry, and each is an argument with a default that matches what a
+    real future card actually supplies:
+
+      * `context` -- `referee` (a Wikipedia card names none, so the default
+        None is the honest case and produces the same two NaNs plus flag that
+        an unrefereed training row gets), `referee_rates`
+        (`mma.context.referee_rates` over the fights known as of the
+        prediction) and `event_country` (`mma.context.event_country` of the
+        venue). `home_country` is then the corner's nationality -- which only
+        the `external` snapshot carries -- against that country.
+      * `notice` -- `notice_a` / `notice_b`, the per-corner state from
+        `mma.notice.from_observation` when the event page states a late
+        replacement or a missed weight, and `mma.notice.unknown_state()`
+        (the default) otherwise, which is what every future bout gets.
+      * `trajectory` -- nothing extra: the Glicko triple is grown from the
+        fighter's post-fight state over the days since their last bout with
+        `mma.glicko.decay_days`, which is the same rule the training pass
+        applies, and `years_since_ufc_debut` is measured from the snapshot's
+        `first_date`.
+
     NOTE: elo_fights (via "pre_fights") and career_fights both read
     snapshot["career_fights"] here. In training these come from two separate
     counters -- the ratings table's fight count and the fight-history table's
@@ -342,16 +367,21 @@ def build_matchup(
     is negligible after standardization (Preprocessor.transform).
     """
     blocks = table_blocks() if blocks is None else blocks
+    resolved = resolve_blocks(blocks)
     keys = state_keys(blocks)
     owners = state_key_blocks(blocks)
 
     ext_a = ext_b = None
-    if EXTERNAL_BLOCK in resolve_blocks(blocks):
+    if EXTERNAL_BLOCK in resolved:
         table = external.load_table()
         ext_a = external.state_for(_fighter_id(bio_a, "a"), as_of, table)
         ext_b = external.state_for(_fighter_id(bio_b, "b"), as_of, table)
 
-    def side(snapshot, bio, ext):
+    if NOTICE_BLOCK in resolved:
+        notice_a = notice.unknown_state() if notice_a is None else dict(notice_a)
+        notice_b = notice.unknown_state() if notice_b is None else dict(notice_b)
+
+    def side(snapshot, bio, ext, camp=None):
         age = (
             (as_of - bio["dob"]).days / 365.25 if pd.notna(bio["dob"]) else np.nan
         )
@@ -379,6 +409,42 @@ def build_matchup(
         }
         if ext is not None:
             extras.update(ext)
+        if TRAJECTORY_BLOCK in resolved:
+            # The trained value is the fighter's post-fight deviation grown
+            # over the lay-off, so serving grows it the same way rather than
+            # serving the stale post-fight number.
+            grown = glicko.decay_days(
+                glicko.Rating(
+                    float(snapshot["glicko_mu"]),
+                    float(snapshot["glicko_phi"]),
+                    float(snapshot["glicko_sigma"]),
+                ),
+                None if pd.isna(days) else days,
+            )
+            first_date = snapshot.get("first_date")
+            extras.update({
+                "pre_glicko_mu": grown.rating,
+                "pre_glicko_phi": grown.rd,
+                "pre_glicko_sigma": grown.volatility,
+                "years_since_ufc_debut": (
+                    (as_of - first_date).days / 365.25
+                    if first_date is not None and pd.notna(first_date)
+                    else np.nan
+                ),
+                "age_squared": age ** 2,
+                "age_x_fights": (
+                    age * float(career_fights)
+                    if career_fights is not None and pd.notna(career_fights)
+                    else np.nan
+                ),
+            })
+        if camp is not None:
+            extras.update(camp)
+        if CONTEXT_BLOCK in resolved:
+            nationality = (ext or {}).get(external.NATIONALITY)
+            extras["home_country"] = fight_context_module.home_country(
+                nationality, event_country
+            )
         state = {}
         for key in keys:
             if key in extras:
@@ -395,17 +461,28 @@ def build_matchup(
                 )
         return state
 
-    context = {
+    fight_context = {
         "weight_class": weight_class,
         "title_fight": title_fight,
         "scheduled_rounds": scheduled_rounds,
     }
     if ext_a is not None:
-        context.update(external.fight_context(ext_a, ext_b))
+        fight_context.update(external.fight_context(ext_a, ext_b))
+    if NOTICE_BLOCK in resolved:
+        fight_context.update(notice.fight_context(notice_a, notice_b))
+    if CONTEXT_BLOCK in resolved:
+        fight_context.update(
+            fight_context_module.referee_context(referee, referee_rates)
+        )
+        fight_context.update(fight_context_module.home_context(
+            (ext_a or {}).get(external.NATIONALITY),
+            (ext_b or {}).get(external.NATIONALITY),
+            event_country,
+        ))
     row = serving.feature_row(
-        side(snapshot_a, bio_a, ext_a),
-        side(snapshot_b, bio_b, ext_b),
-        context,
+        side(snapshot_a, bio_a, ext_a, notice_a),
+        side(snapshot_b, bio_b, ext_b, notice_b),
+        fight_context,
         blocks=blocks,
     )
     frame = pd.DataFrame([row])

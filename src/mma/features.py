@@ -18,18 +18,23 @@ import hashlib
 import numpy as np
 import pandas as pd
 
-from mma import external, serving
+from mma import context, external, notice, serving
 from mma.feature_blocks import (
-    BASE_BLOCK, EXTERNAL_BLOCK, resolve_blocks, state_key_blocks, state_keys,
+    BASE_BLOCK, CONTEXT_BLOCK, EXTERNAL_BLOCK, NOTICE_BLOCK, TRAJECTORY_BLOCK,
+    resolve_blocks, state_key_blocks, state_keys,
 )
 
 # State keys `_side_frame` computes itself rather than merging in from a
 # source table (they need the fight date, the bio row, or another key). The
-# `external` block's keys are here because they come from the committed
-# `data/external` table joined by fighter id, not from history/ratings/fighters.
+# `external` and `notice` blocks' keys are here because they come from a
+# committed `data/external` table joined on ids, not from
+# history/ratings/fighters; `context`'s `home_country` needs the fight's
+# location as well as the corner's nationality; `trajectory`'s two age
+# interactions are products of keys the other tables do provide.
 _DERIVED_STATE_KEYS = (
     "age", "reach_missing", "dob_missing", "southpaw", "debut",
-) + external.STATE_KEYS
+    "age_squared", "age_x_fights",
+) + external.STATE_KEYS + notice.STATE_KEYS + context.STATE_KEYS
 
 
 def swap_corner(fight_id: str) -> bool:
@@ -75,9 +80,10 @@ def _side_frame(fights, fighters, ratings, history, corner: str,
         blocks, fighters, ratings, history
     )
     fighter_col = f"fighter_{corner}_id"
-    side = fights[["fight_id", "date", fighter_col]].rename(
-        columns={fighter_col: "fighter_id"}
-    )
+    carried = ["fight_id", "date", fighter_col]
+    if CONTEXT_BLOCK in resolve_blocks(blocks) and "location" in fights.columns:
+        carried.append("location")
+    side = fights[carried].rename(columns={fighter_col: "fighter_id"})
     side = side.merge(fighters, on="fighter_id", how="left")
     side = side.merge(
         ratings[ratings["corner"] == corner][["fight_id"] + elo_features],
@@ -92,13 +98,41 @@ def _side_frame(fights, fighters, ratings, history, corner: str,
     side["dob_missing"] = side["dob"].isna()
     side["southpaw"] = (side["stance"] == "Southpaw").fillna(False)
     side["debut"] = serving.debut_flag(side["career_fights"])
-    if EXTERNAL_BLOCK in resolve_blocks(blocks):
+    # `trajectory`'s two age interactions. Products of columns already on the
+    # frame, so they are derived here rather than accumulated: `age_squared`
+    # is per corner and `age_x_fights` is the differential source.
+    resolved = resolve_blocks(blocks)
+    if TRAJECTORY_BLOCK in resolved:
+        side["age_squared"] = side["age"] ** 2
+        side["age_x_fights"] = side["age"] * pd.to_numeric(
+            side["career_fights"], errors="coerce"
+        )
+    if EXTERNAL_BLOCK in resolved:
         # Joined here rather than in `mma.snapshots` because this is
         # fighter-static reference data, not accumulated fight state: there is
         # nothing to replay, only a lookup by id plus a duration measured from
         # each fight's own date. `attach` also carries `nationality` through so
         # `build_features` can derive the fight-level `same_country`.
         side = external.attach(side)
+    if NOTICE_BLOCK in resolved:
+        # Joined on the (fight, corner) PAIR: the source's unit of coverage is
+        # the bout, so a corner it has not seen reads unknown rather than
+        # borrowing the other corner's camp.
+        side = notice.attach(side)
+    if CONTEXT_BLOCK in resolved:
+        # `home_country` needs both the corner's nationality (which only the
+        # `external` snapshot carries) and the event's country. Either being
+        # unknown makes the flag False, which is what the fight-level
+        # `home_country_unknown` exists to say.
+        nationality = (
+            side[external.NATIONALITY] if external.NATIONALITY in side.columns
+            else pd.Series([None] * len(side), index=side.index)
+        )
+        countries = side["location"].map(context.event_country)
+        side["event_country"] = countries
+        side["home_country"] = [
+            context.home_country(n, c) for n, c in zip(nationality, countries)
+        ]
     return side
 
 
@@ -144,15 +178,36 @@ def build_features(fights, fighters, ratings, history,
         .map(lambda r: "45" if pd.notna(r) and r >= 4 else (str(int(r)) if pd.notna(r) else None))
         .astype("string"),
     }
-    context = {
+    fight_context = {
         "weight_class": decisive["weight_class"].astype("string"),
         "title_fight": decisive["title_fight"],
         "scheduled_rounds": decisive["scheduled_rounds"],
     }
-    if EXTERNAL_BLOCK in resolve_blocks(blocks):
+    resolved = resolve_blocks(blocks)
+    if EXTERNAL_BLOCK in resolved:
         # Both fight-level columns are symmetric in the two corners, so
         # deriving them from the post-swap frames gives the same values as the
         # pre-swap ones and keeps them aligned with the row they describe.
-        context.update(external.fight_context(first, second))
-    row = serving.feature_row(first, second, context, blocks=blocks)
+        fight_context.update(external.fight_context(first, second))
+    if NOTICE_BLOCK in resolved:
+        fight_context.update(notice.fight_context(first, second))
+    if CONTEXT_BLOCK in resolved:
+        # The referee pass walks EVERY fight, decisive or not -- a referee's
+        # prior bouts are prior bouts whatever their outcome -- and is then
+        # reindexed onto the decisive rows this table is built from.
+        referees = (
+            context.referee_history(fights)
+            .set_index("fight_id")
+            .reindex(decisive["fight_id"].astype("string"))
+        )
+        for column in context.FIGHT_LEVEL[:3]:
+            fight_context[column] = referees[column].to_numpy()
+        fight_context.update(context.home_context(
+            first[external.NATIONALITY] if external.NATIONALITY in first.columns
+            else pd.Series([None] * len(first)),
+            second[external.NATIONALITY] if external.NATIONALITY in second.columns
+            else pd.Series([None] * len(second)),
+            first["event_country"],
+        ))
+    row = serving.feature_row(first, second, fight_context, blocks=blocks)
     return pd.DataFrame({**identifiers, **row})
