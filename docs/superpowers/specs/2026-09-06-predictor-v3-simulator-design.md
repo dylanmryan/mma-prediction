@@ -2,8 +2,9 @@
 
 **Date:** 2026-09-06
 **Status:** Approved 2026-09-06; amended the same day after SP0 (recency, data leads).
-SP0, SP1 and **SP2 done** (SP2 signed off 2026-09-08 — see its section below);
-SP3 and SP4 outstanding.
+SP0, SP1 and **SP2 done** (SP2 signed off 2026-09-08 — see its section below),
+plus **SP2.1**, a pre-registered re-test of SP2's rejections that shipped
+nothing (see the SP2.1 subsection); SP3 and SP4 outstanding.
 **Scope:** Predictions only. The value-betting / odds-analysis layer is a
 later, separate spec (see "Out of scope").
 
@@ -320,6 +321,84 @@ unwired from `prospective.predict_event`; three rankings name-match misses
 would close by extending `mma.prospective.fold_accents`; and one row carries a
 `dob` error giving age 4.6, harmless to a linear age term but not to a
 quadratic one, which SP3's hazard model may well want.
+
+#### SP2.1 — was it the features or the architecture? (pre-registered, 2026-09-08)
+
+The seven rejections above share a shape — XGBoost neutral-to-better, the
+deployed MLP worse — and that shape has two readings. One is the information
+reading used above: the box score is tapped out. The other is a **capacity**
+reading: the MLP's trunk was sized when the table had 46 columns, and a
+fixed-width net must spend capacity on every member of a correlated group
+where a tree picks one per split. The second reading would mean the SP2
+rejections measured the architecture, not the features — so it was written
+down as a hypothesis, with arms, a 25-configuration search space and a
+mechanical decision rule fixed **before anything ran**
+(`docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md`,
+`models/walkforward/sp2_1_decision.json`).
+
+Four rejected blocks (`trajectory`, `notice`, `context`,
+`opponent_adjusted`), each verified to reproduce its committed SP2 number
+exactly, were combined into an 87-column table and searched. The same 25
+configurations were searched over the shipped 54-column table as a **control
+arm**, without which a gain would have been misattributed to the features.
+
+| arm | features | architecture | pooled | Δ vs deployed 0.6476 | ships |
+|---|---|---|---|---|---|
+| A1 | combined | deployed | 0.6475 | −0.0001 | no |
+| C (control) | shipped | best of 25 | 0.6463 | −0.0013 | no |
+| T (treatment) | combined | best of 25 | 0.6464 | −0.0012 | no |
+
+Neither cleared the 0.003 bar; T − C = +0.0001, inside σ_seed = 0.000346. The
+rule's fourth branch applied: **record and revert.** Nothing shipped, the
+blocks were unregistered again, and the deployed hash is still
+`b617b96dae45`.
+
+**What this changes for SP3.** It removes the alternative explanation, and
+therefore strengthens rather than merely repeats the SP2 conclusion. Before
+SP2.1 the claim was "these features did not help the deployed model"; after
+it the claim is "**these features do not help a model given a wider, better
+regularised trunk and 25 attempts to find one — and the deployed trunk is not
+leaving anything on the table either**". The box-score feature space and the
+MLP architecture are *both* at their ceiling. SP3's value must therefore come
+from the paradigm — a coherent joint distribution over (winner, method,
+round), judged on joint log-loss — and not from new columns or a bigger net.
+E1 (hazard + decision on v1 features) is the load-bearing experiment for
+exactly that reason, and E4's latent in-fight state remains the one route to
+information the current columns do not express, because it models the
+*sequence* rather than another aggregate of it. Concretely: SP3 should not
+spend effort widening the trunk, and should not re-open the four archived
+blocks (their registrations are commented out in `mma.feature_blocks`, their
+accumulators still live) unless a *new* source or a *new* model class changes
+what they are worth.
+
+**A live alternative SP4 must weigh before deciding what gets deployed.** The
+strongest number measured anywhere in SP2.1 is not an arm at all: an
+equal-weight **blend of the XGB and torch winner probabilities** scores 0.6459
+on the shipped table and 0.6436 on the combined one, against the deployed
+0.6476, with every evaluation slice improving
+(`models/walkforward/blend_a{0,1}_xgb_torch.json`). It is deliberately **not**
+a ship candidate here — a blend is not one of SP2.1's five pre-registered
+arms, and adopting it on these numbers would be the after-the-fact
+search-widening the pre-registration forbids. But SP4 chooses what actually
+serves, and by then it will be choosing among a simulator, the deployed
+ensemble and a blend. Two things must be settled first: the blend inherits
+roughly half of XGBoost's seed noise, newly measured at σ ≈ 0.0009–0.0013
+(about 3× the torch ensemble's), so its confirmation needs several XGB seeds
+rather than one; and switching or widening the deployed scorer touches nine
+places listed in `open_questions[1]` of the decision file, of which
+`versioning.MODEL_ARTIFACT_GLOBS` is the sharp one — it currently hashes only
+the torch artifacts, so a blended deployment would stop hashing half of what
+serves predictions.
+
+**One methodological result SP3 and SP4 inherit.** XGBoost's own seed noise
+was measured for the first time here (`models/walkforward/noise_floor_xgb.json`):
+σ ≈ 0.00087–0.00125 for a single fit, against 0.000346 for the 5-seed torch
+ensemble. A combined-table XGB result of −0.0039 with every slice improving —
+comfortably over the bar — averaged −0.0024 once re-run at three fresh seeds.
+No SP2 rejection rests on a single-seed XGB screen alone (the screen never
+dropped a block without a torch run), but any future screen on a single
+boosted fit must use ≥3 model seeds; `--model-seed` and
+`scripts/noise_floor.py --candidate xgb` exist for that.
 
 ### SP3 — Fight simulator
 
