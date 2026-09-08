@@ -372,3 +372,48 @@ register(Block(
 #         ),
 #         absolutes=("age_squared",),
 #     ))
+
+
+# --- SP2 block: context (MEASURED AND REJECTED) ------------------------------
+# The fight's SETTING rather than either fighter's record: referee tendency,
+# home advantage, and how often a fighter's wins carried a post-fight bonus.
+# Deliberately NOT registered: built, evaluated and reverted in SP2 Task 8.
+# Three variants were measured and all three are worse than or level with the
+# incumbent on torch (0.6474 to 0.6483 against 0.6476); the best,
+# `context_nohome`, is -0.0002, a fifteenth of the 0.003 bar.
+#
+# Two findings worth carrying forward:
+#
+#   * `home_country_a`/`_b` is the `external` coverage leak in a second
+#     channel. A per-corner boolean is False when the corner's nationality is
+#     unknown, and nationality exists only for fighters the snapshot mapped,
+#     so over the 1,448 feature rows where exactly one corner is mapped the
+#     pair is NOT constant -- and the mapped corner wins 0.745 of those. The
+#     variant that models it is the WORST of the three (+0.0007). Asserted one
+#     level lower, on `mma.context` over the real tables, in
+#     `tests/test_context.py::test_a_per_corner_home_country_pair_is_a_coverage_channel`,
+#     so it survives this revert.
+#   * The referee columns are worth nothing even before the serving-asymmetry
+#     gate is applied. Holding them out of the model moves torch from 0.6474
+#     to 0.6481 and XGB from 0.6499 to 0.6498 -- inside seed noise on the
+#     screen. The gate would have blocked them regardless: they are present on
+#     97.7% of training rows and on 0% of servable ones, because Wikipedia
+#     cards do not name a referee.
+#
+# What was kept, because it is reusable and correct: `mma.context` -- the
+# prior-fights-only referee pass, the event-country parser and its
+# nationality/location normalisation, and the bonus fight-id loader -- plus
+# `tests/test_context.py`. Registering the block again means restoring the
+# lines below plus `bonus_wins` in `mma.history._FighterState`, the
+# `home_country`/`event_country` derivations in `mma.features._side_frame`,
+# the referee and home-advantage context in `build_features`, and the
+# `referee` / `referee_rates` / `event_country` arguments to
+# `mma.inference.build_matchup`; see the SP2 plan's Task 8 notes.
+#
+#     register(Block(
+#         name="context",
+#         differentials=(("bonus_rate", "bonus_rate"),),
+#         booleans=("home_country",),
+#         fight_level=("referee_finish_rate", "referee_decision_rate",
+#                      "referee_missing", "home_country_unknown"),
+#     ))
