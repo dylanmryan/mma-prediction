@@ -1,0 +1,1146 @@
+{
+  "experiment": "SP2.1 combined blocks x model capacity",
+  "pre_registration": "docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md",
+  "incumbent": {
+    "report": "models/walkforward/torch_external_diffsonly_extslice.json",
+    "pooled_winner_log_loss": 0.6476,
+    "note": "A0; the deployed scorer (torch 5-seed ensemble on S0)"
+  },
+  "noise_floors": {
+    "torch": {
+      "sigma_seed": 0.0003464101615137373,
+      "bar": 0.003,
+      "source": "models/walkforward/noise_floor.json"
+    },
+    "xgb": {
+      "sigma_seed_incumbent_recipe": 0.0008698658900466677,
+      "sigma_seed_a1_recipe": 0.0012463279397226486,
+      "sigma_seed_used": 0.0012463279397226486,
+      "bar": 0.003,
+      "source": "models/walkforward/noise_floor_xgb.json",
+      "note": "first measurement of XGBoost's own seed noise in this project. XGB has no seed ensemble; its stochasticity is subsample/colsample under one random_state, varied with --model-seed. Note it is ~2.5-3.6x the torch ensemble's sigma_seed of 0.000346 -- a 5-seed average is a quieter measurement than a single fit."
+    }
+  },
+  "arms": {
+    "A0": {
+      "report": "models/walkforward/torch_external_diffsonly_extslice.json",
+      "candidate": "torch",
+      "drop_columns": [
+        "external_missing",
+        "same_country"
+      ],
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6476,
+        "accuracy": 0.6209,
+        "brier": 0.2283,
+        "ece": 0.0088,
+        "joint_log_loss": 2.3127,
+        "method_macro_f1": 0.387,
+        "round_macro_f1": 0.315,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6535,
+        "2019": 0.6678,
+        "2020": 0.6584,
+        "2021": 0.6679,
+        "2022": 0.6419,
+        "2023": 0.6432,
+        "2024": 0.6354,
+        "2025": 0.6287
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6525,
+          "ece": 0.0303
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.659,
+          "ece": 0.0376
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6575,
+          "ece": 0.0298
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6447,
+          "ece": 0.0457
+        }
+      },
+      "role": "incumbent, no run needed"
+    },
+    "A1_torch": {
+      "report": "models/walkforward/torch_a1_combined.json",
+      "candidate": "torch",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6475,
+        "accuracy": 0.6222,
+        "brier": 0.2281,
+        "ece": 0.0111,
+        "joint_log_loss": 2.3132,
+        "method_macro_f1": 0.3728,
+        "round_macro_f1": 0.3068,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6583,
+        "2019": 0.6665,
+        "2020": 0.6569,
+        "2021": 0.6704,
+        "2022": 0.6428,
+        "2023": 0.638,
+        "2024": 0.6359,
+        "2025": 0.628
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6514,
+          "ece": 0.0204
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6546,
+          "ece": 0.0338
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6538,
+          "ece": 0.0418
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6456,
+          "ece": 0.0508
+        }
+      },
+      "bar_check": {
+        "bar": 0.003,
+        "sigma_seed": 0.0003464101615137373,
+        "delta": -0.0001,
+        "fold_deltas": {
+          "2018": 0.0048,
+          "2019": -0.0013,
+          "2020": -0.0015,
+          "2021": 0.0025,
+          "2022": 0.0009,
+          "2023": -0.0052,
+          "2024": 0.0005,
+          "2025": -0.0007
+        },
+        "worst_fold_delta": 0.0048,
+        "comparable": true,
+        "missing_folds": [],
+        "clears_delta": false,
+        "no_fold_regression": true,
+        "ships": false
+      },
+      "slice_deltas": [
+        {
+          "slice": "debut",
+          "candidate_n": 983,
+          "incumbent_n": 983,
+          "candidate_winner_log_loss": 0.6514,
+          "incumbent_winner_log_loss": 0.6525,
+          "delta": -0.0011
+        },
+        {
+          "slice": "womens",
+          "candidate_n": 779,
+          "incumbent_n": 779,
+          "candidate_winner_log_loss": 0.6546,
+          "incumbent_winner_log_loss": 0.659,
+          "delta": -0.0044
+        },
+        {
+          "slice": "five_round",
+          "candidate_n": 420,
+          "incumbent_n": 420,
+          "candidate_winner_log_loss": 0.6538,
+          "incumbent_winner_log_loss": 0.6575,
+          "delta": -0.0037
+        },
+        {
+          "slice": "external_missing",
+          "candidate_n": 779,
+          "incumbent_n": 779,
+          "candidate_winner_log_loss": 0.6456,
+          "incumbent_winner_log_loss": 0.6447,
+          "delta": 0.0009
+        }
+      ],
+      "role": "S1, deployed config, torch"
+    },
+    "A1_xgb": {
+      "report": "models/walkforward/xgb_a1_combined.json",
+      "candidate": "xgb",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6467,
+        "accuracy": 0.6139,
+        "brier": 0.2278,
+        "ece": 0.015,
+        "joint_log_loss": 2.1802,
+        "method_macro_f1": 0.3319,
+        "round_macro_f1": 0.192,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6319,
+        "2019": 0.6682,
+        "2020": 0.6512,
+        "2021": 0.672,
+        "2022": 0.6539,
+        "2023": 0.643,
+        "2024": 0.6416,
+        "2025": 0.6263
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6398,
+          "ece": 0.053
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6498,
+          "ece": 0.0414
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6551,
+          "ece": 0.0516
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6316,
+          "ece": 0.0654
+        }
+      },
+      "bar_check": {
+        "bar": 0.003,
+        "sigma_seed": 0.0012463279397226486,
+        "delta": -0.0039,
+        "fold_deltas": {
+          "2018": -0.0054,
+          "2019": -0.0067,
+          "2020": -0.0058,
+          "2021": 0.0005,
+          "2022": -0.0068,
+          "2023": -0.0047,
+          "2024": -0.0002,
+          "2025": -0.003
+        },
+        "worst_fold_delta": 0.0005,
+        "comparable": true,
+        "missing_folds": [],
+        "clears_delta": true,
+        "no_fold_regression": true,
+        "ships": true
+      },
+      "slice_deltas": [
+        {
+          "slice": "debut",
+          "candidate_n": 983,
+          "incumbent_n": 983,
+          "candidate_winner_log_loss": 0.6398,
+          "incumbent_winner_log_loss": 0.6461,
+          "delta": -0.0063
+        },
+        {
+          "slice": "womens",
+          "candidate_n": 779,
+          "incumbent_n": 779,
+          "candidate_winner_log_loss": 0.6498,
+          "incumbent_winner_log_loss": 0.6543,
+          "delta": -0.0045
+        },
+        {
+          "slice": "five_round",
+          "candidate_n": 420,
+          "incumbent_n": 420,
+          "candidate_winner_log_loss": 0.6551,
+          "incumbent_winner_log_loss": 0.6622,
+          "delta": -0.0071
+        },
+        {
+          "slice": "external_missing",
+          "candidate_n": 779,
+          "incumbent_n": 779,
+          "candidate_winner_log_loss": 0.6316,
+          "incumbent_winner_log_loss": 0.6353,
+          "delta": -0.0037
+        }
+      ],
+      "role": "S1, deployed config, XGB (paired against the XGB rung of S0)"
+    },
+    "C": {
+      "report": "models/walkforward/torch_C_best.json",
+      "candidate": "torch",
+      "drop_columns": [
+        "external_missing",
+        "same_country"
+      ],
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6463,
+        "accuracy": 0.622,
+        "brier": 0.2277,
+        "ece": 0.0131,
+        "joint_log_loss": 2.2976,
+        "method_macro_f1": 0.3938,
+        "round_macro_f1": 0.3034,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6527,
+        "2019": 0.6693,
+        "2020": 0.6564,
+        "2021": 0.6644,
+        "2022": 0.6417,
+        "2023": 0.6396,
+        "2024": 0.6354,
+        "2025": 0.6269
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6465,
+          "ece": 0.0224
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6574,
+          "ece": 0.0334
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6551,
+          "ece": 0.0317
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6427,
+          "ece": 0.0409
+        }
+      },
+      "bar_check": {
+        "bar": 0.003,
+        "sigma_seed": 0.0003464101615137373,
+        "delta": -0.0013,
+        "fold_deltas": {
+          "2018": -0.0008,
+          "2019": 0.0015,
+          "2020": -0.002,
+          "2021": -0.0035,
+          "2022": -0.0002,
+          "2023": -0.0036,
+          "2024": 0.0,
+          "2025": -0.0018
+        },
+        "worst_fold_delta": 0.0015,
+        "comparable": true,
+        "missing_folds": [],
+        "clears_delta": false,
+        "no_fold_regression": true,
+        "ships": false
+      },
+      "slice_deltas": [
+        {
+          "slice": "debut",
+          "candidate_n": 983,
+          "incumbent_n": 983,
+          "candidate_winner_log_loss": 0.6465,
+          "incumbent_winner_log_loss": 0.6525,
+          "delta": -0.006
+        },
+        {
+          "slice": "womens",
+          "candidate_n": 779,
+          "incumbent_n": 779,
+          "candidate_winner_log_loss": 0.6574,
+          "incumbent_winner_log_loss": 0.659,
+          "delta": -0.0016
+        },
+        {
+          "slice": "five_round",
+          "candidate_n": 420,
+          "incumbent_n": 420,
+          "candidate_winner_log_loss": 0.6551,
+          "incumbent_winner_log_loss": 0.6575,
+          "delta": -0.0024
+        },
+        {
+          "slice": "external_missing",
+          "candidate_n": 779,
+          "incumbent_n": 779,
+          "candidate_winner_log_loss": 0.6427,
+          "incumbent_winner_log_loss": 0.6447,
+          "delta": -0.002
+        }
+      ],
+      "role": "control: S0, searched"
+    },
+    "T": {
+      "report": "models/walkforward/torch_T_best.json",
+      "candidate": "torch",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6464,
+        "accuracy": 0.6243,
+        "brier": 0.2275,
+        "ece": 0.0126,
+        "joint_log_loss": 2.3025,
+        "method_macro_f1": 0.396,
+        "round_macro_f1": 0.2933,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": 0.6559,
+        "2019": 0.6637,
+        "2020": 0.6574,
+        "2021": 0.6686,
+        "2022": 0.6415,
+        "2023": 0.6398,
+        "2024": 0.6353,
+        "2025": 0.6261
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6473,
+          "ece": 0.021
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6573,
+          "ece": 0.0248
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6587,
+          "ece": 0.0417
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6419,
+          "ece": 0.0361
+        }
+      },
+      "bar_check": {
+        "bar": 0.003,
+        "sigma_seed": 0.0003464101615137373,
+        "delta": -0.0012,
+        "fold_deltas": {
+          "2018": 0.0024,
+          "2019": -0.0041,
+          "2020": -0.001,
+          "2021": 0.0007,
+          "2022": -0.0004,
+          "2023": -0.0034,
+          "2024": -0.0001,
+          "2025": -0.0026
+        },
+        "worst_fold_delta": 0.0024,
+        "comparable": true,
+        "missing_folds": [],
+        "clears_delta": false,
+        "no_fold_regression": true,
+        "ships": false
+      },
+      "slice_deltas": [
+        {
+          "slice": "debut",
+          "candidate_n": 983,
+          "incumbent_n": 983,
+          "candidate_winner_log_loss": 0.6473,
+          "incumbent_winner_log_loss": 0.6525,
+          "delta": -0.0052
+        },
+        {
+          "slice": "womens",
+          "candidate_n": 779,
+          "incumbent_n": 779,
+          "candidate_winner_log_loss": 0.6573,
+          "incumbent_winner_log_loss": 0.659,
+          "delta": -0.0017
+        },
+        {
+          "slice": "five_round",
+          "candidate_n": 420,
+          "incumbent_n": 420,
+          "candidate_winner_log_loss": 0.6587,
+          "incumbent_winner_log_loss": 0.6575,
+          "delta": 0.0012
+        },
+        {
+          "slice": "external_missing",
+          "candidate_n": 779,
+          "incumbent_n": 779,
+          "candidate_winner_log_loss": 0.6419,
+          "incumbent_winner_log_loss": 0.6447,
+          "delta": -0.0028
+        }
+      ],
+      "role": "treatment: S1, searched"
+    },
+    "A2": {
+      "role": "recency on the winner of {C, T}",
+      "run": false,
+      "reason": "gated in the pre-registration on the winner having cleared the bar; neither C nor T cleared, so A2 was not run"
+    }
+  },
+  "search_distributions": {
+    "C": {
+      "summary": "models/walkforward/search/C/summary.json",
+      "blocks": [
+        "base",
+        "external"
+      ],
+      "n_configs": 25,
+      "seeds": "0,1",
+      "distribution": {
+        "min": 0.6463,
+        "median": 0.6478,
+        "max": 0.6495
+      },
+      "best_index": 15,
+      "best_config": {
+        "hidden": [
+          512,
+          256
+        ],
+        "dropout": 0.49037785697739394,
+        "lr": 0.00031033271410522273,
+        "weight_decay": 0.0013782919637720444,
+        "embedding_dim": 16,
+        "method_scale": 0.7405975200331721,
+        "round_scale": 0.3871630538832891
+      },
+      "all_pooled": [
+        0.6463,
+        0.6465,
+        0.6466,
+        0.6468,
+        0.6471,
+        0.6472,
+        0.6473,
+        0.6473,
+        0.6475,
+        0.6475,
+        0.6477,
+        0.6477,
+        0.6478,
+        0.648,
+        0.6481,
+        0.6482,
+        0.6482,
+        0.6484,
+        0.6485,
+        0.6487,
+        0.6488,
+        0.6489,
+        0.649,
+        0.6495,
+        0.6495
+      ]
+    },
+    "T": {
+      "summary": "models/walkforward/search/T/summary.json",
+      "blocks": [
+        "base",
+        "external",
+        "notice",
+        "trajectory",
+        "context",
+        "opponent_adjusted"
+      ],
+      "n_configs": 25,
+      "seeds": "0,1",
+      "distribution": {
+        "min": 0.6463,
+        "median": 0.6483,
+        "max": 0.6503
+      },
+      "best_index": 19,
+      "best_config": {
+        "hidden": [
+          128,
+          64
+        ],
+        "dropout": 0.3538276169786234,
+        "lr": 0.00254815285046464,
+        "weight_decay": 1.4577879538552415e-05,
+        "embedding_dim": 16,
+        "method_scale": 0.6706586398061916,
+        "round_scale": 0.12000700263013044
+      },
+      "all_pooled": [
+        0.6463,
+        0.6471,
+        0.6472,
+        0.6473,
+        0.6473,
+        0.6476,
+        0.6477,
+        0.6478,
+        0.6478,
+        0.648,
+        0.6481,
+        0.6482,
+        0.6483,
+        0.6484,
+        0.6485,
+        0.6485,
+        0.6485,
+        0.6486,
+        0.6486,
+        0.6488,
+        0.649,
+        0.6491,
+        0.6494,
+        0.6495,
+        0.6503
+      ]
+    }
+  },
+  "fresh_seed_confirmation": {
+    "rule": "2. Ships only if the 5-seed result clears the bar vs I (bar_check ... ships: true) and a fresh-seed re-score with seeds 5-9 also clears it, measured against the fresh-seed paired incumbent. Both are required; the search is best-of-25 and therefore carries selection optimism, which the fresh-seed arm is there to strip out.",
+    "applies_to": "A1-XGB only: it is the one result that cleared a bar. C and T both failed at 5 seeds, and rule 2's confirmation is a requirement for shipping, not for recording a failure, so the torch fresh-seed re-scores of C and T were deliberately not run.",
+    "method": "XGB has no seed ensemble, so the analogue of torch's fresh seed set is a fresh random_state (--model-seed). Seed 0 is the originally committed run; 1-3 are fresh. --model-seed 0 was verified to reproduce both committed seed-0 reports exactly before use.",
+    "a1_xgb_by_seed": {
+      "0": 0.6467,
+      "1": 0.6472,
+      "2": 0.6488,
+      "3": 0.6493
+    },
+    "incumbent_xgb_by_seed": {
+      "0": 0.6506,
+      "1": 0.6496,
+      "2": 0.6512,
+      "3": 0.6516
+    },
+    "fresh_seeds_only": {
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "bar": 0.003,
+      "sigma_seed": 0.0012463279397226486,
+      "candidate": {
+        "n": 3,
+        "values": [
+          0.6472,
+          0.6488,
+          0.6493
+        ],
+        "mean": 0.648433,
+        "sd": 0.0010969655114602928,
+        "min": 0.6472,
+        "max": 0.6493
+      },
+      "incumbent": {
+        "n": 3,
+        "values": [
+          0.6496,
+          0.6512,
+          0.6516
+        ],
+        "mean": 0.6508,
+        "sd": 0.0010583005244258455,
+        "min": 0.6496,
+        "max": 0.6516
+      },
+      "mean_delta": -0.002367,
+      "passes": false
+    },
+    "all_seeds": {
+      "seeds": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "bar": 0.003,
+      "sigma_seed": 0.0012463279397226486,
+      "candidate": {
+        "n": 4,
+        "values": [
+          0.6467,
+          0.6472,
+          0.6488,
+          0.6493
+        ],
+        "mean": 0.648,
+        "sd": 0.0012463279397226486,
+        "min": 0.6467,
+        "max": 0.6493
+      },
+      "incumbent": {
+        "n": 4,
+        "values": [
+          0.6506,
+          0.6496,
+          0.6512,
+          0.6516
+        ],
+        "mean": 0.65075,
+        "sd": 0.0008698658900466677,
+        "min": 0.6496,
+        "max": 0.6516
+      },
+      "mean_delta": -0.00275,
+      "passes": false
+    },
+    "passes": false,
+    "verdict": "FAILS. The seed-0 pairing that cleared the bar (-0.0039) does not survive re-seeding: the mean delta is -0.002367 over the fresh seeds and -0.00275 over all four, both short of the 0.003 bar. A1-XGB's clearance was seed luck."
+  },
+  "attribution": {
+    "rule": "3. Attribution, decided before seeing the numbers:\n   - If T clears and C does not -> H1 supported; ship S1 with the searched config.\n   - If both clear and T - C > sigma_seed -> both matter; ship S1 with the searched config, and report the split.\n   - If both clear and T - C <= sigma_seed -> H0: the gain is architecture, not features. Ship the searched config on S0 (the simpler table), and record that the extra blocks contributed nothing even at higher capacity.\n   - If neither clears -> the blocks are dead and the architecture is adequate. Record and revert.",
+    "sigma_seed": 0.0003464101615137373,
+    "C_pooled": 0.6463,
+    "C_ships": false,
+    "T_pooled": 0.6464,
+    "T_ships": false,
+    "T_minus_C": 0.0001,
+    "T_minus_C_convention": "log-loss difference T - C; negative means the treatment is better, so the rule's 'T - C > sigma_seed' branch is T - C < -sigma_seed here",
+    "T_minus_C_within_sigma": true,
+    "branch": "neither clears",
+    "verdict": "the blocks are dead and the architecture is adequate",
+    "action": "record and revert",
+    "decision": "Neither C nor T clears the bar against the deployed incumbent (C -0.0013, T -0.0012, bar 0.003), and T - C = 0.0001 is inside sigma_seed = 0.000346. Under the fourth branch the restored blocks are dead and the deployed architecture is adequate: record and revert. Nothing from this experiment ships."
+  },
+  "open_questions": [
+    {
+      "id": "a1_xgb_cleared_its_own_bar",
+      "status": "resolved by the fresh-seed confirmation; recorded for the record",
+      "question": "A1-XGB improved -0.0039 against the XGB rung of S0 with all four slices better -- does the combined feature set carry signal that gradient boosting extracts and the MLP cannot?",
+      "covered_by_rule": false,
+      "quantification": {
+        "seed_0_delta": -0.0039,
+        "seed_0_ships": true,
+        "mean_delta_over_4_seeds": -0.00275,
+        "bar": 0.003,
+        "slice_deltas_seed_0": [
+          {
+            "slice": "debut",
+            "candidate_n": 983,
+            "incumbent_n": 983,
+            "candidate_winner_log_loss": 0.6398,
+            "incumbent_winner_log_loss": 0.6461,
+            "delta": -0.0063
+          },
+          {
+            "slice": "womens",
+            "candidate_n": 779,
+            "incumbent_n": 779,
+            "candidate_winner_log_loss": 0.6498,
+            "incumbent_winner_log_loss": 0.6543,
+            "delta": -0.0045
+          },
+          {
+            "slice": "five_round",
+            "candidate_n": 420,
+            "incumbent_n": 420,
+            "candidate_winner_log_loss": 0.6551,
+            "incumbent_winner_log_loss": 0.6622,
+            "delta": -0.0071
+          },
+          {
+            "slice": "external_missing",
+            "candidate_n": 779,
+            "incumbent_n": 779,
+            "candidate_winner_log_loss": 0.6316,
+            "incumbent_winner_log_loss": 0.6353,
+            "delta": -0.0037
+          }
+        ]
+      },
+      "answer": "No, not at the pre-registered bar. Re-seeding halves the effect: the mean delta is -0.00275, inside the 0.003 bar. The combined table does look worth roughly 0.002-0.003 to XGBoost and roughly nothing to torch, which is directionally the capacity hypothesis, but it is under the bar and cannot ship under this pre-registration."
+    },
+    {
+      "id": "scorer_ladder_may_have_flipped",
+      "status": "OPEN -- outside the pre-registered rule; needs a human call",
+      "question": "SP1 ranked torch above XGB (0.6510 vs 0.6537) and the torch ensemble is what is deployed. On S1 the single-seed numbers read XGB 0.6467 vs torch 0.6475. Should the deployed scorer change, and to what?",
+      "covered_by_rule": false,
+      "comparison_table": {
+        "torch_S0": {
+          "report": "models/walkforward/torch_external_diffsonly_extslice.json",
+          "candidate": "torch",
+          "drop_columns": [
+            "external_missing",
+            "same_country"
+          ],
+          "pooled": {
+            "n": 4804,
+            "winner_log_loss": 0.6476,
+            "accuracy": 0.6209,
+            "brier": 0.2283,
+            "ece": 0.0088,
+            "joint_log_loss": 2.3127,
+            "method_macro_f1": 0.387,
+            "round_macro_f1": 0.315,
+            "n_method": 4792,
+            "n_round": 2446
+          },
+          "folds": {
+            "2018": 0.6535,
+            "2019": 0.6678,
+            "2020": 0.6584,
+            "2021": 0.6679,
+            "2022": 0.6419,
+            "2023": 0.6432,
+            "2024": 0.6354,
+            "2025": 0.6287
+          },
+          "slices": {
+            "debut": {
+              "n": 983,
+              "winner_log_loss": 0.6525,
+              "ece": 0.0303
+            },
+            "womens": {
+              "n": 779,
+              "winner_log_loss": 0.659,
+              "ece": 0.0376
+            },
+            "five_round": {
+              "n": 420,
+              "winner_log_loss": 0.6575,
+              "ece": 0.0298
+            },
+            "external_missing": {
+              "n": 779,
+              "winner_log_loss": 0.6447,
+              "ece": 0.0457
+            }
+          }
+        },
+        "torch_S1": {
+          "report": "models/walkforward/torch_a1_combined.json",
+          "candidate": "torch",
+          "drop_columns": [
+            "external_missing",
+            "same_country",
+            "notice_unknown",
+            "home_country_a",
+            "home_country_b"
+          ],
+          "pooled": {
+            "n": 4804,
+            "winner_log_loss": 0.6475,
+            "accuracy": 0.6222,
+            "brier": 0.2281,
+            "ece": 0.0111,
+            "joint_log_loss": 2.3132,
+            "method_macro_f1": 0.3728,
+            "round_macro_f1": 0.3068,
+            "n_method": 4792,
+            "n_round": 2446
+          },
+          "folds": {
+            "2018": 0.6583,
+            "2019": 0.6665,
+            "2020": 0.6569,
+            "2021": 0.6704,
+            "2022": 0.6428,
+            "2023": 0.638,
+            "2024": 0.6359,
+            "2025": 0.628
+          },
+          "slices": {
+            "debut": {
+              "n": 983,
+              "winner_log_loss": 0.6514,
+              "ece": 0.0204
+            },
+            "womens": {
+              "n": 779,
+              "winner_log_loss": 0.6546,
+              "ece": 0.0338
+            },
+            "five_round": {
+              "n": 420,
+              "winner_log_loss": 0.6538,
+              "ece": 0.0418
+            },
+            "external_missing": {
+              "n": 779,
+              "winner_log_loss": 0.6456,
+              "ece": 0.0508
+            }
+          }
+        },
+        "xgb_S0": {
+          "report": "models/walkforward/xgb_external_diffsonly_extslice.json",
+          "candidate": "xgb",
+          "drop_columns": [
+            "external_missing",
+            "same_country"
+          ],
+          "pooled": {
+            "n": 4804,
+            "winner_log_loss": 0.6506,
+            "accuracy": 0.6137,
+            "brier": 0.2296,
+            "ece": 0.0153,
+            "joint_log_loss": 2.1866,
+            "method_macro_f1": 0.3329,
+            "round_macro_f1": 0.1781,
+            "n_method": 4792,
+            "n_round": 2446
+          },
+          "folds": {
+            "2018": 0.6373,
+            "2019": 0.6749,
+            "2020": 0.657,
+            "2021": 0.6715,
+            "2022": 0.6607,
+            "2023": 0.6477,
+            "2024": 0.6418,
+            "2025": 0.6293
+          },
+          "slices": {
+            "debut": {
+              "n": 983,
+              "winner_log_loss": 0.6461,
+              "ece": 0.044
+            },
+            "womens": {
+              "n": 779,
+              "winner_log_loss": 0.6543,
+              "ece": 0.0406
+            },
+            "five_round": {
+              "n": 420,
+              "winner_log_loss": 0.6622,
+              "ece": 0.0232
+            },
+            "external_missing": {
+              "n": 779,
+              "winner_log_loss": 0.6353,
+              "ece": 0.0612
+            }
+          }
+        },
+        "xgb_S1": {
+          "report": "models/walkforward/xgb_a1_combined.json",
+          "candidate": "xgb",
+          "drop_columns": [
+            "external_missing",
+            "same_country",
+            "notice_unknown",
+            "home_country_a",
+            "home_country_b"
+          ],
+          "pooled": {
+            "n": 4804,
+            "winner_log_loss": 0.6467,
+            "accuracy": 0.6139,
+            "brier": 0.2278,
+            "ece": 0.015,
+            "joint_log_loss": 2.1802,
+            "method_macro_f1": 0.3319,
+            "round_macro_f1": 0.192,
+            "n_method": 4792,
+            "n_round": 2446
+          },
+          "folds": {
+            "2018": 0.6319,
+            "2019": 0.6682,
+            "2020": 0.6512,
+            "2021": 0.672,
+            "2022": 0.6539,
+            "2023": 0.643,
+            "2024": 0.6416,
+            "2025": 0.6263
+          },
+          "slices": {
+            "debut": {
+              "n": 983,
+              "winner_log_loss": 0.6398,
+              "ece": 0.053
+            },
+            "womens": {
+              "n": 779,
+              "winner_log_loss": 0.6498,
+              "ece": 0.0414
+            },
+            "five_round": {
+              "n": 420,
+              "winner_log_loss": 0.6551,
+              "ece": 0.0516
+            },
+            "external_missing": {
+              "n": 779,
+              "winner_log_loss": 0.6316,
+              "ece": 0.0654
+            }
+          }
+        },
+        "blend_S0": {
+          "report": "models/walkforward/blend_a0_xgb_torch.json",
+          "candidate": "blend(xgb,torch)",
+          "drop_columns": [
+            "external_missing",
+            "same_country"
+          ],
+          "pooled": {
+            "n": 4804,
+            "winner_log_loss": 0.6459,
+            "accuracy": 0.6184,
+            "brier": 0.2274,
+            "ece": 0.0178,
+            "joint_log_loss": 2.2047,
+            "method_macro_f1": 0.3456,
+            "round_macro_f1": 0.277,
+            "n_method": 4792,
+            "n_round": 2446
+          },
+          "folds": {
+            "2018": 0.6408,
+            "2019": 0.6669,
+            "2020": 0.6552,
+            "2021": 0.6671,
+            "2022": 0.649,
+            "2023": 0.6415,
+            "2024": 0.6359,
+            "2025": 0.6261
+          },
+          "slices": {
+            "debut": {
+              "n": 983,
+              "winner_log_loss": 0.6433,
+              "ece": 0.0311
+            },
+            "womens": {
+              "n": 779,
+              "winner_log_loss": 0.6537,
+              "ece": 0.0297
+            },
+            "five_round": {
+              "n": 420,
+              "winner_log_loss": 0.6571,
+              "ece": 0.0332
+            },
+            "external_missing": {
+              "n": 779,
+              "winner_log_loss": 0.6344,
+              "ece": 0.0441
+            }
+          }
+        },
+        "blend_S1": {
+          "report": "models/walkforward/blend_a1_xgb_torch.json",
+          "candidate": "blend(xgb,torch)",
+          "drop_columns": [
+            "external_missing",
+            "same_country",
+            "notice_unknown",
+            "home_country_a",
+            "home_country_b"
+          ],
+          "pooled": {
+            "n": 4804,
+            "winner_log_loss": 0.6436,
+            "accuracy": 0.6236,
+            "brier": 0.2263,
+            "ece": 0.0145,
+            "joint_log_loss": 2.2017,
+            "method_macro_f1": 0.3393,
+            "round_macro_f1": 0.2881,
+            "n_method": 4792,
+            "n_round": 2446
+          },
+          "folds": {
+            "2018": 0.6397,
+            "2019": 0.6621,
+            "2020": 0.651,
+            "2021": 0.6686,
+            "2022": 0.6459,
+            "2023": 0.6368,
+            "2024": 0.6353,
+            "2025": 0.6245
+          },
+          "slices": {
+            "debut": {
+              "n": 983,
+              "winner_log_loss": 0.64,
+              "ece": 0.0277
+            },
+            "womens": {
+              "n": 779,
+              "winner_log_loss": 0.649,
+              "ece": 0.0397
+            },
+            "five_round": {
+              "n": 420,
+              "winner_log_loss": 0.6517,
+              "ece": 0.0312
+            },
+            "external_missing": {
+              "n": 779,
+              "winner_log_loss": 0.6336,
+              "ece": 0.0408
+            }
+          }
+        }
+      },
+      "vs_deployed_torch_S0": {
+        "deployed_pooled": 0.6476,
+        "xgb_S1_seed_0": -0.0009,
+        "xgb_S1_mean_over_4_seeds": 0.0004,
+        "torch_S1": -0.0001,
+        "blend_S0": -0.0017,
+        "blend_S1": -0.004
+      },
+      "seed_noise_context": "XGB's own sigma_seed is 0.001246 against torch's 0.000346. A single XGB fit is a noisier measurement than a 5-seed torch ensemble, so the two 4-dp numbers are not comparable at face value: averaged over four seeds XGB+S1 is 0.6480, which is 0.0004 WORSE than the deployed torch+S0's 0.6476, not better.",
+      "blend_note": "The equal-weight average of the two scorers is the best number measured anywhere in SP2.1: 0.6459 on S0 and 0.6436 on S1, i.e. -0.0017 and -0.0040 against the deployed scorer. Both use the single seed-0 XGB member, so each carries roughly half of XGB's 0.00125 seed sd. A blend is NOT one of the five pre-registered arms and cannot ship under SP2.1; it is measured here so the human call is made with the third option on the table, and it is the obvious candidate for a fresh pre-registration.",
+      "what_switching_the_scorer_would_require": [
+        "src/mma/inference.py: Ensemble loads models/torch/seed_*.pt through MultiTaskNet + Preprocessor, and predict_symmetrized averages the corner-swapped pass over that ensemble. Both are torch-specific and would need an XGB (or blend) implementation behind the same interface.",
+        "scripts/train_torch.py / scripts/train_xgb.py: the deployed artifact set would change; the XGB path currently trains one model per head with no seed ensemble, so a switch also decides whether to add one.",
+        "src/mma/versioning.py: MODEL_ARTIFACT_GLOBS hashes the torch weights and preprocessor only, so the model hash would stop covering the artifacts actually serving predictions until the globs are updated.",
+        "app.py: builds and caches the torch Ensemble and renders its model card from the torch walk-forward report.",
+        "scripts/predict_upcoming.py and src/mma/prospective.py: both call predict_symmetrized on the torch ensemble.",
+        "scripts/roll_window.py: rolls the deployed torch artifacts forward.",
+        "src/mma/explain.py: already XGB-based, so a switch would finally align the explanation path with the scoring path instead of splitting them.",
+        "scripts/refit_decision.py: the refit-through-latest budget was derived for the torch recipe and would have to be re-derived.",
+        "tests/test_inference.py, test_serving_parity.py, test_prospective.py, test_predict_upcoming.py, test_versioning.py, test_app.py and the processed-artifact guards test_processed_torch.py / test_processed_xgb.py all assert the torch serving path."
+      ],
+      "not_decided_here": "The pre-registration says: 'if the numbers are ambiguous in a way the rule does not cover, say so explicitly and stop for a human call rather than inventing a tie-break'. SP2.1's arms were all framed around torch, so nothing in it authorises changing the deployed scorer. No artifact was retrained and nothing was redeployed."
+    }
+  ]
+}

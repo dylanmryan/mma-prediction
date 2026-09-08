@@ -9,6 +9,7 @@ Examples:
   python scripts/run_walkforward.py --candidate torch --name torch_refit --fixed-budget-from models/walkforward/torch_v1.json
   python scripts/run_walkforward.py --candidate torch --name torch_refit_recent --fixed-epochs 18 --temperature 0.98
   python scripts/run_walkforward.py --candidate torch --name torch_v1_extslice --drop-columns external_missing,same_country
+  python scripts/run_walkforward.py --candidate xgb --name xgb_v1_seed1 --model-seed 1
 
 Reports land in models/walkforward/<name>.json. Nothing here touches the
 deployed artifacts under models/torch or models/xgb_*.json.
@@ -130,6 +131,32 @@ def resolve_drop_columns(args: argparse.Namespace) -> tuple[str, ...]:
     return tuple(names)
 
 
+def apply_model_seed(args: argparse.Namespace, config: dict) -> dict:
+    """Fold ``--model-seed`` into the XGB param override as ``random_state``.
+
+    XGBoost has no seed ensemble the way the torch candidate does -- its
+    stochasticity lives in ``subsample``/``colsample_bytree`` under a single
+    ``random_state`` (0 in ``mma.models.xgb.BASE_PARAMS``). Re-running with a
+    different value is therefore the XGB analogue of torch's fresh seed set,
+    and is what the SP2.1 fresh-seed confirmation needs. Torch already takes
+    ``--seeds``, so pointing this flag at it would be two seed knobs for one
+    ensemble; the elo candidate fits nothing. Both are usage errors rather
+    than silent no-ops. Returns a new dict; ``config`` is left alone.
+    """
+    if args.model_seed is None:
+        return dict(config)
+    if args.candidate != "xgb":
+        raise SystemExit(
+            f"--model-seed applies to the xgb candidate only (got {args.candidate!r}); "
+            "the torch ensemble is seeded with --seeds"
+        )
+    if "random_state" in config:
+        raise SystemExit(
+            "--model-seed and --config-json both set random_state; pass one of them"
+        )
+    return {**config, "random_state": int(args.model_seed)}
+
+
 def check_drop_columns(drop_columns, features: pd.DataFrame) -> None:
     """Fail loudly on a column that is not in the table.
 
@@ -182,6 +209,9 @@ def main() -> None:
                         help="torch fit budget stated outright (mutually exclusive with --fixed-budget-from)")
     parser.add_argument("--temperature", type=float, default=None,
                         help="calibration temperature for --fixed-epochs mode (default 1.0)")
+    parser.add_argument("--model-seed", type=int, default=None,
+                        help="xgb random_state (subsample/colsample draws); the XGB analogue "
+                             "of torch's --seeds, used for fresh-seed re-scoring")
     parser.add_argument("--drop-columns", default=None,
                         help="comma-separated feature columns to hold out of the model matrix "
                              "(they stay in the table, so slices keyed on them still report)")
@@ -192,7 +222,7 @@ def main() -> None:
         pd.read_parquet(PROCESSED / "features.parquet")
         .sort_values("date", kind="stable").reset_index(drop=True)
     )
-    config = json.loads(args.config_json) if args.config_json else {}
+    config = apply_model_seed(args, json.loads(args.config_json) if args.config_json else {})
     budget = resolve_budget(args)
     drop_columns = resolve_drop_columns(args)
     check_drop_columns(drop_columns, features)
@@ -209,6 +239,7 @@ def main() -> None:
 
     run_config = {
         "candidate": args.candidate, "seeds": args.seeds if args.candidate == "torch" else None,
+        "model_seed": args.model_seed,
         "config": config, "train_start": args.train_start, "half_life": args.half_life,
         "fixed_budget_from": str(args.fixed_budget_from) if args.fixed_budget_from else None,
         "budget": budget, "drop_columns": list(drop_columns),

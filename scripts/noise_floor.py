@@ -41,8 +41,33 @@ def check_disjoint_seed_sets(seed_sets: list[str | None]) -> None:
                 )
 
 
+def seed_label(report: dict) -> str | None:
+    """The seed set a report was produced under, as a comparable string.
+
+    The torch candidate records its ensemble in ``config.seeds``. The xgb
+    candidate has no ensemble -- its stochasticity is one ``random_state``
+    over subsample/colsample -- so its seed is ``config.model_seed`` (the
+    ``--model-seed`` flag), or, when a run set it through ``--config-json``,
+    ``config.config.random_state``. An xgb report with neither ran at the
+    ``mma.models.xgb.BASE_PARAMS`` default of 0, which is a real seed and
+    must take part in the overlap check rather than being waved through.
+    Anything else (the elo floor, an unrecognised candidate) has no seed.
+    """
+    config = report.get("config", {})
+    seeds = config.get("seeds")
+    if seeds is not None:
+        return str(seeds)
+    if config.get("candidate") != "xgb":
+        return None
+    explicit = (config.get("config") or {}).get("random_state")
+    if explicit is not None:
+        return str(int(explicit))
+    model_seed = config.get("model_seed")
+    return str(int(model_seed)) if model_seed is not None else "0"
+
+
 def sigma_from_reports(reports: list[dict]) -> dict:
-    seed_sets = [r.get("config", {}).get("seeds") for r in reports]
+    seed_sets = [seed_label(r) for r in reports]
     check_disjoint_seed_sets(seed_sets)
     values = [r["pooled"]["winner_log_loss"] for r in reports]
     sigma = float(np.std(values, ddof=1)) if len(values) > 1 else float("nan")
@@ -58,7 +83,7 @@ def main() -> None:
     reports = [json.loads(p.read_text()) for p in args.reports]
     result = sigma_from_reports(reports)
     result["reports"] = [str(p) for p in args.reports]
-    result["seed_sets"] = [r.get("config", {}).get("seeds") for r in reports]
+    result["seed_sets"] = [seed_label(r) for r in reports]
     args.out.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
 
