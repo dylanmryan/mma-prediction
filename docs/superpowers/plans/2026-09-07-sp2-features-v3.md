@@ -22,7 +22,7 @@ From the v3 spec §4 SP1/§5 and `models/walkforward/noise_floor.json`:
 - **Fresh-seed re-scoring.** The final shipped feature set is re-run on torch with seeds 5–9 and that number is reported (as SP1 did for the refit recipe).
 - **Negative results are deliverables.** Every block gets a row in the results table in this plan's Completion notes, cleared or not, with its pooled numbers. Code for a block that does not ship is reverted (the elo-v1.1 / model-v2 precedent), but its measurement stays.
 - **Point-in-time.** Every new column must pass `tests/test_processed_features.py::test_no_leakage_truncation_invariance`, which rebuilds the table from pre-2015-truncated fights and compares every column. External joins must filter on a date strictly before the fight.
-- **Missingness.** Every externally-sourced column carries a `*_missing` boolean, and the row-level `external_missing` flag feeds the SP1 slice of the same name. *(Amended during Task 11, which measured the reason: when membership of the external source is itself determined by the future — as it is for `ehan03/jds-mma-data`'s fighter mapping, whose composition tracks how long a fighter's UFC career turned out to be — a **per-corner** missingness flag is a look-ahead feature and must be dropped. The row-level flag is symmetric in the corners and stays. See the Task 11 completion note.)*
+- **Missingness.** Every externally-sourced column carries a `*_missing` boolean, and the row-level `external_missing` flag feeds the SP1 slice of the same name. *(Amended during Task 11, which measured the reason: when membership of the external source is itself determined by the future — as it is for `ehan03/jds-mma-data`'s fighter mapping, whose composition tracks how long a fighter's UFC career turned out to be — a **per-corner** missingness flag is a look-ahead feature and must be dropped. The row-level flag stays in the TABLE, where it is what makes the `external_missing` slice reportable, but the shipped variant keeps it out of both model matrices too. The property to check is not the flag's name: over the rows where exactly one corner is unmapped, the block's columns must take exactly one distinct value tuple. See the Task 11 completion note.)*
 
 ## Block evaluation procedure (invoked by every block task)
 
@@ -995,8 +995,30 @@ snapshot". `bar_check` -> `clears_delta: true`, `no_fold_regression: false`,
 either-corner OR, which keeps the `external_missing` slice that
 `walkforward.slice_masks` reads but cannot say which corner wins. The
 differentials are NaN whenever either corner is unmapped, so no per-corner
-channel survives. Guarded by
-`tests/test_external.py::test_missingness_is_fight_level_only_never_per_corner`.
+channel survives.
+
+*The evidence that no channel survives is the constant-vector result, not the
+`diffsonly` ablation.* On the 1,445 feature rows where exactly one corner is
+unmapped -- precisely the rows the selection effect could be read off -- the
+block's eight columns take **exactly one distinct value tuple**:
+`(NaN x 6, external_missing=True, same_country=False)`. No function of those
+columns can separate a fight whose unmapped corner is A from one whose
+unmapped corner is B, so the selection effect is *unreachable*, not merely
+unmodelled. That is what
+`tests/test_external.py::test_a_half_matched_fight_carries_exactly_one_value_tuple`
+asserts, on the real table, over those rows -- a data-level property rather
+than a rule about column names, so it also catches a per-corner channel
+smuggled in under a name that does not end in `_a`/`_b`.
+
+*Correction to the first write-up:* the `{xgb,torch}_external_diffsonly`
+ablation was presented as "the check that the corrected block is not just a
+subtler encoding of the same selection effect". It cannot be that check.
+`diffsonly` withholds the flags from the model but leaves the differentials
+NaN exactly where a corner is unmapped, so missingness is fully recoverable
+from the NaN pattern -- an ablation in which the leak is still present in the
+input cannot demonstrate its absence. What `diffsonly` actually measures is
+the flags' marginal value (~-0.0004 pooled), which is a useful number and is
+what the variant comparison below uses it for.
 
 - XGB screen, `xgb_external_noleak`: pooled **0.6499** vs 0.6537 (delta
   **-0.0038**), worst fold +0.0031 (2021), `ships: true`.
@@ -1110,9 +1132,11 @@ will never have again.
   This is why the flags could not simply be deleted from the block: without
   `external_missing` in the table there is no `external_missing` slice, and
   the coverage decay this whole section is about becomes unmeasurable.
-- **`external_diffsonly` also measures the flags' marginal value**: the six
-  differentials carry essentially all of the gain (-0.0034 of the -0.0038),
-  and the two flags add ~-0.0004 pooled.
+- **What `external_diffsonly` measures**, restated: the flags' marginal value.
+  The six differentials carry essentially all of the gain (-0.0034 of the
+  -0.0038) and the two flags add ~-0.0004 pooled -- which, per the shipping
+  rule, is bought entirely on folds whose coverage we will never have again.
+  It is *not* leak evidence; see the correction above.
 - Gates on the shipped table, all passing:
   `test_no_leakage_truncation_invariance`, both serving-parity tests, and the
   base-only rebuild stayed byte-identical.

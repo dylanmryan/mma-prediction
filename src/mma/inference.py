@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -271,19 +272,32 @@ def predict_symmetrized(
     }
 
 
+# A ufcstats fighter id: 16 lowercase hex characters. Every id in
+# data/processed/fighters.parquet has this shape (4,581 of 4,581), which is
+# what makes it safe to use as a validation rule rather than a guess.
+UFCSTATS_ID = re.compile(r"^[0-9a-f]{16}$")
+
+
 def _fighter_id(bio: pd.Series, corner: str) -> str:
     """The ufcstats id of a bio row: its index label, as every caller passes it.
 
-    The `external` block joins by id and never by name, so an unlabelled bio
-    row has to be an error -- returning "unmatched" instead would serve a
-    silently all-NaN external corner for a fighter the table may well have.
+    The `external` block joins by id and never by name, so a bio row whose
+    label is not an id has to be an error. Checking `isinstance(str)` was not
+    enough, because the obvious wrong call --
+    `fighters.set_index("name").loc["Jon Jones"]` -- produces a bio row whose
+    label IS a string, just the wrong one. That passed the check and then
+    matched nothing in the external table, so a mapped fighter was served
+    all-NaN external values with `external_missing` quietly set: a silent
+    wrong answer, and precisely the name-matching failure the id-only join
+    exists to make impossible. Validating the SHAPE closes it.
     """
     fighter_id = getattr(bio, "name", None)
-    if not isinstance(fighter_id, str):
+    if not isinstance(fighter_id, str) or not UFCSTATS_ID.match(fighter_id):
         raise KeyError(
-            f"the {EXTERNAL_BLOCK!r} block joins by ufcstats fighter id, but the "
-            f"corner-{corner} bio row is not labelled with one (got "
-            f"{fighter_id!r}); pass fighters.set_index('fighter_id').loc[id]"
+            f"the {EXTERNAL_BLOCK!r} block joins by ufcstats fighter id (16 "
+            f"lowercase hex characters), but the corner-{corner} bio row is not "
+            f"labelled with one (got {fighter_id!r}); pass "
+            "fighters.set_index('fighter_id').loc[id]"
         )
     return fighter_id
 

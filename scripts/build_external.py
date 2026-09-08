@@ -14,6 +14,7 @@ What is derived, keyed by OUR ufcstats `fighter_id`:
   pre_ufc_finish_loss_rate                share of those losses that were finishes
   pre_ufc_avg_opp_wins                    mean career wins of the pre-UFC
                                           opponents AS OF each of those bouts
+                                          (see the CONVENTION note below)
   pro_debut_date                          first recorded pro bout (a DATE)
   first_ufc_date                          first bout in our own fights table
   nationality, gym_id                     origin descriptors, not features
@@ -35,10 +36,16 @@ POINT-IN-TIME ARGUMENT (the reason this block is safe):
   (wins strictly before it), not as of the snapshot, so it too describes only
   the pre-UFC window.
 
-  Mechanically this is checked by
-  `tests/test_processed_features.py::test_no_leakage_truncation_invariance`:
-  the table is a static committed artifact, so truncating the fights table
-  cannot change any column derived from it.
+  What does NOT check this is
+  `tests/test_processed_features.py::test_no_leakage_truncation_invariance`.
+  That test rebuilds the feature table from a truncated fights table; this
+  table is a static committed artifact, so truncation cannot change it and the
+  test passes whatever is in here -- including, hypothetically, a column
+  derived from next year's results. The falsifiable form of the argument is
+  the constancy above, and it is checked directly by
+  `tests/test_external.py::test_pre_ufc_values_are_constant_across_a_fighters_ufc_career`,
+  which asserts that every `pre_ufc_*` value a fighter takes is the same at
+  every one of their UFC fights.
 
   The one thing that would break the argument is a fighter whose recorded pro
   debut post-dates their first UFC bout -- the window would then be empty or
@@ -46,6 +53,24 @@ POINT-IN-TIME ARGUMENT (the reason this block is safe):
   `mma.external` flags those fighters as missing rather than emitting a
   negative duration; the flag is not applied here so that the raw disagreement
   stays visible in the committed table.
+
+CONVENTION -- `pre_ufc_avg_opp_wins` scores an unrecorded opponent as 0 wins:
+
+  The opponent's win count is `bisect` over their own recorded win dates, so
+  an opponent with no wins before the bout contributes 0. That is right for
+  the common case -- 3,482 of the 26,336 pre-UFC bouts (13.2%) are against an
+  opponent the source knows and who had genuinely not won yet -- and wrong for
+  one case: an opponent with no history rows at all is "unknown", not "zero".
+  In this snapshot that is exactly **1 bout of 26,336 (0.004%), affecting 1
+  fighter of 2,553**, so the convention is documented and kept rather than
+  changed: switching to NaN would require regenerating this table and
+  re-running every walk-forward evaluation the `external` shipping decision
+  rests on, to move one value for one fighter.
+
+  It is kept SAFE rather than merely documented: `derive` counts the unknown
+  opponents and raises if they exceed `MAX_UNKNOWN_OPPONENT_SHARE`, so a
+  future snapshot in which the conflation actually matters fails loudly here
+  instead of quietly biasing the column downwards.
 
 GYM DATA: `Tapology/fighter_gyms.csv` is keyed by (fighter, bout), so gym
 affiliation IS dated in this source -- it is not an as-of-scrape snapshot, and
@@ -69,10 +94,18 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from mma.external import drop_source_errors  # noqa: E402
+
 PROCESSED = ROOT / "data" / "processed"
 OUT_DIR = ROOT / "data" / "external"
 SOURCE_URL = "https://github.com/ehan03/jds-mma-data"
 FINISH_METHODS = ("KO/TKO", "Submission")
+# See the CONVENTION note in the module docstring: an opponent with no history
+# rows at all is scored as 0 wins, which is only tolerable while it is
+# vanishingly rare (0.004% of pre-UFC bouts in the ec77f537 snapshot).
+MAX_UNKNOWN_OPPONENT_SHARE = 0.001
 
 
 def clone_snapshot(destination: Path) -> None:
@@ -133,6 +166,11 @@ def derive(snapshot: Path, fights: pd.DataFrame) -> pd.DataFrame:
 
     debut = first_ufc_dates(fights)
     wins_before = win_date_index(histories)
+    # Fighters the source has ANY history for. `wins_before` alone cannot tell
+    # "no wins yet" from "no such fighter"; this set can. See the CONVENTION
+    # note in the module docstring.
+    known_fighters = set(histories["fighter_id"].dropna())
+    n_opponent_bouts = n_unknown_opponents = 0
     by_fighter = dict(tuple(histories.groupby("fighter_id")))
     nationality = bios.set_index("id")["nationality"].to_dict()
     gyms = gym_at_ufc_debut(clean, mapping, fights)
@@ -146,11 +184,19 @@ def derive(snapshot: Path, fights: pd.DataFrame) -> pd.DataFrame:
         pre = history[history["date"] < first_ufc]
         wins = pre[pre["outcome"] == "W"]
         losses = pre[pre["outcome"] == "L"]
-        opponent_wins = [
-            bisect.bisect_left(wins_before[opponent], date) if opponent in wins_before else 0
-            for opponent, date in pre[["opponent_id", "date"]].itertuples(index=False)
-            if pd.notna(opponent)
-        ]
+        opponent_wins = []
+        for opponent, date in pre[["opponent_id", "date"]].itertuples(index=False):
+            if pd.isna(opponent):
+                continue
+            n_opponent_bouts += 1
+            if opponent not in known_fighters:
+                # Unknown, scored as zero -- the documented convention, held
+                # to a rate the assertion below enforces.
+                n_unknown_opponents += 1
+            opponent_wins.append(
+                bisect.bisect_left(wins_before[opponent], date)
+                if opponent in wins_before else 0
+            )
         rows.append({
             "fighter_id": entry.ufcstats_id,
             "pre_ufc_wins": len(wins),
@@ -169,6 +215,17 @@ def derive(snapshot: Path, fights: pd.DataFrame) -> pd.DataFrame:
             "nationality": nationality.get(entry.sherdog_id),
             "gym_id": gyms.get(entry.ufcstats_id),
         })
+
+    share = n_unknown_opponents / n_opponent_bouts if n_opponent_bouts else 0.0
+    print(f"pre_ufc_avg_opp_wins: {n_unknown_opponents}/{n_opponent_bouts} pre-UFC bouts "
+          f"({share:.5%}) are against an opponent with no history rows, scored as 0 wins")
+    if share > MAX_UNKNOWN_OPPONENT_SHARE:
+        raise ValueError(
+            f"{share:.4%} of pre-UFC bouts have an unrecorded opponent, above the "
+            f"{MAX_UNKNOWN_OPPONENT_SHARE:.4%} the zero-wins convention tolerates; "
+            "emit NaN for those bouts and average over the known ones instead "
+            "(see the CONVENTION note in this module's docstring)"
+        )
 
     table = pd.DataFrame(rows).sort_values("fighter_id").reset_index(drop=True)
     table["pre_ufc_wins"] = table["pre_ufc_wins"].astype("int64")
@@ -208,7 +265,17 @@ def gym_at_ufc_debut(clean: Path, mapping: pd.DataFrame, fights: pd.DataFrame) -
 
 def write_readme(path: Path, table: pd.DataFrame, commit: str,
                  coverage_end, fighters: pd.DataFrame) -> None:
+    """Both match rates are reported, pre- and post-drop.
+
+    The committed table keeps the source-error fighters so the raw
+    disagreement stays visible, but `mma.external.load_table` drops them, so
+    the number that actually reaches the feature table is the post-drop one.
+    Quoting only the pre-drop rate overstates coverage by however many
+    fighters the guard removes.
+    """
     matched = fighters["fighter_id"].isin(set(table["fighter_id"]))
+    usable = drop_source_errors(table)
+    matched_usable = fighters["fighter_id"].isin(set(usable["fighter_id"]))
     coverage = "\n".join(
         f"| `{column}` | {int(table[column].notna().sum())} | "
         f"{table[column].notna().mean():.3f} |"
@@ -222,8 +289,15 @@ def write_readme(path: Path, table: pd.DataFrame, commit: str,
 | Licence | MIT (Copyright (c) 2025 Eugene Han) |
 | Snapshot commit | `{commit}` |
 | Coverage end (source UFC events) | {coverage_end:%Y-%m-%d} |
-| Rows in `fighter_external.parquet` | {len(table)} |
-| Match rate vs `data/processed/fighters.parquet` | {int(matched.sum())} / {len(fighters)} ({matched.mean():.3f}) |
+| Licence notice | vendored verbatim as [`LICENSE-jds-mma-data`](LICENSE-jds-mma-data) |
+| Rows in `fighter_external.parquet` | {len(table)} as committed; **{len(usable)} usable** |
+| Match rate vs `data/processed/fighters.parquet` | {int(matched.sum())} / {len(fighters)} ({matched.mean():.3f}) as committed; **{int(matched_usable.sum())} / {len(fighters)} ({matched_usable.mean():.3f}) usable** |
+
+The two rows differ by the {len(table) - len(usable)} fighter(s) whose recorded pro debut
+post-dates their first UFC bout. They are kept in the committed parquet so the
+source disagreement stays visible, and dropped by
+`mma.external.drop_source_errors` before anything reads it -- so the *usable*
+figure is the one the feature table actually sees, and the one to quote.
 
 **Only derived aggregates are committed here, never the raw snapshot** (~130 MB);
 regenerate with `python scripts/build_external.py`, which clones the source into
@@ -234,7 +308,7 @@ coverage ends {coverage_end:%Y-%m-%d}, so fighters who debuted after that are
 unmatched by construction. That is what the row-level `external_missing` flag
 and the walk-forward slice of the same name exist to measure.
 
-Per-column non-null counts over the {len(table)} matched fighters:
+Per-column non-null counts over the {len(table)} committed rows:
 
 | column | non-null | share |
 |---|---|---|
@@ -257,9 +331,27 @@ which bought a spurious -0.0143 pooled log-loss on the 2018-2023 folds and then
 cost +0.0487 on 2025, where missingness means "debuted after the snapshot"
 instead. See the SP2 plan's Task 11 notes.
 
-See `scripts/build_external.py` for the point-in-time argument behind every
-column, and `src/mma/external.py` for the join (by fighter id only, never by
-name) and the missingness rules.
+The shipped block goes further: both fight-level flags stay in the feature
+table (so the `external_missing` walk-forward slice is reportable) and are
+excluded from every model matrix, because modelling them makes the block decay
+as the snapshot ages. What makes the selection effect *unreachable* rather
+than merely unmodelled is that on the rows where exactly one corner is
+unmapped, every one of the block's columns takes the same value -- one
+distinct value tuple over all 1,445 such rows, asserted by
+`tests/test_external.py::test_a_half_matched_fight_carries_exactly_one_value_tuple`.
+
+## Point-in-time
+
+Every `pre_ufc_*` column is cut at `history["date"] < first_ufc_date`, so it
+summarises a window that closed before the fighter's UFC career began and is
+therefore constant across all of their UFC fights. That constancy -- not the
+truncation-invariance test, which cannot see a static artifact at all -- is
+the checkable form of the claim, and
+`tests/test_external.py::test_pre_ufc_values_are_constant_across_a_fighters_ufc_career`
+asserts it on the real table. `scripts/build_external.py` carries the full
+argument, including the zero-wins convention for an unrecorded opponent;
+`src/mma/external.py` carries the join (by fighter id only, never by name) and
+the missingness rules.
 """)
 
 
@@ -291,12 +383,16 @@ def main(argv=None) -> None:
     write_readme(args.out_dir / "README.md", table, commit, coverage_end, fighters)
 
     matched = fighters["fighter_id"].isin(set(table["fighter_id"]))
-    errors = (table["pro_debut_date"] > table["first_ufc_date"]).sum()
+    usable = drop_source_errors(table)
+    matched_usable = fighters["fighter_id"].isin(set(usable["fighter_id"]))
     print(f"snapshot {commit[:10]} -> {args.out_dir / 'fighter_external.parquet'}")
-    print(f"{len(table)} fighters; coverage end {coverage_end:%Y-%m-%d}")
+    print(f"{len(table)} fighters committed, {len(usable)} usable; "
+          f"coverage end {coverage_end:%Y-%m-%d}")
     print(f"match rate vs fighters.parquet: {int(matched.sum())}/{len(fighters)} "
-          f"({matched.mean():.4f})")
-    print(f"pro debut after first UFC bout (source errors, flagged at load): {int(errors)}")
+          f"({matched.mean():.4f}) committed, {int(matched_usable.sum())}/{len(fighters)} "
+          f"({matched_usable.mean():.4f}) usable")
+    print("dropped at load (pro debut after first UFC bout, or a missing date): "
+          f"{len(table) - len(usable)}")
     print(table.notna().mean().round(4).to_string())
 
 

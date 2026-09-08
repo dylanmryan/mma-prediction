@@ -28,10 +28,24 @@ missing-fighter path instead of contributing a wrong number.
 
 `days_since_pro_debut` is the one column that is not fighter-static: the table
 stores the DATE and this module subtracts it from each fight's own date,
-exactly as `days_since_last` is handled. Everything else describes a window
-that closed before the fighter's first UFC bout, so it is constant across
-their UFC career and cannot leak (see `scripts/build_external.py` for the full
-argument; `test_no_leakage_truncation_invariance` is the mechanical check).
+exactly as `days_since_last` is handled.
+
+**Why this block is point-in-time safe**, stated honestly. It is NOT because
+`tests/test_processed_features.py::test_no_leakage_truncation_invariance`
+passes. That test rebuilds the feature table from a truncated fights table and
+compares every column; the external table is a static committed artifact that
+the truncation does not touch, so the test is structurally incapable of
+detecting a leak here -- it would pass just as happily on a column derived
+from next year's results. The argument is the cut itself:
+`scripts/build_external.derive` selects `history["date"] < first_ufc_date`,
+where `first_ufc_date` is the fighter's first bout in OUR fights table. Every
+`pre_ufc_*` value therefore summarises a window that closed strictly before
+the fighter's UFC career began, which makes it CONSTANT across all of that
+fighter's UFC fights -- so it cannot carry information from one of their
+fights into another, let alone from the future. That constancy is the
+falsifiable form of the claim, and
+`tests/test_external.py::test_pre_ufc_values_are_constant_across_a_fighters_ufc_career`
+asserts it directly on the real table.
 """
 from __future__ import annotations
 
@@ -67,18 +81,28 @@ _MISSING_STATE = {key: np.nan for key in NUMERIC_STATE_KEYS} | {
 
 
 def drop_source_errors(table: pd.DataFrame) -> pd.DataFrame:
-    """Remove fighters whose recorded pro debut post-dates their first UFC bout.
+    """Keep only fighters whose pro debut is a real date on or before their
+    first UFC bout.
 
     Dropping rather than repairing is deliberate: "not in the table" is then
     the single missingness rule the rest of the module implements, and a
     fighter whose debut date disagrees with our own fights table is exactly a
     fighter whose derived pre-UFC window should not be trusted.
 
+    The condition is stated positively (`notna` on both dates AND ordered)
+    rather than as `~(debut > first_ufc)`. The negated form let a MISSING date
+    through: `NaT > date` is False, so `~False` kept the fighter, whose
+    `days_since_pro_debut` then came out NaN while `external_missing` said
+    False -- breaking this module's one invariant, that a present flag means
+    present values. A fighter with no usable debut date takes the ordinary
+    missing-fighter path like any other.
+
     `attach` and `state_for` apply this themselves rather than trusting their
     caller, so passing a raw table in cannot bypass the guard. It is
     idempotent, and the table is a few thousand rows.
     """
-    sane = ~(table["pro_debut_date"] > table["first_ufc_date"])
+    debut, first_ufc = table["pro_debut_date"], table["first_ufc_date"]
+    sane = debut.notna() & first_ufc.notna() & (debut <= first_ufc)
     return table[sane].reset_index(drop=True)
 
 
