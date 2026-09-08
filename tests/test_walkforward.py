@@ -5,7 +5,8 @@ import pandas as pd
 import pytest
 
 from mma.walkforward import FOLD_YEARS, make_folds, recency_weights
-from mma.walkforward import bar_check, build_report, paired_delta, pool, score_rows, slice_masks
+from mma.walkforward import bar_check, build_report, paired_delta, pool, score_rows
+from mma.walkforward import slice_comparison, slice_masks
 
 METHOD = ["ko_tko", "submission", "decision"]
 ROUND = ["1", "2", "3", "45"]
@@ -222,6 +223,46 @@ def test_paired_delta_folds_restricted_to_common_years():
     b = {"pooled": {"winner_log_loss": 0.5}, "folds": {"2019": {"winner_log_loss": 0.4}, "2020": {"winner_log_loss": 0.5}}}
     out = paired_delta(a, b, sigma_seed=0.002)
     assert out["per_fold_B_minus_A"] == {"2019": pytest.approx(-0.1)}
+
+
+def test_slice_comparison_pairs_slices_and_flags_missing_ones():
+    cand = {"slices": {
+        "debut": {"n": 100, "winner_log_loss": 0.640},
+        "external_missing": {"n": 20, "winner_log_loss": 0.700},
+    }}
+    inc = {"slices": {
+        "debut": {"n": 100, "winner_log_loss": 0.650},
+        "womens": {"n": 50, "winner_log_loss": 0.660},
+    }}
+    rows = {r["slice"]: r for r in slice_comparison(cand, inc)}
+    assert set(rows) == {"debut", "external_missing", "womens"}
+
+    shared = rows["debut"]
+    assert shared["n"] == 100
+    assert shared["candidate_winner_log_loss"] == pytest.approx(0.640)
+    assert shared["incumbent_winner_log_loss"] == pytest.approx(0.650)
+    assert shared["delta"] == pytest.approx(-0.010)
+
+    # candidate-only slice: no incumbent number, so no delta
+    only_cand = rows["external_missing"]
+    assert only_cand["n"] == 20
+    assert only_cand["candidate_winner_log_loss"] == pytest.approx(0.700)
+    assert only_cand["incumbent_winner_log_loss"] is None
+    assert only_cand["delta"] is None
+
+    # incumbent-only slice is still reported, from the other side
+    only_inc = rows["womens"]
+    assert only_inc["n"] == 50
+    assert only_inc["candidate_winner_log_loss"] is None
+    assert only_inc["delta"] is None
+
+    # candidate slices come first, in the candidate report's own order
+    assert [r["slice"] for r in slice_comparison(cand, inc)] == [
+        "debut", "external_missing", "womens"]
+
+
+def test_slice_comparison_handles_reports_without_slices():
+    assert slice_comparison({}, {}) == []
 
 
 def test_build_report_shape():
