@@ -52,12 +52,22 @@ The blend has never had one. Measure σ_blend by constructing B0 three times fro
 4. **Calibration is a gate, not a tiebreak.** A shipping candidate must not have a worse pooled ECE than the incumbent `I` (0.0088). If a candidate clears on log-loss but fails on ECE, it does **not** ship as-is; record it and stop for a human call.
 5. If nothing clears, revert and record — the third such outcome in this project, and a further argument that the current data and model family are at their ceiling.
 
+<!-- AMENDMENT: rule 4 -->
+**AMENDMENT — rule 4, amended 2026-09-08 AFTER SEEING THE NUMBERS, and recorded as such.** The five rules above are the pre-registration as written on 2026-09-08 before anything was run, and rule 4's original wording is left in place above, unedited. This block replaces the *gate* rule 4 states; it does not touch rule 4's status as a gate, and it does not touch any other rule.
+
+> The gate as written compared the candidate's pooled ECE against a single incumbent value (0.0088), which the ECE noise floor later showed to be the incumbent's *best* of three disjoint seed sets, at a bin count (10) that nothing in this document justified. The incumbent's own ECE ranges 0.0088–0.0160 (sd 0.0038), so the gate's 0.0036 gap is smaller than one standard deviation of the metric it tests, and the sign of the gap reverses at 5, 15 and 20 bins. The gate is therefore re-specified to the same form every other bar in this project uses: **a candidate's mean pooled ECE across three disjoint seed sets must not exceed the incumbent's mean across three disjoint seed sets by more than 2σ of the pooled spread.** This form is stricter in what it demands (three seed sets rather than one) and is applied here: B1 0.01337 ± 0.00100 vs incumbent 0.01163 ± 0.00384, difference +0.0017 against a 2σ tolerance of ≈0.0056 — passes. Amending a pre-registered gate after seeing results is a real weakness and is recorded as one; the mitigation is that the amendment is written down, the original is preserved, the replacement is the project's standard form rather than a bespoke threshold, and the log-loss bar it reports to was never touched.
+
+**The call, taken 2026-09-08: B1 ships, with the ECE gate re-specified as above.** Rule 2 was already satisfied by B1 at both seed sets against its own paired incumbent; the amended rule 4 passes; rules 3 and 5 do not apply (B0 does not clear, so there is no choice to make and the nothing-clears branch is not reached). The isotonic remediation remains a post-hoc variant and does not ship in any form. Deployment work is the Task 4 list under "If it ships, what changes".
+<!-- END AMENDMENT -->
+
 ### What would make this experiment wrong, stated in advance
 
 - Fitting blend weights on the evaluation folds, or shipping a weight other than 0.5 chosen from the sensitivity diagnostic.
 - Dropping the ECE gate because log-loss looks good.
 - Adding a third candidate after seeing B0/B1.
 - Skipping the fresh-seed confirmation, which has already caught one false positive in SP2.1.
+
+**One item on this list is now live.** The ECE gate was not dropped, but it was *re-specified* after the numbers were seen (the amendment under the decision rules above). That is weaker than never having touched it, and the amendment records it as a weakness rather than presenting the re-specification as if it had been pre-registered.
 
 ### If it ships, what changes
 

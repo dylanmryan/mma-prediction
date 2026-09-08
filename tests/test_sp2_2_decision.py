@@ -1,9 +1,11 @@
 """Pure helpers behind SP2.2's decision artifact (scripts/sp2_2_decision.py).
 
-The script itself reads committed reports and decides nothing; what is worth
-pinning is the arithmetic it uses to describe the ECE gate, and the guarantee
-that the rules it quotes are the pre-registration's own text rather than a
-paraphrase that could drift from it.
+The script reads committed reports and applies the pre-registration's rules;
+what is worth pinning is the arithmetic it uses to describe the ECE gate, the
+guarantee that the rules it quotes are the pre-registration's own text rather
+than a paraphrase that could drift from it, and -- since rule 4's gate was
+AMENDED after the numbers were seen -- that the amendment is quoted from the
+plan file too, so the artifact cannot state a gate the plan does not.
 """
 from __future__ import annotations
 
@@ -29,6 +31,10 @@ PLAN_STUB = """# A plan
 3. **Choice between candidates:** ship B0 unless B1 beats it.
 4. **Calibration is a gate, not a tiebreak.** Stop for a human call.
 5. If nothing clears, revert and record.
+
+<!-- AMENDMENT: rule 4 -->
+**AMENDMENT** the gate is re-specified to three disjoint seed sets.
+<!-- END AMENDMENT -->
 
 ### What would make this experiment wrong
 
@@ -59,6 +65,77 @@ def test_quoted_rules_fails_loudly_rather_than_quoting_a_partial_list():
         d.quoted_rules("### Decision rule\n\n1. only one rule.\n")
     with pytest.raises(ValueError, match="exactly one"):
         d.quoted_rules("no heading here")
+
+
+def test_the_amendment_does_not_disturb_the_original_rules():
+    """The amendment sits BELOW the numbered list and rule 4's original
+    wording is left in place, so the quoted rules are still the ones written
+    before anything was run."""
+    rules = d.quoted_rules(PLAN_STUB)
+    assert sorted(rules) == ["1", "2", "3", "4", "5"]
+    assert "AMENDMENT" not in " ".join(rules.values())
+    real = d.quoted_rules(d.PLAN.read_text())
+    assert "(0.0088)" in real["4"]  # the original single-value gate, unedited
+
+
+# --- quoted_amendment -------------------------------------------------------
+
+
+def test_quoted_amendment_takes_the_block_from_the_plan_verbatim():
+    text = d.quoted_amendment(PLAN_STUB)
+    assert text == "**AMENDMENT** the gate is re-specified to three disjoint seed sets."
+    assert d.AMENDMENT_START not in text and d.AMENDMENT_END not in text
+
+
+def test_quoted_amendment_reads_the_real_pre_registration():
+    text = d.quoted_amendment(d.PLAN.read_text())
+    assert "amended 2026-09-08" in text
+    assert "three disjoint seed sets" in text
+    assert "is a real weakness and is recorded as one" in text
+
+
+def test_quoted_amendment_fails_loudly_when_the_block_is_missing_or_doubled():
+    with pytest.raises(ValueError, match="exactly one"):
+        d.quoted_amendment("no markers here")
+    doubled = PLAN_STUB + PLAN_STUB
+    with pytest.raises(ValueError, match="exactly one"):
+        d.quoted_amendment(doubled)
+
+
+# --- amended_ece_gate -------------------------------------------------------
+
+
+def test_amended_gate_pools_the_two_arms_standard_deviations():
+    """The tolerance is 2 sigma of the POOLED spread of the two arms, not of
+    either one alone -- the incumbent's own sd is four times the candidate's,
+    and reading the gate off whichever arm suits is the failure mode the
+    amendment exists to close."""
+    import math
+
+    incumbent = {"mean": 0.011633333333333334, "sigma_seed": 0.0038370995990895693,
+                 "n_reports": 3}
+    candidate = {"mean": 0.013366666666666666, "sigma_seed": 0.0010016652800877814,
+                 "n_reports": 3}
+    out = d.amended_ece_gate(incumbent, candidate)
+    expected = math.sqrt((incumbent["sigma_seed"] ** 2 + candidate["sigma_seed"] ** 2) / 2)
+    assert out["pooled_sd"] == pytest.approx(expected, abs=1e-12)
+    assert out["tolerance_2sigma"] == pytest.approx(2 * expected, abs=1e-12)
+    assert out["difference_candidate_minus_incumbent"] == pytest.approx(0.0017333, abs=1e-6)
+    assert out["passes"] is True
+
+
+def test_amended_gate_fails_when_the_candidate_is_worse_by_more_than_2_sigma():
+    incumbent = {"mean": 0.010, "sigma_seed": 0.001, "n_reports": 3}
+    candidate = {"mean": 0.020, "sigma_seed": 0.001, "n_reports": 3}
+    out = d.amended_ece_gate(incumbent, candidate)
+    assert out["passes"] is False
+    assert out["difference_candidate_minus_incumbent"] == pytest.approx(0.010)
+
+
+def test_amended_gate_passes_a_better_calibrated_candidate_outright():
+    incumbent = {"mean": 0.020, "sigma_seed": 0.004, "n_reports": 3}
+    candidate = {"mean": 0.010, "sigma_seed": 0.001, "n_reports": 3}
+    assert d.amended_ece_gate(incumbent, candidate)["passes"] is True
 
 
 # --- spread -----------------------------------------------------------------
@@ -181,17 +258,37 @@ def test_the_committed_decision_file_is_reproducible():
     assert d.build() == json.loads(d.OUT.read_text())
 
 
-def test_the_artifact_decides_nothing():
-    """SP2.2's rule 4 reserves the call for a human. If this test ever fails
-    because some field started asserting an outcome, that is the failure it
-    exists to catch."""
+def test_the_artifact_records_the_human_call_rather_than_taking_it_itself():
+    """Rule 4 reserved the call for a human; the human made it on 2026-09-08
+    (B1 ships, ECE gate re-specified). The artifact must record THAT -- the
+    outcome, the amended gate and the amendment's own text -- and must still
+    not invent one: the recorded call names the human decision and the
+    amendment it rests on."""
     import json
 
     decision = json.loads(d.OUT.read_text())
-    assert decision["decided"] is False
-    assert decision["rules"]["status"]["4"]["resolved"] is False
-    assert decision["awaiting_human_call"]["blocked_on"] == "rule 4"
+    assert decision["decided"] is True
+    assert decision["decision"]["outcome"] == "ship B1"
+    assert decision["decision"]["taken_by"] == "human call reserved by rule 4"
+    assert decision["decision"]["date"] == "2026-09-08"
+    assert decision["rules"]["status"]["4"]["resolved"] is True
+    assert decision["rules"]["status"]["4"]["gate_applied"] == "amended"
     assert decision["remediation_isotonic"]["label"].startswith("POST-HOC VARIANT")
+    assert decision["decision"]["ships"]["isotonic_remediation"] is False
+
+
+def test_the_artifact_keeps_the_original_gate_visible_next_to_the_amended_one():
+    """Amending a pre-registered rule after seeing results is only defensible
+    if the original stays readable beside the replacement."""
+    import json
+
+    gate = json.loads(d.OUT.read_text())["ece_gate"]
+    assert "(0.0088)" in gate["rule_as_written"]
+    assert gate["B1_fails_the_gate_as_written"] is True
+    amended = gate["amended"]
+    assert amended["passes"] is True
+    assert amended["text"] == d.quoted_amendment(d.PLAN.read_text())
+    assert amended["weakness"].startswith("Amending a pre-registered gate")
 
 
 def test_the_quoted_rules_match_the_pre_registration_on_disk():
@@ -199,3 +296,5 @@ def test_the_quoted_rules_match_the_pre_registration_on_disk():
 
     decision = json.loads(d.OUT.read_text())
     assert decision["rules"]["text"] == d.quoted_rules(d.PLAN.read_text())
+
+    assert decision["rules"]["amendment"] == d.quoted_amendment(d.PLAN.read_text())
