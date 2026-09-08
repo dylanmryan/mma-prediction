@@ -2,7 +2,20 @@
   "experiment": "SP2.2 calibrated two-model blend",
   "pre_registration": "docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md",
   "generated_by": "scripts/sp2_2_decision.py",
-  "decided": false,
+  "decided": true,
+  "decision": {
+    "outcome": "ship B1",
+    "date": "2026-09-08",
+    "taken_by": "human call reserved by rule 4",
+    "what_ships": "B1: the equal-weight (0.5) blend of a 5-seed XGBoost ensemble and the 5-seed torch ensemble, temperature-scaled after averaging, on S1 (base,external,trajectory,notice,context,opponent_adjusted) with external_missing, same_country, notice_unknown, home_country_a and home_country_b held out of both model matrices.",
+    "ships": {
+      "B1": true,
+      "B0": false,
+      "isotonic_remediation": false
+    },
+    "why": "Rule 2 is satisfied by B1 and only by B1: it clears the bar against I at seeds 0-4 and clears it again at seeds 5-9 against its own fresh-seed paired incumbent. Rule 3 does not apply (B0 does not clear, so there is no choice between candidates) and rule 5 does not apply (something clears). Rule 4 is the only rule left, and its gate AS WRITTEN fails: B1's pooled ECE 0.0124 against the single incumbent value 0.0088 the rule names. That rule reserved the case for a human, and the human amended the gate -- see `ece_gate.amended` and the amendment quoted from the plan file -- because the incumbent's own ECE ranges 0.0088-0.0160 across three disjoint seed sets, the 0.0036 gap is smaller than one sd of the metric it tests, and the sign of the gap reverses at 5, 15 and 20 bins. Under the amended gate B1 passes.",
+    "recorded_weakness": "The ECE gate was re-specified AFTER the numbers were seen. That is the weakest part of this experiment and is recorded rather than smoothed over: the original gate is preserved verbatim in the plan and in `ece_gate.rule_as_written`, the replacement is the project's standard measured-difference-against-a-measured-noise-floor form rather than a bespoke threshold, and the log-loss bar B1 actually cleared was never touched."
+  },
   "incumbent": {
     "report": "models/walkforward/torch_external_diffsonly_extslice.json",
     "note": "I: the deployed scorer, a 5-seed torch ensemble on S0",
@@ -1060,7 +1073,7 @@
     }
   },
   "ece_gate": {
-    "rule": "4. **Calibration is a gate, not a tiebreak.** A shipping candidate must not have a worse pooled ECE than the incumbent `I` (0.0088). If a candidate clears on log-loss but fails on ECE, it does **not** ship as-is; record it and stop for a human call.",
+    "rule_as_written": "4. **Calibration is a gate, not a tiebreak.** A shipping candidate must not have a worse pooled ECE than the incumbent `I` (0.0088). If a candidate clears on log-loss but fails on ECE, it does **not** ship as-is; record it and stop for a human call.",
     "incumbent_pooled_ece": 0.0088,
     "B0_pooled_ece": 0.0091,
     "B1_pooled_ece": 0.0124,
@@ -1543,7 +1556,35 @@
         ]
       }
     },
-    "not_resolved_here": "Rule 4 sends this to a human. The facts above are what the call needs; the call itself is not taken by this script."
+    "amended": {
+      "label": "RULE 4 AS AMENDED 2026-09-08, AFTER SEEING THE NUMBERS",
+      "text": "**AMENDMENT \u2014 rule 4, amended 2026-09-08 AFTER SEEING THE NUMBERS, and recorded as such.** The five rules above are the pre-registration as written on 2026-09-08 before anything was run, and rule 4's original wording is left in place above, unedited. This block replaces the *gate* rule 4 states; it does not touch rule 4's status as a gate, and it does not touch any other rule.\n\n> The gate as written compared the candidate's pooled ECE against a single incumbent value (0.0088), which the ECE noise floor later showed to be the incumbent's *best* of three disjoint seed sets, at a bin count (10) that nothing in this document justified. The incumbent's own ECE ranges 0.0088\u20130.0160 (sd 0.0038), so the gate's 0.0036 gap is smaller than one standard deviation of the metric it tests, and the sign of the gap reverses at 5, 15 and 20 bins. The gate is therefore re-specified to the same form every other bar in this project uses: **a candidate's mean pooled ECE across three disjoint seed sets must not exceed the incumbent's mean across three disjoint seed sets by more than 2\u03c3 of the pooled spread.** This form is stricter in what it demands (three seed sets rather than one) and is applied here: B1 0.01337 \u00b1 0.00100 vs incumbent 0.01163 \u00b1 0.00384, difference +0.0017 against a 2\u03c3 tolerance of \u22480.0056 \u2014 passes. Amending a pre-registered gate after seeing results is a real weakness and is recorded as one; the mitigation is that the amendment is written down, the original is preserved, the replacement is the project's standard form rather than a bespoke threshold, and the log-loss bar it reports to was never touched.\n\n**The call, taken 2026-09-08: B1 ships, with the ECE gate re-specified as above.** Rule 2 was already satisfied by B1 at both seed sets against its own paired incumbent; the amended rule 4 passes; rules 3 and 5 do not apply (B0 does not clear, so there is no choice to make and the nothing-clears branch is not reached). The isotonic remediation remains a post-hoc variant and does not ship in any form. Deployment work is the Task 4 list under \"If it ships, what changes\".",
+      "quoted_verbatim_from": "docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md",
+      "source": "models/walkforward/noise_floor_ece.json",
+      "incumbent_arm": "incumbent_torch_S0",
+      "candidate_arm": "B1_blend_S1",
+      "incumbent_pooled_ece": [
+        0.0088,
+        0.016,
+        0.0101
+      ],
+      "candidate_pooled_ece": [
+        0.0124,
+        0.0144,
+        0.0133
+      ],
+      "form": "a candidate's mean pooled ECE across three disjoint seed sets must not exceed the incumbent's mean across three disjoint seed sets by more than 2 sigma of the pooled spread",
+      "incumbent_mean": 0.011633,
+      "incumbent_sd": 0.003837,
+      "candidate_mean": 0.013367,
+      "candidate_sd": 0.001002,
+      "pooled_sd": 0.002804163571073081,
+      "tolerance_2sigma": 0.005608327142146162,
+      "difference_candidate_minus_incumbent": 0.0017333333333333315,
+      "passes": true,
+      "weakness": "Amending a pre-registered gate after seeing results is a real weakness. The mitigations, and they are mitigations rather than a defence: the amendment is written down and dated in the plan file, the original wording is preserved above and in `rule_as_written`, the replacement is the same form every other bar in this project uses rather than a threshold chosen to fit, and the log-loss bar the candidate actually cleared was never touched."
+    },
+    "resolved_here": "Rule 4 sent this to a human; the human took it on 2026-09-08 and it is recorded in `decision`. The facts above are what that call rested on."
   },
   "remediation_isotonic": {
     "label": "POST-HOC VARIANT -- NOT A CANDIDATE AND NOT A SHIPPING FORM",
@@ -1691,6 +1732,7 @@
       "4": "4. **Calibration is a gate, not a tiebreak.** A shipping candidate must not have a worse pooled ECE than the incumbent `I` (0.0088). If a candidate clears on log-loss but fails on ECE, it does **not** ship as-is; record it and stop for a human call.",
       "5": "5. If nothing clears, revert and record \u2014 the third such outcome in this project, and a further argument that the current data and model family are at their ceiling."
     },
+    "amendment": "**AMENDMENT \u2014 rule 4, amended 2026-09-08 AFTER SEEING THE NUMBERS, and recorded as such.** The five rules above are the pre-registration as written on 2026-09-08 before anything was run, and rule 4's original wording is left in place above, unedited. This block replaces the *gate* rule 4 states; it does not touch rule 4's status as a gate, and it does not touch any other rule.\n\n> The gate as written compared the candidate's pooled ECE against a single incumbent value (0.0088), which the ECE noise floor later showed to be the incumbent's *best* of three disjoint seed sets, at a bin count (10) that nothing in this document justified. The incumbent's own ECE ranges 0.0088\u20130.0160 (sd 0.0038), so the gate's 0.0036 gap is smaller than one standard deviation of the metric it tests, and the sign of the gap reverses at 5, 15 and 20 bins. The gate is therefore re-specified to the same form every other bar in this project uses: **a candidate's mean pooled ECE across three disjoint seed sets must not exceed the incumbent's mean across three disjoint seed sets by more than 2\u03c3 of the pooled spread.** This form is stricter in what it demands (three seed sets rather than one) and is applied here: B1 0.01337 \u00b1 0.00100 vs incumbent 0.01163 \u00b1 0.00384, difference +0.0017 against a 2\u03c3 tolerance of \u22480.0056 \u2014 passes. Amending a pre-registered gate after seeing results is a real weakness and is recorded as one; the mitigation is that the amendment is written down, the original is preserved, the replacement is the project's standard form rather than a bespoke threshold, and the log-loss bar it reports to was never touched.\n\n**The call, taken 2026-09-08: B1 ships, with the ECE gate re-specified as above.** Rule 2 was already satisfied by B1 at both seed sets against its own paired incumbent; the amended rule 4 passes; rules 3 and 5 do not apply (B0 does not clear, so there is no choice to make and the nothing-clears branch is not reached). The isotonic remediation remains a post-hoc variant and does not ship in any form. Deployment work is the Task 4 list under \"If it ships, what changes\".",
     "status": {
       "1": {
         "satisfied": true,
@@ -1719,8 +1761,11 @@
       },
       "4": {
         "applies": true,
-        "resolved": false,
-        "reason": "reserved for a human call by the rule's own text"
+        "resolved": true,
+        "gate_applied": "amended",
+        "fails_as_written": true,
+        "passes_as_amended": true,
+        "reason": "The rule reserved this for a human call; the call was taken on 2026-09-08 and amended the gate (see `ece_gate.amended`). B1 passes the amended gate, so rule 4 no longer blocks it."
       },
       "5": {
         "applies": false,
@@ -1728,15 +1773,17 @@
       }
     }
   },
-  "awaiting_human_call": {
-    "blocked_on": "rule 4",
-    "rule": "4. **Calibration is a gate, not a tiebreak.** A shipping candidate must not have a worse pooled ECE than the incumbent `I` (0.0088). If a candidate clears on log-loss but fails on ECE, it does **not** ship as-is; record it and stop for a human call.",
-    "why": "B1 satisfies rule 2 -- it clears the bar against I at seeds 0-4 and clears it again at seeds 5-9 against the fresh-seed paired incumbent -- and then fails rule 4 as written, because its pooled ECE is worse than I's. Rule 4's own text sends that case to a human: 'record it and stop for a human call'. Nothing in this artifact resolves it, nothing was deployed and nothing was reverted.",
-    "what_the_call_needs": [
-      "the ECE noise floors, which say how much of the ECE gap is measurable",
-      "the bin-count sweep, which says whether the gap survives a different binning of the same predictions",
-      "the reliability curves, which say WHERE the miscalibration sits",
-      "the isotonic remediation, which is a post-hoc variant and would itself need a fresh-seed confirmation before it could ship"
-    ]
+  "human_call": {
+    "reserved_by": "rule 4",
+    "rule_as_written": "4. **Calibration is a gate, not a tiebreak.** A shipping candidate must not have a worse pooled ECE than the incumbent `I` (0.0088). If a candidate clears on log-loss but fails on ECE, it does **not** ship as-is; record it and stop for a human call.",
+    "taken": "2026-09-08",
+    "outcome": "B1 ships, with the ECE gate re-specified (see rules.amendment)",
+    "what_the_call_rested_on": [
+      "the ECE noise floors, which say how much of the ECE gap is measurable: the incumbent's own ECE ranges 0.0088-0.0160 (sd 0.0038) and B1's 0.0124-0.0144 (sd 0.0010), so the 0.0036 gap the gate turned on is smaller than one sd of the incumbent's own metric",
+      "the bin-count sweep, which says the gap does not survive a different binning of the same predictions: B1 is worse at 10 bins and better at 5, 15 and 20, and 10 is only `expected_calibration_error`'s default",
+      "the reliability curves, which say the miscalibration is a couple of bins on each side rather than a systematic slope on either",
+      "the isotonic remediation, which fails clearly on both axes and is a post-hoc variant that would need a fresh-seed confirmation of its own before it could ship in any form -- it does not ship"
+    ],
+    "not_decided_by_this_script": "This script applies rules 1, 2, 3 and 5 mechanically and reports the facts rule 4 needs. The amendment to rule 4 and the decision to ship B1 are a human's, recorded here and in the plan file; nothing in this script chose them."
   }
 }

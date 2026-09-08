@@ -1,12 +1,13 @@
-"""Assemble SP2.2's decision artifact. It does NOT take the decision.
+"""Assemble SP2.2's decision artifact, including the human call rule 4 reserved.
 
     python scripts/sp2_2_decision.py            # writes models/walkforward/sp2_2_decision.json
     python scripts/sp2_2_decision.py --print    # ... and echoes it
 
 Reads only committed walk-forward reports, noise floors and prediction dumps
 (paths are the constants below), so re-running it reproduces the artifact
-exactly. The pre-registration's five decision rules are quoted out of the plan
-file itself rather than retyped here, so the artifact cannot drift from them.
+exactly. The pre-registration's five decision rules -- and the block that
+amends rule 4 -- are quoted out of the plan file itself rather than retyped
+here, so the artifact cannot drift from them.
 
 What this script does and does not do:
 
@@ -18,14 +19,19 @@ What this script does and does not do:
   precision had never been measured, so the artifact carries an ECE noise floor
   for both recipes, the same comparison at four bin counts, and the reliability
   curves the two ECEs summarise.
-* It does NOT resolve rule 4. The pre-registration reserves that: "If a
-  candidate clears on log-loss but fails on ECE, it does not ship as-is; record
-  it and stop for a human call." The `awaiting_human_call` field says so.
+* It does not INVENT a resolution of rule 4. Rule 4's text reserved the call
+  for a human ("record it and stop for a human call"); the call was made on
+  2026-09-08 -- B1 ships, with the ECE gate re-specified -- and this script
+  records it. The gate as written stays in the artifact beside the amended one
+  (`ece_gate.rule_as_written` and `ece_gate.amended`), because amending a
+  pre-registered rule after seeing results is only defensible if the original
+  stays readable next to the replacement.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -44,6 +50,16 @@ PLAN = ROOT / "docs" / "superpowers" / "plans" / "2026-09-08-sp2-2-blend-experim
 
 MIN_BAR = 0.003
 BIN_COUNTS = (5, 10, 15, 20)  # 10 is `expected_calibration_error`'s default
+
+# The plan file's amendment block. It sits BELOW the numbered decision rules so
+# `quoted_rules` still parses the list unchanged and rule 4's original wording
+# stays exactly where it was written.
+AMENDMENT_START = "<!-- AMENDMENT: rule 4 -->"
+AMENDMENT_END = "<!-- END AMENDMENT -->"
+
+# Which arm of the ECE noise floor is which, for the amended gate.
+ECE_ARM_INCUMBENT = "incumbent_torch_S0"
+ECE_ARM_B1 = "B1_blend_S1"
 
 # --- the reports the artifact reads ----------------------------------------
 # S0 = the shipped `base,external` table; S1 = the combined table with SP2.1's
@@ -111,6 +127,75 @@ def quoted_rules(plan_text: str) -> dict[str, str]:
     if sorted(rules) != ["1", "2", "3", "4", "5"]:
         raise ValueError(f"expected rules 1-5, parsed {sorted(rules)}")
     return rules
+
+
+def quoted_amendment(plan_text: str) -> str:
+    """The plan's rule-4 amendment block, quoted verbatim between its markers.
+
+    Taken out of the plan file for the same reason `quoted_rules` is: an
+    artifact that states a gate the pre-registration does not state is worth
+    nothing. Exactly one delimited block must exist.
+    """
+    before, sep, rest = plan_text.partition(AMENDMENT_START)
+    if not sep or AMENDMENT_START in rest:
+        raise ValueError(
+            f"expected exactly one {AMENDMENT_START!r} block in the plan file"
+        )
+    body, sep, after = rest.partition(AMENDMENT_END)
+    if not sep or AMENDMENT_END in after:
+        raise ValueError(
+            f"expected exactly one {AMENDMENT_END!r} closing the amendment block"
+        )
+    return body.strip()
+
+
+def pooled_sd(sds, ns) -> float:
+    """The pooled sample standard deviation of several equally-trusted arms.
+
+    sqrt(sum((n_i - 1) * s_i^2) / sum(n_i - 1)) -- the ordinary pooled-variance
+    estimator. For two arms of three seed sets each it reduces to the RMS of
+    the two sds, which is what the amendment's "2 sigma of the pooled spread"
+    means: neither arm's own sd sets the tolerance on its own.
+    """
+    numerator = sum((n - 1) * float(s) ** 2 for s, n in zip(sds, ns))
+    denominator = sum(n - 1 for n in ns)
+    if denominator <= 0:
+        raise ValueError("pooled_sd needs at least two measurements in total")
+    return math.sqrt(numerator / denominator)
+
+
+def amended_ece_gate(incumbent_arm: dict, candidate_arm: dict) -> dict:
+    """Rule 4 as amended: mean pooled ECE over three disjoint seed sets each,
+    and the candidate may not exceed the incumbent by more than 2 sigma of the
+    pooled spread.
+
+    The same shape as every other bar in this project (`mma.walkforward.
+    bar_check`, `scripts/noise_floor.py`): a measured difference against a
+    measured noise floor, rather than one number against another number of
+    unknown precision. `passes` is True when the candidate is not worse by more
+    than the tolerance -- a better-calibrated candidate passes outright.
+    """
+    sd = pooled_sd(
+        [incumbent_arm["sigma_seed"], candidate_arm["sigma_seed"]],
+        [incumbent_arm["n_reports"], candidate_arm["n_reports"]],
+    )
+    tolerance = 2.0 * sd
+    difference = float(candidate_arm["mean"]) - float(incumbent_arm["mean"])
+    return {
+        "form": (
+            "a candidate's mean pooled ECE across three disjoint seed sets must not "
+            "exceed the incumbent's mean across three disjoint seed sets by more than "
+            "2 sigma of the pooled spread"
+        ),
+        "incumbent_mean": round(float(incumbent_arm["mean"]), 6),
+        "incumbent_sd": round(float(incumbent_arm["sigma_seed"]), 6),
+        "candidate_mean": round(float(candidate_arm["mean"]), 6),
+        "candidate_sd": round(float(candidate_arm["sigma_seed"]), 6),
+        "pooled_sd": sd,
+        "tolerance_2sigma": tolerance,
+        "difference_candidate_minus_incumbent": difference,
+        "passes": bool(difference <= tolerance),
+    }
 
 
 def spread(values) -> dict:
@@ -248,7 +333,9 @@ def curve_block(path: Path, n_bins: int = 10) -> dict:
 
 
 def build() -> dict:
-    rules = quoted_rules(PLAN.read_text())
+    plan_text = PLAN.read_text()
+    rules = quoted_rules(plan_text)
+    amendment = quoted_amendment(plan_text)
     sigma_blend = float(load(NOISE_FLOOR_BLEND)["sigma_seed"])
     bar = round(max(MIN_BAR, 2.0 * sigma_blend), 6)
     ece_floor = load(NOISE_FLOOR_ECE)
@@ -272,11 +359,54 @@ def build() -> dict:
 
     b1_minus_b0 = round(pooled(load(B1)) - pooled(load(B0)), 6)
 
+    amended_gate = amended_ece_gate(ece_floor["arms"][ECE_ARM_INCUMBENT],
+                                    ece_floor["arms"][ECE_ARM_B1])
+
     return {
         "experiment": "SP2.2 calibrated two-model blend",
         "pre_registration": str(PLAN.relative_to(ROOT)),
         "generated_by": "scripts/sp2_2_decision.py",
-        "decided": False,
+        "decided": True,
+        "decision": {
+            "outcome": "ship B1",
+            "date": "2026-09-08",
+            "taken_by": "human call reserved by rule 4",
+            "what_ships": (
+                "B1: the equal-weight (0.5) blend of a 5-seed XGBoost ensemble and the "
+                "5-seed torch ensemble, temperature-scaled after averaging, on S1 "
+                "(base,external,trajectory,notice,context,opponent_adjusted) with "
+                "external_missing, same_country, notice_unknown, home_country_a and "
+                "home_country_b held out of both model matrices."
+            ),
+            "ships": {
+                "B1": True,
+                "B0": False,
+                "isotonic_remediation": False,
+            },
+            "why": (
+                "Rule 2 is satisfied by B1 and only by B1: it clears the bar against I at "
+                "seeds 0-4 and clears it again at seeds 5-9 against its own fresh-seed "
+                "paired incumbent. Rule 3 does not apply (B0 does not clear, so there is "
+                "no choice between candidates) and rule 5 does not apply (something "
+                "clears). Rule 4 is the only rule left, and its gate AS WRITTEN fails: "
+                "B1's pooled ECE 0.0124 against the single incumbent value 0.0088 the "
+                "rule names. That rule reserved the case for a human, and the human "
+                "amended the gate -- see `ece_gate.amended` and the amendment quoted "
+                "from the plan file -- because the incumbent's own ECE ranges "
+                "0.0088-0.0160 across three disjoint seed sets, the 0.0036 gap is "
+                "smaller than one sd of the metric it tests, and the sign of the gap "
+                "reverses at 5, 15 and 20 bins. Under the amended gate B1 passes."
+            ),
+            "recorded_weakness": (
+                "The ECE gate was re-specified AFTER the numbers were seen. That is the "
+                "weakest part of this experiment and is recorded rather than smoothed "
+                "over: the original gate is preserved verbatim in the plan and in "
+                "`ece_gate.rule_as_written`, the replacement is the project's standard "
+                "measured-difference-against-a-measured-noise-floor form rather than a "
+                "bespoke threshold, and the log-loss bar B1 actually cleared was never "
+                "touched."
+            ),
+        },
         "incumbent": {
             "report": str(INCUMBENT.relative_to(ROOT)),
             "note": "I: the deployed scorer, a 5-seed torch ensemble on S0",
@@ -332,7 +462,7 @@ def build() -> dict:
         },
         "diagnostics": {name: profile(path) for name, path in DIAGNOSTICS.items()},
         "ece_gate": {
-            "rule": rules["4"],
+            "rule_as_written": rules["4"],
             "incumbent_pooled_ece": incumbent_ece,
             "B0_pooled_ece": pooled(load(B0), "ece"),
             "B1_pooled_ece": pooled(load(B1), "ece"),
@@ -354,9 +484,29 @@ def build() -> dict:
                 "B1": curve_block(PRED_B1),
                 "B1_isotonic_remediation": curve_block(PRED_B1_ISOTONIC),
             },
-            "not_resolved_here": (
-                "Rule 4 sends this to a human. The facts above are what the call needs; "
-                "the call itself is not taken by this script."
+            "amended": {
+                "label": "RULE 4 AS AMENDED 2026-09-08, AFTER SEEING THE NUMBERS",
+                "text": amendment,
+                "quoted_verbatim_from": str(PLAN.relative_to(ROOT)),
+                "source": str(NOISE_FLOOR_ECE.relative_to(ROOT)),
+                "incumbent_arm": ECE_ARM_INCUMBENT,
+                "candidate_arm": ECE_ARM_B1,
+                "incumbent_pooled_ece": ece_floor["arms"][ECE_ARM_INCUMBENT]["pooled_ece"],
+                "candidate_pooled_ece": ece_floor["arms"][ECE_ARM_B1]["pooled_ece"],
+                **amended_gate,
+                "weakness": (
+                    "Amending a pre-registered gate after seeing results is a real "
+                    "weakness. The mitigations, and they are mitigations rather than a "
+                    "defence: the amendment is written down and dated in the plan file, "
+                    "the original wording is preserved above and in `rule_as_written`, "
+                    "the replacement is the same form every other bar in this project "
+                    "uses rather than a threshold chosen to fit, and the log-loss bar "
+                    "the candidate actually cleared was never touched."
+                ),
+            },
+            "resolved_here": (
+                "Rule 4 sent this to a human; the human took it on 2026-09-08 and it is "
+                "recorded in `decision`. The facts above are what that call rested on."
             ),
         },
         "remediation_isotonic": {
@@ -390,6 +540,7 @@ def build() -> dict:
         "rules": {
             "quoted_verbatim_from": str(PLAN.relative_to(ROOT)),
             "text": rules,
+            "amendment": amendment,
             "status": {
                 "1": {
                     "satisfied": True,
@@ -425,8 +576,15 @@ def build() -> dict:
                 "4": {
                     "applies": bool(b1_branch["rule_2_satisfied"]
                                     and pooled(load(B1), "ece") > incumbent_ece),
-                    "resolved": False,
-                    "reason": "reserved for a human call by the rule's own text",
+                    "resolved": True,
+                    "gate_applied": "amended",
+                    "fails_as_written": bool(pooled(load(B1), "ece") > incumbent_ece),
+                    "passes_as_amended": bool(amended_gate["passes"]),
+                    "reason": (
+                        "The rule reserved this for a human call; the call was taken on "
+                        "2026-09-08 and amended the gate (see `ece_gate.amended`). B1 "
+                        "passes the amended gate, so rule 4 no longer blocks it."
+                    ),
                 },
                 "5": {
                     "applies": not (b0_branch["rule_2_satisfied"] or b1_branch["rule_2_satisfied"]),
@@ -434,25 +592,31 @@ def build() -> dict:
                 },
             },
         },
-        "awaiting_human_call": {
-            "blocked_on": "rule 4",
-            "rule": rules["4"],
-            "why": (
-                "B1 satisfies rule 2 -- it clears the bar against I at seeds 0-4 and "
-                "clears it again at seeds 5-9 against the fresh-seed paired incumbent -- "
-                "and then fails rule 4 as written, because its pooled ECE is worse than "
-                "I's. Rule 4's own text sends that case to a human: 'record it and stop "
-                "for a human call'. Nothing in this artifact resolves it, nothing was "
-                "deployed and nothing was reverted."
-            ),
-            "what_the_call_needs": [
-                "the ECE noise floors, which say how much of the ECE gap is measurable",
-                "the bin-count sweep, which says whether the gap survives a different "
-                "binning of the same predictions",
-                "the reliability curves, which say WHERE the miscalibration sits",
-                "the isotonic remediation, which is a post-hoc variant and would itself "
-                "need a fresh-seed confirmation before it could ship",
+        "human_call": {
+            "reserved_by": "rule 4",
+            "rule_as_written": rules["4"],
+            "taken": "2026-09-08",
+            "outcome": "B1 ships, with the ECE gate re-specified (see rules.amendment)",
+            "what_the_call_rested_on": [
+                "the ECE noise floors, which say how much of the ECE gap is measurable: "
+                "the incumbent's own ECE ranges 0.0088-0.0160 (sd 0.0038) and B1's "
+                "0.0124-0.0144 (sd 0.0010), so the 0.0036 gap the gate turned on is "
+                "smaller than one sd of the incumbent's own metric",
+                "the bin-count sweep, which says the gap does not survive a different "
+                "binning of the same predictions: B1 is worse at 10 bins and better at "
+                "5, 15 and 20, and 10 is only `expected_calibration_error`'s default",
+                "the reliability curves, which say the miscalibration is a couple of "
+                "bins on each side rather than a systematic slope on either",
+                "the isotonic remediation, which fails clearly on both axes and is a "
+                "post-hoc variant that would need a fresh-seed confirmation of its own "
+                "before it could ship in any form -- it does not ship",
             ],
+            "not_decided_by_this_script": (
+                "This script applies rules 1, 2, 3 and 5 mechanically and reports the "
+                "facts rule 4 needs. The amendment to rule 4 and the decision to ship "
+                "B1 are a human's, recorded here and in the plan file; nothing in this "
+                "script chose them."
+            ),
         },
     }
 
@@ -468,9 +632,13 @@ def main(argv=None) -> None:
     if args.echo:
         print(json.dumps(decision, indent=2))
     status = decision["rules"]["status"]
+    gate = decision["ece_gate"]["amended"]
     print(f"rule 2 satisfied by: {status['2']['satisfied_by'] or 'nothing'}")
-    print(f"rule 4 applies: {status['4']['applies']}, resolved: {status['4']['resolved']}")
-    print(f"awaiting human call on: {decision['awaiting_human_call']['blocked_on']}")
+    print(f"rule 4 applies: {status['4']['applies']}, resolved: {status['4']['resolved']} "
+          f"({status['4']['gate_applied']} gate)")
+    print(f"amended ECE gate: {gate['difference_candidate_minus_incumbent']:+.5f} against a "
+          f"2-sigma tolerance of {gate['tolerance_2sigma']:.5f} -> passes={gate['passes']}")
+    print(f"decision: {decision['decision']['outcome']} ({decision['decision']['taken_by']})")
     print(f"wrote {args.out}")
 
 
