@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 import json
 
+import numpy as np
+import pandas as pd
 import pytest
 
 import scripts.run_walkforward as rwf
@@ -74,3 +76,87 @@ def test_nonsense_values_are_rejected():
         rwf.resolve_budget(_args(fixed_epochs=0))
     with pytest.raises(SystemExit, match="must be positive"):
         rwf.resolve_budget(_args(fixed_epochs=18, temperature=0.0))
+
+
+# --- --drop-columns ---------------------------------------------------------
+# The ablation path: hold columns out of the MODEL MATRIX while leaving them in
+# the feature TABLE, so a paired incumbent can be computed on the same table as
+# the candidate and `walkforward.slice_masks` still reports a slice keyed on a
+# dropped column.
+
+
+def _drop_args(**overrides) -> argparse.Namespace:
+    base = {"candidate": "torch", "drop_columns": None}
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+def test_no_flag_drops_nothing():
+    assert rwf.resolve_drop_columns(_drop_args()) == ()
+
+
+def test_names_are_split_stripped_and_deduplicated_in_order():
+    assert rwf.resolve_drop_columns(
+        _drop_args(drop_columns=" external_missing , same_country ,external_missing,")
+    ) == ("external_missing", "same_country")
+
+
+def test_a_flag_that_names_nothing_is_a_usage_error():
+    with pytest.raises(SystemExit, match="names no columns"):
+        rwf.resolve_drop_columns(_drop_args(drop_columns=" , "))
+
+
+def test_dropping_columns_from_the_elo_candidate_is_a_usage_error():
+    with pytest.raises(SystemExit, match="fitted candidates only"):
+        rwf.resolve_drop_columns(_drop_args(candidate="elo", drop_columns="elo_diff"))
+
+
+def test_an_unknown_column_is_rejected_rather_than_silently_dropping_nothing():
+    features = pd.DataFrame({"elo_diff": [1.0], "external_missing": [True]})
+    rwf.check_drop_columns(("external_missing",), features)  # present: fine
+    with pytest.raises(SystemExit, match="absent from the feature table"):
+        rwf.check_drop_columns(("external_missing", "typo_diff"), features)
+
+
+def _ablation_frame() -> pd.DataFrame:
+    return pd.DataFrame({
+        "fight_id": ["f1", "f2", "f3", "f4"],
+        "date": pd.to_datetime(["2020-01-01", "2020-06-01", "2021-01-01", "2021-06-01"]),
+        "swapped": [False, True, False, True],
+        "y_winner": [1.0, 0.0, 1.0, 0.0],
+        "y_method": ["KO/TKO", "Decision", "KO/TKO", "Decision"],
+        "y_finish_round": ["1", None, "2", None],
+        "weight_class": ["Lightweight"] * 4,
+        "elo_diff": [10.0, -20.0, 30.0, -40.0],
+        "external_missing": [False, True, False, True],
+        "same_country": [True, False, True, False],
+    })
+
+
+def test_a_dropped_column_is_absent_from_both_learners_model_matrices():
+    """The property the flag exists for, checked on the real builders."""
+    from mma.models.xgb import feature_frame
+    from mma.tensors import Preprocessor
+
+    features = _ablation_frame()
+    dropped = ("external_missing", "same_country")
+    train = np.array([True, True, False, False])
+
+    kept = feature_frame(features)
+    assert {"elo_diff", "external_missing", "same_country"} <= set(kept.columns)
+    ablated = feature_frame(features, dropped)
+    assert set(ablated.columns) == set(kept.columns) - set(dropped)
+    assert "elo_diff" in ablated.columns
+
+    full = Preprocessor.fit(features, train_mask=train)
+    assert {"elo_diff", "external_missing", "same_country"} <= set(full.numeric_columns)
+    thin = Preprocessor.fit(features, train_mask=train, drop_columns=dropped)
+    assert set(thin.numeric_columns) == set(full.numeric_columns) - set(dropped)
+    assert thin.transform(features)[0].shape[1] == len(thin.numeric_columns)
+
+
+def test_drop_columns_reaches_the_candidates_the_cli_builds():
+    xgb = rwf.build_candidate("xgb", "x", "0", {}, None, ("external_missing",))
+    torch_candidate = rwf.build_candidate("torch", "t", "0,1", {}, None, ("external_missing",))
+    assert xgb.drop_columns == ("external_missing",)
+    assert torch_candidate.drop_columns == ("external_missing",)

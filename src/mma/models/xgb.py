@@ -27,8 +27,15 @@ MAX_ROUNDS = 2000
 EARLY_STOP = 50
 
 
-def feature_frame(features: pd.DataFrame) -> pd.DataFrame:
-    x = features[[c for c in features.columns if c not in NON_FEATURES]].copy()
+def feature_frame(features: pd.DataFrame, drop_columns=()) -> pd.DataFrame:
+    """The model matrix: every column that is not an identifier or a target.
+
+    `drop_columns` names further columns to leave out *for this call only* --
+    the ablation path behind `scripts/run_walkforward.py --drop-columns`.
+    Columns excluded for good belong in `NON_FEATURES`, not here.
+    """
+    excluded = NON_FEATURES | set(drop_columns)
+    x = features[[c for c in features.columns if c not in excluded]].copy()
     x["weight_class"] = x["weight_class"].astype("category")
     for column in x.columns:
         if x[column].dtype == "bool" or str(x[column].dtype) == "boolean":

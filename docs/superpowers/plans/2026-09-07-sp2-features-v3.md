@@ -785,7 +785,7 @@ EOF
 | trajectory | _…_ | _…_ | _…_ | _…_ | |
 | context | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | recency | 0.6525 (0.6537) | 0.6499 (0.6510) | -0.0011 vs torch_v1 | **no** | best window/half-life: half-life 8y (window barely matters); improves on both scorers but by a third of the 0.003 bar. Incumbent stays `{xgb,torch}_v1`. |
-| external | 0.6499 (0.6537) | 0.6472 (0.6510) | -0.0038 vs torch_v1 | **yes** | leak-free form only (fight-level missingness, no per-corner flag). external_missing slice: n=779, LL 0.6452 (vs pooled 0.6472); no incumbent slice exists to diff against. Coverage 0.799 of rows. New incumbent: `{xgb,torch}_external_noleak`. |
+| external | 0.6499 (0.6537) | 0.6472 (0.6510) | -0.0038 vs torch_v1 | **yes** | leak-free form only (fight-level missingness, no per-corner flag). external_missing slice: n=779, 0.6429 -> 0.6452, **+0.0023 worse**, against the paired incumbent `torch_v1_extslice` (see below). Coverage 0.799 of rows. Shipped variant and new incumbent chosen in the follow-up below. |
 | notice | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
 | rankings | _…_ | _…_ | _…_ | _…_ | match rate: _…_ |
 
@@ -1007,15 +1007,37 @@ channel survives. Guarded by
   **`ships: true`**. ECE also improves, 0.0121 vs 0.0139.
 - torch slices vs `torch_v1`: five_round -0.0088, debut -0.0015,
   womens -0.0011. Nothing regresses.
-- **`external_missing` slice**: n=779, candidate LL **0.6452**, accuracy 0.6367
-  -- marginally better than the candidate's own pooled 0.6472, so the block
-  does not hurt the post-snapshot rows. A slice *delta* is not computable:
-  `torch_v1.json` predates the column and the locked rules forbid regenerating
-  incumbent reports. The fold deltas carry the same information more honestly:
-  the two folds with the most missing rows (2024, 2025) are the two flat ones
-  (+0.0009, +0.0004), while every well-covered fold improves. The contrast with
-  the leaky variant is stark -- there the same slice read 0.5842 with accuracy
-  0.6906, which was the leak showing.
+- **`external_missing` slice: the block makes those rows WORSE, by +0.0023.**
+  n=779, candidate LL **0.6452** (ECE 0.0515) against a paired incumbent's
+  **0.6429** (ECE 0.0461). Both accuracy and Brier are flat (0.6367 vs 0.6354,
+  0.2271 vs 0.2264); the cost is calibration, which is what a log-loss slice
+  delta is for.
+
+  *This corrects an error in the first write-up of this task, which reported
+  the slice as "not computable" and then compared 0.6452 to the candidate's own
+  pooled 0.6472 -- concluding the block "does not hurt the post-snapshot rows".
+  That comparison measures how easy those rows are relative to the rest of the
+  table, not what the block did to them, and it is exactly the failure the
+  harness exists to prevent. The two numbers happen to point opposite ways: the
+  slice is easier than average AND the block degrades it.*
+
+  The delta is computable, and cheaply. `torch_v1.json` does predate the
+  column, but re-running the v1 *recipe* on the current 54-column table with
+  the eight external columns held out of the model matrix
+  (`scripts/run_walkforward.py --drop-columns`, added in this task) reproduces
+  `torch_v1.json` **bit-exactly** -- pooled, all eight folds, all three shared
+  slices and every `fit_info` entry -- while still seeing `external_missing` in
+  the table, so `walkforward.slice_masks` reports the slice. That equality is
+  what makes it a valid paired stand-in rather than a regenerated incumbent:
+  the locked rule forbids *changing* the incumbent numbers, and these are the
+  same numbers. Report: `models/walkforward/torch_v1_extslice.json`.
+
+  So the block's -0.0038 pooled gain is bought entirely on rows the snapshot
+  covers, and paid for slightly on the rows it does not -- which is the same
+  story the fold deltas tell (below), read on the axis that names the cause.
+  The contrast with the leaky variant is still stark: there the same slice read
+  0.5842 with accuracy 0.6906, i.e. *better* than the well-covered rows, which
+  was the leak showing.
 - **Ablation, `{xgb,torch}_external_diffsonly`**: the six differentials with
   both fight-level flags withheld. XGB 0.6506 (delta -0.0031), torch **0.6476**
   (delta **-0.0034**), worst fold +0.0015, `ships: true`. So essentially all of
