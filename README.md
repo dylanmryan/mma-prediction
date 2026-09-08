@@ -632,7 +632,7 @@ the win probability, ensemble spread, MC-dropout uncertainty histogram,
 method-of-victory / finish-round breakdown, both fighters' Elo
 trajectories, and a "Why this prediction?" panel breaking down the top
 factors driving the call — all from the artifacts already checked into
-`models/torch/` and `models/xgb_winner.json`, no training required.
+`models/torch/` and `models/xgb_<head>_seed*.json`, no training required.
 Predictions are symmetrized across both fighter orderings
 (`mma.inference.predict_symmetrized`) so the reported probability is always
 self-consistent.

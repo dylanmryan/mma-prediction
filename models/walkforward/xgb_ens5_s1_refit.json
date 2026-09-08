@@ -1,0 +1,397 @@
+{
+  "name": "xgb_ens5_s1_refit",
+  "config": {
+    "candidate": "xgb",
+    "seeds": "0,1,2,3,4",
+    "model_seed": null,
+    "config": {},
+    "train_start": null,
+    "half_life": null,
+    "fixed_budget_from": "models/walkforward/xgb_ens5_s1.json",
+    "budget": {
+      "fixed_rounds": {
+        "winner": 109,
+        "method": 73,
+        "round": 71
+      }
+    },
+    "drop_columns": [
+      "external_missing",
+      "same_country",
+      "notice_unknown",
+      "home_country_a",
+      "home_country_b"
+    ],
+    "n_feature_rows": 11238,
+    "features_max_date": "2026-08-08",
+    "runtime_sec": 61.5
+  },
+  "fold_years": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "folds": {
+    "2018": {
+      "n": 522,
+      "winner_log_loss": 0.6282,
+      "accuracy": 0.6284,
+      "brier": 0.2205,
+      "ece": 0.0264,
+      "joint_log_loss": 2.218,
+      "method_macro_f1": 0.3397,
+      "round_macro_f1": 0.1729,
+      "n_method": 521,
+      "n_round": 280
+    },
+    "2019": {
+      "n": 553,
+      "winner_log_loss": 0.6704,
+      "accuracy": 0.5877,
+      "brier": 0.2384,
+      "ece": 0.0403,
+      "joint_log_loss": 2.1214,
+      "method_macro_f1": 0.3535,
+      "round_macro_f1": 0.1796,
+      "n_method": 552,
+      "n_round": 257
+    },
+    "2020": {
+      "n": 492,
+      "winner_log_loss": 0.65,
+      "accuracy": 0.6565,
+      "brier": 0.2286,
+      "ece": 0.0749,
+      "joint_log_loss": 2.1783,
+      "method_macro_f1": 0.3454,
+      "round_macro_f1": 0.1742,
+      "n_method": 490,
+      "n_round": 247
+    },
+    "2021": {
+      "n": 546,
+      "winner_log_loss": 0.6755,
+      "accuracy": 0.5714,
+      "brier": 0.2412,
+      "ece": 0.0493,
+      "joint_log_loss": 2.206,
+      "method_macro_f1": 0.307,
+      "round_macro_f1": 0.1547,
+      "n_method": 544,
+      "n_round": 270
+    },
+    "2022": {
+      "n": 582,
+      "winner_log_loss": 0.6494,
+      "accuracy": 0.6031,
+      "brier": 0.229,
+      "ece": 0.0302,
+      "joint_log_loss": 2.2253,
+      "method_macro_f1": 0.3221,
+      "round_macro_f1": 0.2166,
+      "n_method": 581,
+      "n_round": 318
+    },
+    "2023": {
+      "n": 581,
+      "winner_log_loss": 0.6436,
+      "accuracy": 0.6386,
+      "brier": 0.2262,
+      "ece": 0.0435,
+      "joint_log_loss": 2.2018,
+      "method_macro_f1": 0.2941,
+      "round_macro_f1": 0.1723,
+      "n_method": 578,
+      "n_round": 303
+    },
+    "2024": {
+      "n": 593,
+      "winner_log_loss": 0.6391,
+      "accuracy": 0.6273,
+      "brier": 0.2242,
+      "ece": 0.0315,
+      "joint_log_loss": 2.086,
+      "method_macro_f1": 0.36,
+      "round_macro_f1": 0.1639,
+      "n_method": 591,
+      "n_round": 270
+    },
+    "2025": {
+      "n": 935,
+      "winner_log_loss": 0.6235,
+      "accuracy": 0.6535,
+      "brier": 0.217,
+      "ece": 0.0392,
+      "joint_log_loss": 2.154,
+      "method_macro_f1": 0.3417,
+      "round_macro_f1": 0.1847,
+      "n_method": 935,
+      "n_round": 501
+    }
+  },
+  "pooled": {
+    "n": 4804,
+    "winner_log_loss": 0.6455,
+    "accuracy": 0.623,
+    "brier": 0.2272,
+    "ece": 0.015,
+    "joint_log_loss": 2.1716,
+    "method_macro_f1": 0.3342,
+    "round_macro_f1": 0.1828,
+    "n_method": 4792,
+    "n_round": 2446
+  },
+  "slices": {
+    "debut": {
+      "n": 983,
+      "winner_log_loss": 0.6413,
+      "accuracy": 0.6287,
+      "brier": 0.2255,
+      "ece": 0.0386,
+      "joint_log_loss": 2.2219,
+      "method_macro_f1": 0.3363,
+      "round_macro_f1": 0.243,
+      "n_method": 980,
+      "n_round": 559
+    },
+    "womens": {
+      "n": 779,
+      "winner_log_loss": 0.6546,
+      "accuracy": 0.5905,
+      "brier": 0.2319,
+      "ece": 0.0527,
+      "joint_log_loss": 1.941,
+      "method_macro_f1": 0.2709,
+      "round_macro_f1": 0.1528,
+      "n_method": 777,
+      "n_round": 277
+    },
+    "five_round": {
+      "n": 420,
+      "winner_log_loss": 0.6609,
+      "accuracy": 0.5952,
+      "brier": 0.2346,
+      "ece": 0.0388,
+      "joint_log_loss": 2.4373,
+      "method_macro_f1": 0.3639,
+      "round_macro_f1": 0.1572,
+      "n_method": 419,
+      "n_round": 233
+    },
+    "external_missing": {
+      "n": 779,
+      "winner_log_loss": 0.6304,
+      "accuracy": 0.6341,
+      "brier": 0.2207,
+      "ece": 0.0452,
+      "joint_log_loss": 2.2206,
+      "method_macro_f1": 0.3395,
+      "round_macro_f1": 0.2499,
+      "n_method": 777,
+      "n_round": 462
+    }
+  },
+  "fit_info": {
+    "best_iteration": [
+      {
+        "winner": [
+          109,
+          109,
+          109,
+          109,
+          109
+        ],
+        "method": [
+          73,
+          73,
+          73,
+          73,
+          73
+        ],
+        "round": [
+          71,
+          71,
+          71,
+          71,
+          71
+        ]
+      },
+      {
+        "winner": [
+          109,
+          109,
+          109,
+          109,
+          109
+        ],
+        "method": [
+          73,
+          73,
+          73,
+          73,
+          73
+        ],
+        "round": [
+          71,
+          71,
+          71,
+          71,
+          71
+        ]
+      },
+      {
+        "winner": [
+          109,
+          109,
+          109,
+          109,
+          109
+        ],
+        "method": [
+          73,
+          73,
+          73,
+          73,
+          73
+        ],
+        "round": [
+          71,
+          71,
+          71,
+          71,
+          71
+        ]
+      },
+      {
+        "winner": [
+          109,
+          109,
+          109,
+          109,
+          109
+        ],
+        "method": [
+          73,
+          73,
+          73,
+          73,
+          73
+        ],
+        "round": [
+          71,
+          71,
+          71,
+          71,
+          71
+        ]
+      },
+      {
+        "winner": [
+          109,
+          109,
+          109,
+          109,
+          109
+        ],
+        "method": [
+          73,
+          73,
+          73,
+          73,
+          73
+        ],
+        "round": [
+          71,
+          71,
+          71,
+          71,
+          71
+        ]
+      },
+      {
+        "winner": [
+          109,
+          109,
+          109,
+          109,
+          109
+        ],
+        "method": [
+          73,
+          73,
+          73,
+          73,
+          73
+        ],
+        "round": [
+          71,
+          71,
+          71,
+          71,
+          71
+        ]
+      },
+      {
+        "winner": [
+          109,
+          109,
+          109,
+          109,
+          109
+        ],
+        "method": [
+          73,
+          73,
+          73,
+          73,
+          73
+        ],
+        "round": [
+          71,
+          71,
+          71,
+          71,
+          71
+        ]
+      },
+      {
+        "winner": [
+          109,
+          109,
+          109,
+          109,
+          109
+        ],
+        "method": [
+          73,
+          73,
+          73,
+          73,
+          73
+        ],
+        "round": [
+          71,
+          71,
+          71,
+          71,
+          71
+        ]
+      }
+    ],
+    "n_train": [
+      6434,
+      6956,
+      7509,
+      8001,
+      8547,
+      9129,
+      9710,
+      10303
+    ]
+  }
+}

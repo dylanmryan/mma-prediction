@@ -29,8 +29,9 @@ decision file.
 
 Usage:
     python scripts/refit_decision.py                    # the v1 table's set
-    python scripts/refit_decision.py --reports v3       # the shipped SP2 table
-    python scripts/refit_decision.py --reports v3 --out /tmp/decision.json
+    python scripts/refit_decision.py --reports v3       # the SP2 base,external table
+    python scripts/refit_decision.py --reports b1       # the shipped SP2.2 S1 table
+    python scripts/refit_decision.py --reports b1 --out /tmp/decision.json
 """
 from __future__ import annotations
 
@@ -91,6 +92,41 @@ REPORT_SETS = {
             "this set re-derives the deployment budget on the SP2 feature table; the v1 "
             "budget (14 epochs / T 1.1; 82/80/76 trees) was derived from a different table "
             "and does not carry over (models/walkforward/refit_decision.json)"
+        ),
+    },
+    "b1": {
+        "table": (
+            "the SP2.2 shipped S1 table (base,external,trajectory,notice,context,"
+            "opponent_adjusted, 11,238 x 87) with external_missing, same_country, "
+            "notice_unknown, home_country_a and home_country_b held out of both "
+            "model matrices"
+        ),
+        "out": WF / "refit_decision_b1.json",
+        "reports": {
+            # Both members of the deployed BLEND, each on its own A/B. The XGB
+            # arm is the FIVE-SEED ensemble, which is what deploys since SP2.2 --
+            # a budget derived from a single fit is a budget for a different fit
+            # shape, the same way a budget from a different table is a budget for
+            # a different table.
+            "xgb": {"A": WF / "xgb_ens5_s1.json", "B": WF / "xgb_ens5_s1_refit.json"},
+            "torch": {"A": WF / "torch_a1_combined.json",
+                      "B": WF / "torch_a1_combined_refit.json"},
+        },
+        "fresh": {
+            "A": WF / "torch_a1_combined_seeds5.json",
+            "B": WF / "torch_a1_combined_refit_seeds5.json",
+        },
+        "note": (
+            "SP2.2 ships a blend on the S1 table, so BOTH members need a deployment "
+            "budget on that table and the XGB member needs one for its five-seed "
+            "shape; the SP2 numbers (10 epochs / T 1.07; 105/61/75 trees) were derived "
+            "from the base,external table and a single XGB fit, and do not carry over "
+            "(models/walkforward/refit_decision_v3.json). NOTE what this set does NOT "
+            "decide: the blend's own post-average temperature. The harness fits that on "
+            "each fold's inner-validation year, which fixed-budget mode trains on, so a "
+            "refit-mode blend report cannot exist by construction; the deployed value is "
+            "the median of blend_b1.json's per-fold temperatures (mma.inference."
+            "BLEND_TEMPERATURE), derived by this same fixed_budget_from median rule."
         ),
     },
 }
