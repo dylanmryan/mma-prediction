@@ -783,7 +783,7 @@ EOF
 | in_fight | 0.6540 (0.6537) | 0.6528 (0.6510) | +0.0018 vs torch_v1 | **no** | worse on both scorers; torch slices: womens +0.0062, debut +0.0034, five_round −0.0035. Incumbent stays `{xgb,torch}_v1`. |
 | opponent_adjusted | 0.6519 (0.6537) | 0.6532 (0.6510) | +0.0022 vs torch_v1 | **no** | XGB liked it (-0.0018), torch did not; every fold worse on torch. Slices: debut +0.0030, womens +0.0020, five_round -0.0018. Coverage 0.63/0.51 of rows. Incumbent stays `{xgb,torch}_v1`. |
 | trajectory | 0.6486 (0.6506) | 0.6472 (0.6476) | -0.0004 vs torch_external_diffsonly_extslice | **no** | XGB liked it (-0.0020), torch barely moved. Holding the most Elo-collinear column (`glicko_mu_diff`, r=0.88) out of the model lands in the same place (-0.0005), so collinearity is not the whole story. Kept regardless: `mma.glicko` and the `run_glicko` pass, so `ratings.parquet` carries the Glicko-2 triple. Incumbent stays `{xgb,torch}_external_diffsonly_extslice`. |
-| context | _…_ | _…_ | _…_ | _…_ | forced-missing ablation: _…_ |
+| context | 0.6499 (0.6506) | 0.6474 (0.6476) | -0.0002 vs torch_external_diffsonly_extslice | **no** | best of three variants is `context_nohome` (per-corner `home_country` held out of the model as a measured coverage channel); a fifteenth of the bar. Referee held-out ablation: 0.6481, **+0.0005** -- worse than the incumbent, so the serving-asymmetry gate fails too. Modelling `home_country_a`/`_b` is the worst variant (+0.0007). Incumbent stays `{xgb,torch}_external_diffsonly_extslice`. |
 | recency | 0.6525 (0.6537) | 0.6499 (0.6510) | -0.0011 vs torch_v1 | **no** | best window/half-life: half-life 8y (window barely matters); improves on both scorers but by a third of the 0.003 bar. Incumbent stays `{xgb,torch}_v1`. |
 | external | 0.6506 (0.6537) | 0.6476 (0.6510) | -0.0034 vs torch_v1 | **yes** | shipped as `external_diffsonly`: six pre-UFC differentials, the two fight-level flags kept in the table but excluded from both model matrices. Three variants measured and all three clear the bar; this one is the only one that does not degrade on 2024-2025 (row-weighted -0.00064). external_missing slice n=779, 0.6429 -> 0.6447, +0.0018, against the paired incumbent `torch_v1_extslice`. Coverage 0.799 of rows. New incumbent: `{xgb,torch}_external_diffsonly_extslice`. |
 | notice | 0.6501 (0.6506) | 0.6472 (0.6476) | -0.0004 vs torch_external_diffsonly_extslice | **no** | best variant `notice_noflag` (coverage flag in the table, out of the model); a seventh of the bar. Coverage 0.498 of rows and **0.000 of 2025-2026**, so the forced-unknown ablation was moot -- serving is the unknown state for every future fight by construction. Incumbent stays `{xgb,torch}_external_diffsonly_extslice`. |
@@ -928,6 +928,88 @@ three and five post-fight Elo movements), `elo_peak_minus_current_diff`,
   `torch_trajectory.json`, `torch_trajectory_nomu.json`. The block's feature
   wiring is reverted; the commented-out registration in
   `mma.feature_blocks` records what restoring it would take.
+
+**Block `context` (Task 8), measured and rejected.** Seven columns describing
+the fight's SETTING rather than either fighter's record: `bonus_rate_diff`,
+`home_country_a`/`_b`, and the four fight-level columns
+`referee_finish_rate`, `referee_decision_rate`, `referee_missing`,
+`home_country_unknown`. `mma.context` owns the derivations.
+
+- **The constant-vector leak check FAILS for `home_country_a`/`_b`, and that
+  is the block's first real finding.** A per-corner boolean is False when the
+  corner's nationality is unknown, and nationality only exists for fighters
+  the `external` snapshot mapped -- so over the **1,448** feature rows where
+  exactly ONE corner is mapped, the pair takes **three** distinct value tuples
+  ((True, False), (False, True), (False, False)) rather than one, and those
+  rows are exactly where the mapped corner wins **0.745** of the time. That is
+  the `external` block's measured selection effect in a second channel. Per
+  the amended missingness rule the two columns stay in the TABLE and are held
+  out of both model matrices; the variant that models them is the worst of the
+  three measured (+0.0007 on torch), which is the outcome that rule predicts.
+  Asserted one level lower, on `mma.context` over the real fights and external
+  tables, in `tests/test_context.py::test_a_per_corner_home_country_pair_is_a_coverage_channel`,
+  so it survives the block being reverted.
+- **The home-advantage effect itself is real but small.** Over the 8,973 rows
+  where BOTH nationalities are known, the corner fighting in its own country
+  wins 0.516 (n=1,885 with only A home) against 0.490 (n=1,859 with only B
+  home) -- about a 2.6-point edge, on 33% of rows.
+- XGB screen, three variants, all inside the 0.002 threshold and all slightly
+  better than the incumbent 0.6506: `xgb_context` (everything modelled)
+  **0.6501** (-0.0005), `xgb_context_nohome` (the two `home_country` columns
+  held out) **0.6499** (-0.0007), `xgb_context_nohome_noref` (also the three
+  referee columns held out) **0.6498** (-0.0008). Note the ordering: on the
+  screen, each thing removed makes it slightly BETTER.
+- torch decision, against the incumbent 0.6476:
+  `torch_context` **0.6483** (delta **+0.0007**, worst fold +0.0021),
+  `torch_context_nohome` **0.6474** (delta **-0.0002**, worst fold +0.0017),
+  `torch_context_nohome_noref` **0.6481** (delta **+0.0005**, worst fold
+  +0.0047). `bar_check` on all three -> `clears_delta: false`,
+  `no_fold_regression: true`, **`ships: false`**. The best is a fifteenth of
+  the bar.
+- `torch_context_nohome` fold deltas: 2018 0.0000, 2019 +0.0007, 2020 +0.0004,
+  2021 0.0000, 2022 +0.0017, 2023 -0.0042, 2024 -0.0002, 2025 +0.0003 -- the
+  whole of its pooled gain is one fold (2023).
+- torch slices vs `torch_external_diffsonly_extslice` (`context_nohome`):
+  debut -0.0014, womens -0.0026, five_round -0.0037,
+  external_missing +0.0006.
+- **The serving-asymmetry gate, run as required and failed independently.**
+  Wikipedia cards do not name a referee, so the three referee columns are
+  present on 97.7% of training rows and on **0%** of the rows the deployed
+  model will ever score. The gate is "ship only if the block clears the bar
+  AND the referee-held-out variant does not lose more than sigma_seed (0.000346)
+  against the incumbent". The held-out variant is **+0.0005** against the
+  incumbent -- worse, by more than sigma_seed -- so it fails the second clause
+  as well as the first. The columns are also worth nothing before the gate is
+  applied: removing them moves torch from 0.6474 to 0.6481 and XGB from 0.6499
+  to 0.6498, i.e. within seed noise on the screen and a small LOSS on the
+  scorer that decides. There is no variant of this block that ships.
+- Coverage over the 11,238 rows: `bonus_rate_diff` 0.726 (both corners need a
+  prior bout); `home_country_a`/`_b` True on 0.395/0.393;
+  `home_country_unknown` True on 0.259 (nationality unknown for ~20% of
+  corners, `fights.location` absent for ~23% of fights);
+  `referee_finish_rate` / `referee_decision_rate` populated on 0.951 and
+  `referee_missing` True on 0.023, concentrated in the pre-2017 rows -- every
+  fold year from 2019 on has full referee coverage in TRAINING, which is
+  exactly what makes the serving asymmetry sharp rather than academic.
+- Gates before evaluation, all passing on the context table (11,238 x 61):
+  `test_no_leakage_truncation_invariance` and both serving-parity tests. The
+  parity test had to be given the two card-level facts a real caller supplies
+  (`referee` + `mma.context.referee_rates(past)`, and
+  `mma.context.event_country(location)`); with them the served row matched the
+  trained row exactly, including `home_country_a`/`_b`.
+- **Kept after the revert**, because it is reusable and correct:
+  `src/mma/context.py` (the prior-fights-only referee pass, the event-country
+  parser with its nationality/location normalisation, the home-advantage
+  comparison and the bonus fight-id loader) and `tests/test_context.py` (25
+  tests). Reports kept: `models/walkforward/{xgb,torch}_context.json`,
+  `..._context_nohome.json`, `..._context_nohome_noref.json`. The block's
+  feature wiring is reverted; the commented-out registration in
+  `mma.feature_blocks` records what restoring it would take.
+- *Definition care taken along the way.* `bonuses.parquet` records bonuses per
+  FIGHT, not per fighter, so "Performance of the Night" cannot be attributed
+  to a corner from the data; `bonus_rate` credits the WINNER of a bonus fight,
+  which is stated in `mma.context`'s docstring rather than left implicit, and
+  means a shared "Fight of the Night" counts for the winner only.
 
 **Block `recency` (Task 9), measured and rejected.** No feature columns: the
 SP1 harness's `--train-start` / `--half-life` capability searched as a block.
