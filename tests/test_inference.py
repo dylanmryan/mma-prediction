@@ -31,6 +31,16 @@ def matchup(ensemble):
             "last5_win_rate": 0.8, "last5_avg_opp_elo": 1550.0,
             "elo_overall": 1600.0, "elo_striking": 1580.0,
             "elo_grappling": 1570.0, "last_date": pd.Timestamp("2025-06-01"),
+            # the blocks restored for SP2.1: a served snapshot carries every
+            # field they read, exactly as `mma.snapshots.build_snapshots` emits
+            "first_date": pd.Timestamp("2019-03-01"),
+            "glicko_mu": 1610.0, "glicko_phi": 90.0, "glicko_sigma": 0.06,
+            "elo_delta_3": 24.0, "elo_delta_5": 31.0,
+            "elo_peak_minus_current": 12.0, "bonus_rate": 0.3,
+            "sig_pm_vs_exp": 0.8, "sig_absorbed_pm_vs_exp": -0.4,
+            "td_landed_pf_vs_exp": 0.5, "td_def_vs_exp": 0.1,
+            "ctrl_share_vs_exp": 0.05,
+            "avg_opp_elo_wins": 1520.0, "avg_opp_elo_losses": 1610.0,
         }
     )
     weaker = snapshot.copy()

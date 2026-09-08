@@ -201,3 +201,30 @@ def test_an_unknown_fight_carries_exactly_one_state_tuple():
         f"{len(distinct)} distinct state tuples over {len(unknown)} unknown corners; "
         "the loader can tell which corner the source is missing"
     )
+
+
+def test_the_flag_stays_excluded_even_though_the_block_is_unregistered():
+    """The block's shipping form (`notice_noflag`), asserted structurally.
+
+    `notice_unknown` would have to reach the table -- it is the only column
+    that says the source has not seen a fight, and every 2025-and-later row is
+    one -- but modelling it is modelling the calendar: the Bet MMA bout list
+    ends 2024-12-14, so the flag separates the recent folds from the old ones
+    rather than one fighter from the other. Measured in SP2 Task 12: torch
+    0.6482 with the flag in the model, 0.6472 with it held out.
+
+    The block itself is not registered: it was rejected in SP2 and again in
+    SP2.1, where it was one of the four blocks combined into the treatment arm
+    (neither that arm nor its control cleared the bar). What this test pins is
+    that the two exclusion lists still name the flag, so re-registering the
+    block is uncommenting `feature_blocks.py` and nothing else -- an exclusion
+    silently dropped in the meantime is how the rejected variant would ship by
+    accident.
+    """
+    from mma.feature_blocks import BLOCKS, NOTICE_BLOCK
+    from mma.models.xgb import NON_FEATURES
+    from mma.tensors import DROPPED
+
+    assert NOTICE_BLOCK not in BLOCKS, "rejected in SP2 and again in SP2.1"
+    assert "notice_unknown" in NON_FEATURES
+    assert "notice_unknown" in DROPPED

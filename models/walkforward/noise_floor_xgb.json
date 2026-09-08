@@ -1,0 +1,23 @@
+{
+  "n_reports": 4,
+  "pooled_winner_log_loss": [
+    0.6506,
+    0.6496,
+    0.6512,
+    0.6516
+  ],
+  "sigma_seed": 0.0008698658900466677,
+  "bar": 0.003,
+  "reports": [
+    "models/walkforward/xgb_external_diffsonly_extslice.json",
+    "models/walkforward/xgb_external_diffsonly_extslice_seed1.json",
+    "models/walkforward/xgb_external_diffsonly_extslice_seed2.json",
+    "models/walkforward/xgb_external_diffsonly_extslice_seed3.json"
+  ],
+  "seed_sets": [
+    "0",
+    "1",
+    "2",
+    "3"
+  ]
+}

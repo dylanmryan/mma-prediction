@@ -164,6 +164,17 @@ def _snapshots():
             "elo_overall": [1600.0, 1450.0], "elo_striking": [1580.0, 1440.0],
             "elo_grappling": [1570.0, 1430.0],
             "last_date": pd.to_datetime(["2025-06-01", "2025-05-01"]),
+            # the blocks restored for SP2.1, as build_snapshots emits them
+            "first_date": pd.to_datetime(["2019-03-01", "2020-02-01"]),
+            "glicko_mu": [1610.0, 1460.0], "glicko_phi": [90.0, 120.0],
+            "glicko_sigma": [0.06, 0.06],
+            "elo_delta_3": [24.0, -18.0], "elo_delta_5": [31.0, -22.0],
+            "elo_peak_minus_current": [12.0, 40.0], "bonus_rate": [0.3, 0.1],
+            "sig_pm_vs_exp": [0.8, -0.5], "sig_absorbed_pm_vs_exp": [-0.4, 0.6],
+            "td_landed_pf_vs_exp": [0.5, -0.2], "td_def_vs_exp": [0.1, -0.1],
+            "ctrl_share_vs_exp": [0.05, -0.03],
+            "avg_opp_elo_wins": [1520.0, 1480.0],
+            "avg_opp_elo_losses": [1610.0, 1560.0],
         },
         index=pd.Index(["0f1d0a0000000000", "0f1d0b0000000000"], name="fighter_id"),
     )

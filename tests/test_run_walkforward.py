@@ -160,3 +160,53 @@ def test_drop_columns_reaches_the_candidates_the_cli_builds():
     torch_candidate = rwf.build_candidate("torch", "t", "0,1", {}, None, ("age_diff",))
     assert xgb.drop_columns == ("age_diff",)
     assert torch_candidate.drop_columns == ("age_diff",)
+
+
+# --- --model-seed -----------------------------------------------------------
+# XGBoost's stochasticity is subsample/colsample under one random_state, so a
+# re-run with a different value is the XGB analogue of torch's fresh seed set
+# (SP2.1 Task 4's fresh-seed confirmation). Torch is seeded with --seeds and
+# elo fits nothing, so pointing the flag at either is a usage error.
+
+
+def _seed_args(**overrides) -> argparse.Namespace:
+    base = {"candidate": "xgb", "model_seed": None}
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+def test_no_flag_leaves_the_param_override_alone():
+    assert rwf.apply_model_seed(_seed_args(), {}) == {}
+    assert rwf.apply_model_seed(_seed_args(), {"max_depth": 5}) == {"max_depth": 5}
+
+
+def test_model_seed_becomes_the_xgb_random_state():
+    assert rwf.apply_model_seed(_seed_args(model_seed=3), {"max_depth": 5}) == {
+        "max_depth": 5, "random_state": 3,
+    }
+
+
+def test_the_caller_s_config_is_not_mutated():
+    config = {"max_depth": 5}
+    rwf.apply_model_seed(_seed_args(model_seed=3), config)
+    assert config == {"max_depth": 5}
+
+
+@pytest.mark.parametrize("candidate", ["torch", "elo"])
+def test_model_seed_is_xgb_only(candidate):
+    with pytest.raises(SystemExit, match="xgb candidate only"):
+        rwf.apply_model_seed(_seed_args(candidate=candidate, model_seed=1), {})
+
+
+def test_two_sources_for_random_state_is_a_usage_error():
+    with pytest.raises(SystemExit, match="both set random_state"):
+        rwf.apply_model_seed(_seed_args(model_seed=1), {"random_state": 7})
+
+
+def test_random_state_reaches_the_fitted_estimator():
+    """The property the flag exists for, on the real xgboost builder."""
+    from mma.models.xgb import _classifier
+
+    config = rwf.apply_model_seed(_seed_args(model_seed=3), {})
+    assert _classifier("binary:logistic", config, 10).get_params()["random_state"] == 3
+    assert _classifier("binary:logistic", {}, 10).get_params()["random_state"] == 0

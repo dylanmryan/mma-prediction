@@ -169,6 +169,70 @@ snapshot has seen the fighters and does nothing where it has not, and the
 share it has not seen only grows. Keeping this block paying needs a
 refreshable source — an SP4 follow-up, not a solved problem.
 
+### Were the rejected blocks capacity-limited? A pre-registered re-test
+
+The table above has a suspicious pattern: on the blocks with the most new
+columns, the tree ensemble improves while the neural net — the scorer that
+decides — gets worse. That is what a *capacity* limit looks like, not
+necessarily an absence of information. A gradient-boosted ensemble can pick
+the better-conditioned member of a correlated pair per split; a fixed-width
+MLP must spend capacity on all of them, and the deployed MLP's shape was tuned
+when the table had 46 columns. So the rejections might have been measuring the
+architecture rather than the features.
+
+That was written down as a hypothesis and tested, with the design, the arms,
+the search space and the decision rule **pre-registered before anything ran**
+(`docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md`). The four
+rejected blocks whose numbers fit the capacity story — `trajectory`, `notice`,
+`context`, `opponent_adjusted` — were restored (each first verified to
+reproduce its committed SP2 number exactly, so a "gain" could not be a
+restoration bug) into a combined 87-column table, and a 25-configuration torch
+architecture search was run over it.
+
+**The control arm is the point.** The identical 25 configurations were also
+searched over the *shipped* 54-column table. Without that arm, any improvement
+would have been credited to the features when it might have been the
+architecture all along.
+
+| Arm | Features | Architecture | Pooled | Δ vs deployed 0.6476 | Ships? |
+|---|---|---|---|---|---|
+| A1 | combined | deployed | 0.6475 | −0.0001 | no |
+| **C** (control) | **shipped** | searched, best of 25 | 0.6463 | −0.0013 | no |
+| **T** (treatment) | **combined** | searched, best of 25 | 0.6464 | −0.0012 | no |
+
+**Neither arm cleared the 0.003 bar, and T − C = +0.0001 is inside the seed
+noise floor of 0.00035.** The pre-registered rule's fourth branch applied
+verbatim — *the blocks are dead and the architecture is adequate; record and
+revert* — so the blocks were unregistered again and **nothing was deployed**.
+Neither hypothesis survived: the extra columns are not worth 0.003 even at
+higher capacity, and a search across five architecture families and five
+hyper-parameters could not move the control arm a third of the bar either. The
+box score and the fixed-width MLP are both at their ceiling.
+
+Two findings are worth keeping regardless of the verdict:
+
+- **A result that looked like a ship, and was seed luck.** On the combined
+  table XGBoost improved by −0.0039 with every evaluation slice better — over
+  the bar, `ships: true`. The pre-registration required a fresh-seed re-score
+  before that could count. Re-run at three fresh seeds it averaged **−0.0024**,
+  under the bar. Had the confirmation step been optional, this project would
+  have shipped a coin flip.
+- **XGBoost's seed noise, measured here for the first time: σ ≈ 0.0009–0.0013,
+  about 3× the torch ensemble's 0.00035.** A single boosted fit is a much
+  noisier measurement than a 5-seed average, which is exactly why the −0.0039
+  looked real. No earlier rejection rests on a single-seed XGB number alone —
+  the screen never dropped a block without a torch run — but XGB screening
+  should use ≥3 seeds from here on, and `--model-seed` plus
+  `scripts/noise_floor.py --candidate xgb` now exist for that.
+
+Everything measured is committed (`models/walkforward/search/`,
+`models/walkforward/sp2_1_decision.json`), including the strongest lead the
+experiment turned up and could not act on: an equal-weight **blend** of the
+two scorers reads 0.6459 on the shipped table and 0.6436 on the combined one,
+with every slice improving. A blend was not one of the five pre-registered
+arms, so shipping it on these numbers would be the exact after-the-fact
+search-widening the pre-registration forbids. It gets its own experiment.
+
 ### Data sources and licences
 
 | Source | Used for | Licence |
