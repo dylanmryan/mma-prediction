@@ -222,7 +222,7 @@ def load_everything():
     # used to be multiplied by mean-matching factors because the class-weighted
     # heads overstated rare classes by up to 2.5x; the simulator's marginals
     # land within a few points of the base rates on their own
-    # (models/torch/display_priors.json records the measurement), and
+    # (models/display_calibration.json records the measurement), and
     # correcting two marginals separately would pull them off the joint they
     # are read from -- reintroducing exactly the contradiction SP3 removed.
     predictor = SimulatorPredictor.load()
@@ -242,7 +242,8 @@ by_name = {name: fighter_id for fighter_id, name in eligible["name"].items()}
 
 st.title("🥊 MMA Fight Predictor")
 st.caption(
-    f"Elo → XGBoost → neural ensemble → calibrated blend, honestly evaluated. "
+    f"Elo → XGBoost → neural ensemble → calibrated blend → fight simulator, "
+    f"honestly evaluated. "
     f"Fighter stats as of {as_of:%Y-%m-%d}."
 )
 
@@ -380,7 +381,6 @@ if name_a and name_b and name_a != name_b:
              name_b: [f"{row[2]:.1%}" for row in outcomes]},
             index=[row[0] for row in outcomes],
         ),
-        use_container_width=True,
     )
     st.caption(
         f"Each cell is the probability that fighter wins that exact way, and "

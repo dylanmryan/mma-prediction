@@ -601,6 +601,15 @@ class SimulatorPredictor:
         The extra keys are `joint_cells` (the `mma.evaluate` cell layout),
         `joint_zero_mass` (which of those cells no simulated fight landed in,
         before smoothing) and `p_distance`.
+
+        A fight's RNG stream is `[sim_seed, its row position]`, so the same
+        fight predicted at a different position in a batch comes back with the
+        same distribution plus a different Monte Carlo draw -- of order the
+        `p_a_wins` standard error, ~0.005 at the deployed `n_runs`. Serving
+        goes through `predict_symmetrized` one matchup at a time, where the
+        position is always 0, so a served prediction is reproducible exactly;
+        the variation only shows up when the same row is scored inside
+        different batches (`scripts/check_display_calibration.py`).
         """
         blended = self.blend.predict(features)
         n_rounds = self._rounds(features)
