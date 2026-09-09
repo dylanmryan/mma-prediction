@@ -6,15 +6,20 @@ THRESHOLD, prints the pre-registered promotion protocol. Never touches any
 file. This is what the weekly refresh-data.yml Action runs and only prints.
 
 `--execute`: runs the split-protocol comparison once the threshold is met.
-It gates on the TORCH ENSEMBLE, which since SP2.2 is only HALF of the model
-the app serves -- the deployed scorer is a blend of that ensemble and a 5-seed
-XGBoost ensemble (`mma.inference.BlendedPredictor`). This gate retrains and
-scores the torch member alone, so it can no longer answer "does a fresh fit
-beat the incumbent?" about the served model, and `--execute` refuses to run
-against a blended incumbent (`blended_incumbent` below) rather than reporting
-a number about half a model as if it were about the model. Bringing the gate
-onto the blend, or onto the walk-forward harness, is SP4 work. What it does
-when it does run:
+It gates on the TORCH ENSEMBLE, which is one of the four models the app now
+serves. Since SP2.2 the winner probability is a blend of that ensemble and a
+5-seed XGBoost ensemble; since SP3 the deployed scorer is the HYBRID
+(`mma.inference.SimulatorPredictor`), which takes its winner from that blend
+and its method, finish round and joint distribution from a Monte Carlo
+simulator built on two more models this gate never touches. So it cannot
+answer "does a fresh fit beat the incumbent?" about the served model at all,
+and `--execute` refuses to run against a blended or hybrid incumbent
+(`blended_incumbent` / `hybrid_incumbent` below) rather than reporting a
+number about part of a model as if it were about the model.
+`incumbent_coverage_text` writes that sentence from the artifacts on disk, so
+it stays true as the deployment changes. Bringing the gate onto the served
+scorer, or onto the walk-forward harness, is SP4 work. What it does when it
+does run:
 
   1. Windows: NEW_CUTOFF = latest data date - VAL_WINDOW_YEARS; the held-
      forward validation slice is [NEW_CUTOFF, latest]. Both incumbent and
@@ -27,8 +32,8 @@ when it does run:
      winner log-loss.
   4. Promote iff candidate_log_loss < incumbent_log_loss - PROMOTION_MARGIN.
 
-CAVEAT 1 -- the candidate is half the model. See above: `--execute` aborts on a
-blended incumbent.
+CAVEAT 1 -- the candidate is one member of four. See above: `--execute` aborts
+on a blended or hybrid incumbent.
 
 CAVEAT 2 -- the comparison is only valid when the slice is OUT-OF-TIME for the
 incumbent. Under the default deployment recipe (refit_through_latest, see
@@ -50,13 +55,15 @@ a fresh fit beat the incumbent on held-forward data?". If promoted, the
 candidate ensemble artifacts are STAGED into models/torch (the incumbent is
 backed up on disk first) but NOTHING is committed: this command performs NO
 git writes. After any promotion decision the human re-runs the refit recipe
--- bare `scripts/train_xgb.py`, `scripts/train_torch.py`, then
-`scripts/build_display_priors.py` -- so the deployed model includes the
+-- bare `scripts/train_xgb.py`, `scripts/train_torch.py`,
+`scripts/train_hazard.py`, then `scripts/build_display_priors.py` -- so the
+deployed model includes the
 newest fights, runs the full test suite, reviews the metrics diff, and
 commits by hand. The `model_version` that starts a fresh track_record.json
-section is the artifact hash from `mma.versioning.model_version` (over BOTH
-members: the torch weights and preprocessing stats and the XGBoost seed
-boosters), NOT a commit sha; prospective
+section is the artifact hash from `mma.versioning.model_version` (over every
+member: the torch weights and preprocessing stats, the XGBoost seed boosters,
+the simulator's hazard and decision models, and the committed blend and
+simulator configuration), NOT a commit sha; prospective
 predictions already key every fight by the model_version active when it was
 made. If rejected, models/torch is left untouched and the negative result
 is printed.
@@ -112,7 +119,13 @@ def graded_fights_since(event_records: list[dict], cutoff: pd.Timestamp) -> list
     return graded
 
 
-def promotion_protocol_text(n_accumulated: int, cutoff: pd.Timestamp) -> str:
+def promotion_protocol_text(n_accumulated: int, cutoff: pd.Timestamp,
+                            models_dir: Path = None) -> str:
+    """The dry-run text. `models_dir` decides how CAVEAT 1 describes the
+    incumbent (see `incumbent_coverage_text`) -- it is read from the artifacts
+    so the caveat cannot go stale the way a hand-written sentence about "the
+    blend" did when the simulator shipped."""
+    models_dir = MODELS_DIR if models_dir is None else models_dir
     return (
         f"{n_accumulated} graded prospective fight(s) have accumulated since the "
         f"current model's data cutoff ({cutoff.date()}), meeting the "
@@ -135,20 +148,20 @@ def promotion_protocol_text(n_accumulated: int, cutoff: pd.Timestamp) -> str:
         "directly. On promotion the candidate ensemble is STAGED into "
         "models/torch -- this command makes NO git commit; a human runs the "
         "suite, reviews the diff, and commits by hand.\n\n"
-        "CAVEAT 1: since SP2.2 the deployed scorer is a BLEND of that torch "
-        "ensemble and a 5-seed XGBoost ensemble, so this gate covers HALF the "
-        "served model and --execute aborts on a blended incumbent rather than "
-        "reporting a number about half a model as if it were about the model.\n"
+        f"CAVEAT 1: {incumbent_coverage_text(models_dir)}, so --execute aborts "
+        "rather than reporting a number about part of a model as if it were "
+        "about the model.\n"
         "CAVEAT 2: under the default refit_through_latest recipe the incumbent is "
         "trained through the latest data date, so the newest-2-years slice is "
         "IN-SAMPLE for it and --execute aborts for that reason too (steps 2-4 are "
         "not a valid gate). "
         "The walk-forward harness (models/walkforward/, scripts/run_walkforward.py, "
-        "including --candidate blend) is the primary comparison until SP4 moves "
+        "including --candidate blend and --candidate hybrid) is the primary "
+        "comparison until SP4 moves "
         "this gate onto it. A split-protocol candidate never ships as-is: after "
         "any promotion decision, re-run bare scripts/train_xgb.py, "
-        "scripts/train_torch.py and scripts/build_display_priors.py (the refit "
-        "recipe) before committing."
+        "scripts/train_torch.py, scripts/train_hazard.py and "
+        "scripts/build_display_priors.py (the refit recipe) before committing."
     )
 
 
@@ -168,6 +181,45 @@ def blended_incumbent(models_dir: Path) -> bool:
     the comparison is not a promotion gate for anything that ships.
     """
     return bool(list(Path(models_dir).glob("xgb_winner_seed*.json")))
+
+
+def hybrid_incumbent(models_dir: Path) -> bool:
+    """True when the deployed scorer is the SP3 HYBRID.
+
+    Same artifact-detection rule as `blended_incumbent`: the simulator's two
+    members (`xgb_hazard_seed*.json`, `xgb_decision_seed*.json`) are what
+    `mma.inference.SimulatorPredictor.load` reads. It matters separately from
+    the blend because it makes this gate's coverage smaller again, and in a
+    different way: the blend still supplies the whole winner probability, so a
+    torch-only number is half of THAT -- but method, finish round and the
+    joint distribution the app and the prediction records now show come from
+    the simulator, which this gate does not touch at all.
+    """
+    return bool(list(Path(models_dir).glob("xgb_hazard_seed*.json"))
+                and list(Path(models_dir).glob("xgb_decision_seed*.json")))
+
+
+def incumbent_coverage_text(models_dir: Path) -> str:
+    """What fraction of the served scorer this gate actually retrains, in
+    words, given the artifacts on disk. Used by both the dry-run protocol text
+    and the --execute abort, so the two cannot describe different models."""
+    if hybrid_incumbent(models_dir):
+        return (
+            "the deployed scorer is the SP3 HYBRID: the blend (a 5-seed XGBoost "
+            "ensemble plus the 5-seed torch ensemble, temperature-scaled) supplies "
+            "P(A wins), and the Monte Carlo fight simulator (a 5-seed hazard model "
+            "and a 5-seed decision model) supplies P(method, round | winner). This "
+            "gate retrains and scores the TORCH ENSEMBLE alone -- half of the winner "
+            "probability, and none of the method, round or joint distribution the "
+            "app and the prediction records show"
+        )
+    if blended_incumbent(models_dir):
+        return (
+            "the deployed scorer is a BLEND of the torch ensemble and a 5-seed "
+            "XGBoost ensemble, and this gate retrains and scores the torch member "
+            "alone -- half the served model"
+        )
+    return "the deployed scorer is the torch ensemble this gate retrains"
 
 
 def incumbent_in_sample(metrics: dict, new_val_start) -> bool:
@@ -289,16 +341,15 @@ def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
               "against. Aborting.")
         return
 
-    if blended_incumbent(MODELS_DIR):
+    if blended_incumbent(MODELS_DIR) or hybrid_incumbent(MODELS_DIR):
         raise SystemExit(
-            "--execute aborted: the deployed scorer is a BLEND (an XGBoost seed "
-            f"ensemble in {MODELS_DIR} alongside the torch ensemble in "
-            f"{torch_dir}), and this gate retrains and scores the torch member "
-            "alone. A number about half the served model is not a promotion "
-            "gate for the served model, so it is not produced. Compare recipes "
-            "with the walk-forward harness instead (scripts/run_walkforward.py "
-            "--candidate blend, reports under models/walkforward/); moving this "
-            "gate onto the blend is SP4 work."
+            f"--execute aborted: {incumbent_coverage_text(MODELS_DIR)} (artifacts "
+            f"in {MODELS_DIR}, torch ensemble in {torch_dir}). A number about part "
+            "of the served model is not a promotion gate for the served model, so "
+            "it is not produced. Compare recipes with the walk-forward harness "
+            "instead (scripts/run_walkforward.py --candidate blend or --candidate "
+            "hybrid, reports under models/walkforward/); moving this gate onto the "
+            "served scorer is SP4 work."
         )
 
     incumbent_metrics = _load_incumbent_metrics(torch_dir)

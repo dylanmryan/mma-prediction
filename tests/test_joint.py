@@ -11,7 +11,8 @@ import pytest
 
 from mma.evaluate import joint_cell_log_loss, joint_outcome_log_loss
 from mma.joint import (
-    compose_joint_cells, corner_cells, impose_winner_marginal, marginals_from_cells,
+    cells_to_dict, compose_joint_cells, corner_cells, impose_winner_marginal,
+    marginals_from_cells, swap_corners,
 )
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
 
@@ -108,3 +109,47 @@ def test_imposing_survives_a_corner_with_no_mass():
     # B's block is A's shape, so the unreachable round-45 cells stay empty.
     assert out[0, [3, 7, 11, 15]].sum() == 0.0
     assert out[0, 8:16] == pytest.approx(0.4 * np.array([0.5, 0.3, 0.2, 0, 0, 0, 0, 0]))
+
+
+def test_swap_corners_exchanges_the_two_winner_blocks_and_is_an_involution():
+    winner, method, rounds = _marginals()
+    cells = compose_joint_cells(winner, method, rounds, M, R)
+    swapped = swap_corners(cells, M, R)
+    # the mirrored joint is the joint of the mirrored winner, same conditionals
+    expected = compose_joint_cells(1.0 - winner, method, rounds, M, R)
+    np.testing.assert_allclose(swapped, expected)
+    np.testing.assert_allclose(swap_corners(swapped, M, R), cells)
+    np.testing.assert_allclose(
+        marginals_from_cells(swapped, M, R)["winner"], 1.0 - winner)
+    # method and round describe the fight, not a corner, so they are unmoved
+    for head in ("method", "round"):
+        np.testing.assert_allclose(marginals_from_cells(swapped, M, R)[head],
+                                   marginals_from_cells(cells, M, R)[head])
+
+
+def test_cells_to_dict_is_the_same_distribution_in_nested_form():
+    winner, method, rounds = _marginals(n=3)
+    cells = compose_joint_cells(winner, method, rounds, M, R)
+    record = cells_to_dict(cells[0], M, R)
+    assert list(record) == ["a", "b"]
+    total = 0.0
+    for corner in ("a", "b"):
+        assert set(record[corner]) == set(M)
+        assert record[corner]["decision"] >= 0.0
+        total += record[corner]["decision"]
+        for finishing in M[:-1]:
+            assert list(record[corner][finishing]) == list(R)
+            total += sum(record[corner][finishing].values())
+    assert total == pytest.approx(1.0)
+    # cell for cell, in the layout's own order
+    flat = [record["a"][m][r] for m in M[:-1] for r in R]
+    flat += [record["b"][m][r] for m in M[:-1] for r in R]
+    flat += [record["a"]["decision"], record["b"]["decision"]]
+    np.testing.assert_allclose(flat, cells[0])
+
+
+def test_cells_to_dict_rejects_a_batch():
+    winner, method, rounds = _marginals(n=3)
+    cells = compose_joint_cells(winner, method, rounds, M, R)
+    with pytest.raises(ValueError, match="one row"):
+        cells_to_dict(cells, M, R)

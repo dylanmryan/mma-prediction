@@ -1,7 +1,7 @@
 """Arithmetic on the joint outcome-cell distribution, shared by SP3's candidates.
 
 `mma.evaluate` defines the cell layout and scores a realised cell against
-it. This module is the other half: the four operations that BUILD a joint
+it. This module is the other half: the operations that BUILD a joint
 in that layout, factored out here because SP3's fallback branch needs each
 of them in more than one place.
 
@@ -24,6 +24,8 @@ of them in more than one place.
   joint, so a candidate that models cells still reports the three marginals
   every existing harness metric consumes, and reports them from the SAME
   distribution its joint log-loss is computed from.
+* `cells_to_dict` — one fight's joint as nested plain Python, which is what
+  a prediction record stores and what the app's outcome table reads.
 
 Pure numpy; no pandas, no model, no I/O.
 """
@@ -79,6 +81,34 @@ def swap_corners(cells, method_classes, round_classes) -> np.ndarray:
     out[:, a_idx] = cells[:, b_idx]
     out[:, b_idx] = cells[:, a_idx]
     return out
+
+
+def cells_to_dict(cells, method_classes, round_classes) -> dict:
+    """One fight's joint as nested plain Python: `{corner: {method: ...}}`.
+
+    `{"a": {"ko_tko": {"1": .., "2": .., ...}, "submission": {...},
+    "decision": ..}, "b": {...}}` -- every entry is P(that corner wins that
+    way), and the whole thing sums to 1. The serialisable form of the cell
+    layout, for the prediction records (`mma.prospective`) and the app's
+    outcome table; `cells` is a single row, not a batch.
+    """
+    n_methods, n_rounds = _split(method_classes, round_classes)
+    cells = np.asarray(cells, dtype=float)
+    expected = n_joint_cells(method_classes, round_classes)
+    if cells.shape != (expected,):
+        raise ValueError(f"cells must be one row of shape ({expected},); got {cells.shape}")
+    block = n_methods * n_rounds
+    finish = cells[: 2 * block].reshape(2, n_methods, n_rounds)
+    cards = cells[2 * block:]
+    return {
+        corner: {
+            **{method: {str(r): float(finish[i, m, j])
+                        for j, r in enumerate(round_classes)}
+               for m, method in enumerate(method_classes[:-1])},
+            DECISION: float(cards[i]),
+        }
+        for i, corner in enumerate(("a", "b"))
+    }
 
 
 def compose_joint_cells(winner, method, round_probs, method_classes, round_classes) -> np.ndarray:

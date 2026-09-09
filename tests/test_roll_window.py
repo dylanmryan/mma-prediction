@@ -308,9 +308,56 @@ def test_execute_aborts_on_a_blended_incumbent_before_touching_anything(staged, 
     assert not (models_dir / roll_window.CANDIDATE_DIR_NAME).exists()
 
 
-def test_the_dry_run_protocol_text_says_the_gate_covers_half_the_model():
-    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"))
-    assert "BLEND" in text and "HALF the served model" in text
+def test_the_dry_run_protocol_text_describes_the_incumbent_on_disk(tmp_path):
+    """CAVEAT 1 has to be true of whatever is deployed, not of whatever was
+    deployed when the sentence was written."""
+    models = tmp_path / "models"
+    (models / "torch").mkdir(parents=True)
+    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"), models)
+    assert "torch ensemble this gate retrains" in text
+
+    (models / "xgb_winner_seed0.json").write_text("{}")
+    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"), models)
+    assert "BLEND" in text and "half the served model" in text
+
+    (models / "xgb_hazard_seed0.json").write_text("{}")
+    (models / "xgb_decision_seed0.json").write_text("{}")
+    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"), models)
+    assert "HYBRID" in text
+    assert "none of the method, round or joint distribution" in text
+
+
+def test_hybrid_incumbent_needs_both_simulator_members(tmp_path):
+    models = tmp_path / "models"
+    (models / "torch").mkdir(parents=True)
+    assert roll_window.hybrid_incumbent(models) is False
+    (models / "xgb_hazard_seed0.json").write_text("{}")
+    assert roll_window.hybrid_incumbent(models) is False  # half a simulator is not one
+    (models / "xgb_decision_seed0.json").write_text("{}")
+    assert roll_window.hybrid_incumbent(models) is True
+
+
+def test_execute_aborts_on_a_hybrid_incumbent_naming_what_it_does_not_cover(
+        staged, monkeypatch):
+    """The abort has to say what the gate actually misses. Against a hybrid
+    that is more than half a winner probability: the whole joint distribution
+    the app and the prediction records show comes from members this gate never
+    touches."""
+    models_dir, torch_dir = staged
+    (models_dir / "xgb_winner_seed0.json").write_text("{}")
+    (models_dir / "xgb_hazard_seed0.json").write_text("{}")
+    (models_dir / "xgb_decision_seed0.json").write_text("{}")
+    called = {"retrain": False, "eval": False}
+    monkeypatch.setattr(roll_window, "_retrain_candidate",
+                        lambda *a, **k: called.__setitem__("retrain", True))
+    monkeypatch.setattr(roll_window, "_ensemble_val_log_loss",
+                        lambda *a, **k: called.__setitem__("eval", True) or 0.65)
+    features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
+    with pytest.raises(SystemExit, match="HYBRID"):
+        roll_window._execute(features, cutoff=pd.Timestamp("2024-06-01"))
+
+    assert called == {"retrain": False, "eval": False}
+    assert (torch_dir / "net_seed0.pt").read_bytes() == INCUMBENT_FILES["net_seed0.pt"]
 
 
 def test_execute_aborts_when_incumbent_is_refit_in_sample(staged, monkeypatch):
