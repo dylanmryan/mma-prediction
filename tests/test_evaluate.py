@@ -5,9 +5,12 @@ from mma.evaluate import (
     accuracy,
     brier_score,
     expected_calibration_error,
+    joint_cell_index,
+    joint_cell_log_loss,
     joint_outcome_log_loss,
     log_loss,
     macro_f1,
+    realised_zero_mass_fraction,
     reliability_curve,
 )
 
@@ -129,3 +132,104 @@ def test_reliability_curve_bins_the_endpoints_the_way_ece_does():
 def test_reliability_curve_rejects_mismatched_lengths():
     with pytest.raises(ValueError, match="same length"):
         reliability_curve([1.0, 0.0], [0.5])
+
+
+# --------------------------------------------------------------------------
+# joint cell scoring (SP3 Task 3)
+# --------------------------------------------------------------------------
+
+METHOD = ["ko_tko", "submission", "decision"]
+ROUND = ["1", "2", "3", "45"]
+
+
+def _outcomes():
+    y_w = np.array([1.0, 0.0, 1.0, 0.0, 1.0])
+    y_m = np.array(["ko_tko", "decision", "submission", "ko_tko", "decision"], dtype=object)
+    y_r = np.array(["1", None, "45", "3", None], dtype=object)
+    return y_w, y_m, y_r
+
+
+def _marginals(seed=0):
+    rng = np.random.default_rng(seed)
+    p_w = rng.uniform(0.2, 0.8, size=5)
+    method = rng.dirichlet(np.ones(3), size=5)
+    rounds = rng.dirichlet(np.ones(4), size=5)
+    return p_w, method, rounds
+
+
+def _composed_cells(p_w, method, rounds):
+    """The independence composition written out as a flat joint cell vector.
+
+    Multiplication order matches `joint_outcome_log_loss` exactly (`p_w`,
+    then the method term, then the round term), so the two paths agree bit
+    for bit rather than merely to 4 dp.
+    """
+    n = len(p_w)
+    cells = np.zeros((n, 18))
+    for i in range(n):
+        for w, p_corner in enumerate((p_w[i], 1.0 - p_w[i])):
+            for m in range(2):
+                for r in range(4):
+                    cells[i, w * 8 + m * 4 + r] = p_corner * method[i, m] * rounds[i, r]
+            cells[i, 16 + w] = p_corner * method[i, 2]
+    return cells
+
+
+def test_joint_cells_from_independent_marginals_score_exactly_the_composed_path():
+    y_w, y_m, y_r = _outcomes()
+    p_w, method, rounds = _marginals()
+    composed = joint_outcome_log_loss(y_w, y_m, y_r, p_w, method, rounds, METHOD, ROUND)
+    direct = joint_cell_log_loss(y_w, y_m, y_r, _composed_cells(p_w, method, rounds), METHOD, ROUND)
+    assert direct == composed
+
+
+def test_joint_cell_index_layout():
+    # finishes: winner-major, then method, then round; decisions last
+    assert joint_cell_index(0, 0, 0, METHOD, ROUND) == 0
+    assert joint_cell_index(0, 1, 3, METHOD, ROUND) == 7
+    assert joint_cell_index(1, 0, 0, METHOD, ROUND) == 8
+    assert joint_cell_index(1, 1, 3, METHOD, ROUND) == 15
+    assert joint_cell_index(0, None, None, METHOD, ROUND) == 16
+    assert joint_cell_index(1, None, None, METHOD, ROUND) == 17
+
+
+def test_joint_cell_log_loss_reads_the_realised_cell():
+    y_w = np.array([1.0])
+    y_m = np.array(["submission"], dtype=object)
+    y_r = np.array(["2"], dtype=object)
+    cells = np.full((1, 18), 0.01)
+    cells[0, joint_cell_index(0, 1, 1, METHOD, ROUND)] = 0.4
+    assert joint_cell_log_loss(y_w, y_m, y_r, cells, METHOD, ROUND) == pytest.approx(-np.log(0.4))
+
+
+def test_joint_cell_log_loss_uses_the_corner_b_block_when_b_won():
+    y_w = np.array([0.0])
+    y_m = np.array(["ko_tko"], dtype=object)
+    y_r = np.array(["3"], dtype=object)
+    cells = np.full((1, 18), 0.01)
+    cells[0, joint_cell_index(1, 0, 2, METHOD, ROUND)] = 0.3
+    assert joint_cell_log_loss(y_w, y_m, y_r, cells, METHOD, ROUND) == pytest.approx(-np.log(0.3))
+
+
+def test_joint_cell_log_loss_skips_unscorable_rows_like_the_composed_path():
+    y_w = np.array([1.0, 1.0, 1.0])
+    y_m = np.array([None, "ko_tko", "ko_tko"], dtype=object)
+    y_r = np.array(["1", None, "1"], dtype=object)
+    cells = np.full((3, 18), 0.05)
+    cells[2, joint_cell_index(0, 0, 0, METHOD, ROUND)] = 0.5
+    assert joint_cell_log_loss(y_w, y_m, y_r, cells, METHOD, ROUND) == pytest.approx(-np.log(0.5))
+
+
+def test_joint_cell_log_loss_is_finite_on_a_zero_cell():
+    y_w, y_m, y_r = np.array([1.0]), np.array(["ko_tko"], dtype=object), np.array(["1"], dtype=object)
+    assert np.isfinite(joint_cell_log_loss(y_w, y_m, y_r, np.zeros((1, 18)), METHOD, ROUND))
+
+
+def test_realised_zero_mass_fraction_counts_only_scorable_rows():
+    y_w = np.array([1.0, 1.0, 1.0])
+    y_m = np.array(["ko_tko", "ko_tko", None], dtype=object)
+    y_r = np.array(["1", "2", None], dtype=object)
+    zero = np.zeros((3, 18), dtype=bool)
+    zero[0, joint_cell_index(0, 0, 0, METHOD, ROUND)] = True
+    # the third row is unscorable, so the denominator is 2 and not 3
+    assert realised_zero_mass_fraction(y_w, y_m, y_r, zero, METHOD, ROUND) == pytest.approx(0.5)

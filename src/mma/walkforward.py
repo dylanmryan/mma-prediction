@@ -30,9 +30,16 @@ import numpy as np
 import pandas as pd
 
 from mma.evaluate import (
-    accuracy, brier_score, expected_calibration_error, joint_outcome_log_loss,
-    log_loss, macro_f1,
+    accuracy, brier_score, expected_calibration_error, joint_cell_log_loss,
+    joint_outcome_log_loss, log_loss, macro_f1, realised_zero_mass_fraction,
 )
+
+#: Optional prediction entries carried alongside the three marginal heads.
+#: `joint_cells` is a candidate's own joint distribution over the outcome
+#: cells (`mma.evaluate`'s layout); `joint_zero_mass` flags the cells that had
+#: zero RAW simulated mass before smoothing. Both are row-aligned `(n, 18)`
+#: arrays, so they pool and slice exactly like the heads do.
+EXTRA_PRED_KEYS = ("joint_cells", "joint_zero_mass")
 
 FOLD_YEARS = tuple(range(2018, 2026))
 _DAYS_PER_YEAR = 365.25
@@ -112,8 +119,24 @@ def score_rows(features: pd.DataFrame, pred: dict, method_classes, round_classes
     if pred.get("method") is not None and pred.get("round") is not None:
         y_m = _labels(features["y_method"])
         y_r = _labels(features["y_finish_round"])
-        out["joint_log_loss"] = round(joint_outcome_log_loss(
-            y, y_m, y_r, p, pred["method"], pred["round"], method_classes, round_classes), 4)
+        cells = pred.get("joint_cells")
+        if cells is None:
+            # Independence composition P(w)*P(m)*P(r | finish) -- the only
+            # path the marginal-head candidates have, and the baseline the
+            # simulator is measured against.
+            out["joint_log_loss"] = round(joint_outcome_log_loss(
+                y, y_m, y_r, p, pred["method"], pred["round"], method_classes, round_classes), 4)
+        else:
+            # A candidate that models the cells jointly is scored on its own
+            # joint. Both branches are -log P(realised cell) over the same
+            # cell set, so the two numbers are directly comparable -- see
+            # `mma.evaluate.joint_cell_log_loss`.
+            out["joint_log_loss"] = round(joint_cell_log_loss(
+                y, y_m, y_r, cells, method_classes, round_classes), 4)
+            zero_mass = pred.get("joint_zero_mass")
+            if zero_mass is not None:
+                out["zero_mass_cell_fraction"] = round(realised_zero_mass_fraction(
+                    y, y_m, y_r, zero_mass, method_classes, round_classes), 4)
         known = features["y_method"].notna().to_numpy()
         if known.any():
             m_pred = [method_classes[i] for i in np.asarray(pred["method"])[known].argmax(axis=1)]
@@ -145,16 +168,24 @@ def pool(features: pd.DataFrame, fold_preds: list[tuple[np.ndarray, dict]]):
     `fold_preds`, not the original order of `features`."""
     frames, winner, method, rounds = [], [], [], []
     has_heads = all(p.get("method") is not None and p.get("round") is not None for _, p in fold_preds)
+    extra = {
+        key: ([] if all(p.get(key) is not None for _, p in fold_preds) else None)
+        for key in EXTRA_PRED_KEYS
+    }
     for mask, pred in fold_preds:
         frames.append(features.loc[mask])
         winner.append(np.asarray(pred["winner"], dtype=float))
         if has_heads:
             method.append(np.asarray(pred["method"], dtype=float))
             rounds.append(np.asarray(pred["round"], dtype=float))
+        for key, collected in extra.items():
+            if collected is not None:
+                collected.append(np.asarray(pred[key]))
     pooled = {
         "winner": np.concatenate(winner),
         "method": np.concatenate(method) if has_heads else None,
         "round": np.concatenate(rounds) if has_heads else None,
+        **{key: (np.concatenate(c) if c is not None else None) for key, c in extra.items()},
     }
     return pd.concat(frames).reset_index(drop=True), pooled
 

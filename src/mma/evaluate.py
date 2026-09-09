@@ -116,3 +116,102 @@ def joint_outcome_log_loss(
             p *= round_probs[i, r_index[r]]
         losses.append(-np.log(max(p, _EPS)))
     return float(np.mean(losses)) if losses else float("nan")
+
+
+# --------------------------------------------------------------------------
+# joint outcome cells (SP3)
+# --------------------------------------------------------------------------
+# The simulator emits one distribution over the whole outcome space rather
+# than three marginals, so it is scored by reading the realised cell's
+# probability straight out of that distribution. The cell set is exactly the
+# one the composed path implies -- (winner) x (finishing method) x (round),
+# plus (winner) x decision -- so `joint_cell_log_loss` and
+# `joint_outcome_log_loss` are both `-log P(realised cell)` over the same
+# cells and are directly comparable. `tests/test_evaluate.py` pins that: a
+# joint built by multiplying independent marginals scores exactly what the
+# composed path scores for those marginals.
+#
+# Flat layout, given `method_classes` whose LAST entry is "decision" and
+# `round_classes`:
+#
+#     index = winner * n_finish_methods * n_rounds + method * n_rounds + round
+#     decision index = 2 * n_finish_methods * n_rounds + winner
+#
+# winner 0 is the feature table's corner A (`y_winner == 1`), winner 1 its
+# corner B. With the harness's three methods and four round classes that is
+# 16 finish cells followed by 2 decision cells, 18 in all.
+
+DECISION = "decision"
+
+
+def n_joint_cells(method_classes, round_classes) -> int:
+    return 2 * (len(method_classes) - 1) * len(round_classes) + 2
+
+
+def joint_cell_index(winner: int, method_index, round_index, method_classes, round_classes) -> int:
+    """Flat index of one outcome cell. `method_index`/`round_index` are None
+    for a decision, which has no round term."""
+    n_rounds = len(round_classes)
+    n_methods = len(method_classes) - 1
+    if method_index is None or round_index is None:
+        return 2 * n_methods * n_rounds + int(winner)
+    return int(winner) * n_methods * n_rounds + int(method_index) * n_rounds + int(round_index)
+
+
+def _realised_cells(y_winner, y_method, y_round, method_classes, round_classes):
+    """(row, cell index) for every row whose realised cell is scorable.
+
+    Skips exactly what `joint_outcome_log_loss` skips: an unknown method, and
+    a finish with an unknown round. Both scorers walk this, so they always
+    average over the same rows."""
+    y_w = np.asarray(y_winner, dtype=float)
+    m_index = {label: i for i, label in enumerate(method_classes) if label != DECISION}
+    r_index = {label: i for i, label in enumerate(round_classes)}
+    out = []
+    for i, (m, r) in enumerate(zip(y_method, y_round)):
+        winner = 0 if y_w[i] == 1.0 else 1
+        if m == DECISION:
+            out.append((i, joint_cell_index(winner, None, None, method_classes, round_classes)))
+            continue
+        if m is None or m not in m_index:
+            continue
+        if r is None or r not in r_index:
+            continue
+        out.append((i, joint_cell_index(winner, m_index[m], r_index[r], method_classes, round_classes)))
+    return out
+
+
+def joint_cell_log_loss(
+    y_winner, y_method, y_round, cells, method_classes, round_classes,
+) -> float:
+    """Mean `-log P(realised cell)` read directly from a joint distribution.
+
+    `cells` is `(n, n_joint_cells(...))` in the layout above. Zero mass is
+    floored at `_EPS` exactly as the composed path floors its product, so a
+    cell the simulator never landed in scores badly rather than infinitely --
+    though the simulator's Laplace smoothing means it should never be zero."""
+    cells = np.asarray(cells, dtype=float)
+    expected = n_joint_cells(method_classes, round_classes)
+    if cells.ndim != 2 or cells.shape[1] != expected:
+        raise ValueError(f"cells must have shape (n, {expected}); got {cells.shape}")
+    losses = [
+        -np.log(max(cells[i, cell], _EPS))
+        for i, cell in _realised_cells(y_winner, y_method, y_round, method_classes, round_classes)
+    ]
+    return float(np.mean(losses)) if losses else float("nan")
+
+
+def realised_zero_mass_fraction(
+    y_winner, y_method, y_round, zero_mass, method_classes, round_classes,
+) -> float:
+    """Fraction of scorable rows whose realised cell had zero raw simulated mass.
+
+    The plan's pre-registered Monte Carlo adequacy check: more than ~1% means
+    `n_runs` is too small for the cell set. `zero_mass` is a boolean array in
+    the same layout as `cells`, carrying the raw (pre-smoothing) emptiness of
+    each cell."""
+    zero_mass = np.asarray(zero_mass, dtype=bool)
+    rows = _realised_cells(y_winner, y_method, y_round, method_classes, round_classes)
+    if not rows:
+        return float("nan")
+    return float(np.mean([bool(zero_mass[i, cell]) for i, cell in rows]))

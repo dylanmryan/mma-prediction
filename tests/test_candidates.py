@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mma.candidates import BlendCandidate, EloCandidate, TorchCandidate, XGBCandidate
+from mma.candidates import (
+    BlendCandidate, EloCandidate, HazardCandidate, TorchCandidate, XGBCandidate,
+)
 from mma.walkforward import Fold, make_folds
 
 
@@ -375,3 +377,161 @@ def test_fit_isotonic_is_monotone_and_clipped_away_from_zero_and_one():
     # out-of-range inputs clip to the end values rather than raising
     assert apply(np.array([-5.0]))[0] == pytest.approx(out[0])
     assert apply(np.array([5.0]))[0] == pytest.approx(out[-1])
+
+
+# --------------------------------------------------------------------------
+# HazardCandidate (SP3 Task 3)
+# --------------------------------------------------------------------------
+
+def _hazard_pair(n=500, seed=1):
+    """A feature table and the matching fights table, with the method/round
+    labels made mutually consistent so the hazard rows are well formed."""
+    rng = np.random.default_rng(seed)
+    dates = pd.to_datetime("2014-01-01") + pd.to_timedelta(
+        rng.integers(0, 6 * 365, size=n), unit="D")
+    elo_diff = rng.normal(0, 120, size=n)
+    p = 1 / (1 + 10 ** (-elo_diff / 400))
+    y = (rng.uniform(size=n) < p).astype(int)
+    scheduled = rng.choice([3, 5], size=n, p=[0.85, 0.15])
+    method = rng.choice(["ko_tko", "submission", "decision"], size=n, p=[0.35, 0.2, 0.45])
+    finish_round = np.array([
+        0 if m == "decision" else rng.integers(1, s + 1)
+        for m, s in zip(method, scheduled)
+    ])
+    bucket = np.where(method == "decision", None,
+                      np.where(finish_round >= 4, "45", finish_round.astype(str)))
+    features = pd.DataFrame({
+        "fight_id": [f"f{i}" for i in range(n)], "date": dates, "swapped": False,
+        "y_winner": y, "y_method": pd.array(method, dtype="string"),
+        "y_finish_round": pd.array(bucket, dtype="string"),
+        "weight_class": pd.array(rng.choice(["Lightweight", "Women's Strawweight"], size=n),
+                                 dtype="string"),
+        "title_fight": False, "scheduled_rounds": pd.array(scheduled, dtype="Int64"),
+        "elo_diff": elo_diff, "age_diff": rng.normal(0, 5, size=n),
+        "debut_a": False, "debut_b": False,
+        "age_a": rng.normal(30, 4, size=n), "age_b": rng.normal(30, 4, size=n),
+    }).sort_values("date", kind="stable").reset_index(drop=True)
+    fights = pd.DataFrame({
+        "fight_id": features["fight_id"],
+        "winner": np.where(features["y_winner"] == 1, "a", "b"),
+        "method": features["y_method"].astype("string"),
+        "finish_round": pd.array(
+            [None if m == "decision" else int(r) for m, r in
+             zip(features["y_method"], features["y_finish_round"].fillna("0").replace(
+                 {"45": "4"}).astype(int))], dtype="Int64"),
+        "scheduled_rounds": features["scheduled_rounds"],
+    })
+    return features, fights
+
+
+@pytest.fixture(scope="module")
+def hazard_pair():
+    return _hazard_pair()
+
+
+@pytest.fixture(scope="module")
+def hazard_fold(hazard_pair):
+    return make_folds(hazard_pair[0]["date"], fold_years=(2019,))[0]
+
+
+def _hazard_candidate(fights, **overrides):
+    kwargs = {"seeds": (0,), "params": {"max_depth": 2}, "n_runs": 400, **overrides}
+    return HazardCandidate(fights=fights, **kwargs)
+
+
+def test_hazard_candidate_shapes_and_joint_cells(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    pred, info = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    n = int(hazard_fold.eval.sum())
+    assert pred["winner"].shape == (n,)
+    assert pred["method"].shape == (n, 3) and pred["round"].shape == (n, 4)
+    assert pred["joint_cells"].shape == (n, 18)
+    assert pred["joint_zero_mass"].shape == (n, 18)
+    assert pred["joint_cells"].sum(axis=1) == pytest.approx(np.ones(n))
+    assert (pred["joint_cells"] >= 0).all()
+
+
+def test_hazard_marginals_are_read_off_the_same_joint(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    pred, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    cells = pred["joint_cells"]
+    a_mass = cells[:, :8].sum(axis=1) + cells[:, 16]
+    assert pred["winner"] == pytest.approx(a_mass)
+    ko = cells[:, 0:4].sum(axis=1) + cells[:, 8:12].sum(axis=1)
+    assert pred["method"][:, 0] == pytest.approx(ko)
+    assert pred["method"][:, 2] == pytest.approx(cells[:, 16:].sum(axis=1))
+    assert pred["method"].sum(axis=1) == pytest.approx(np.ones(len(cells)))
+    assert pred["round"].sum(axis=1) == pytest.approx(np.ones(len(cells)))
+
+
+def test_hazard_three_round_fights_get_no_round_45_mass(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    pred, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    three = (features.loc[hazard_fold.eval, "scheduled_rounds"] <= 3).to_numpy()
+    assert pred["round"][three, 3].sum() == 0.0
+    assert pred["joint_cells"][three][:, [3, 7, 11, 15]].sum() == 0.0
+    assert pred["joint_cells"][~three][:, [3, 7, 11, 15]].sum() > 0.0
+
+
+def test_hazard_symmetric_matchup_is_exactly_a_coin_flip(hazard_pair, hazard_fold):
+    """The symmetrisation contract: averaging the two corner orderings has to
+    map A onto B correctly, so a matchup with no corner asymmetry must come
+    back at exactly 0.5 -- not 0.5 plus Monte Carlo noise."""
+    features, fights = hazard_pair
+    symmetric = features.copy()
+    evaluated = hazard_fold.eval
+    for column in ("elo_diff", "age_diff"):
+        symmetric.loc[evaluated, column] = 0.0
+    symmetric.loc[evaluated, "age_b"] = symmetric.loc[evaluated, "age_a"].to_numpy()
+    pred, _ = _hazard_candidate(fights).fit_predict(symmetric, hazard_fold, None)
+    assert (pred["winner"] == 0.5).all()
+    cells = pred["joint_cells"]
+    assert cells[:, :8] == pytest.approx(cells[:, 8:16], abs=0.0)
+    assert cells[:, 16] == pytest.approx(cells[:, 17], abs=0.0)
+
+
+def test_hazard_candidate_is_deterministic(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    a, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    b, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    assert np.array_equal(a["winner"], b["winner"])
+    assert np.array_equal(a["joint_cells"], b["joint_cells"])
+
+
+def test_hazard_info_carries_both_members_and_the_monte_carlo_diagnostics(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    _, info = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    assert set(info["hazard"]) == {"best_iteration", "n_train"}
+    assert set(info["decision"]) == {"best_iteration", "n_train"}
+    assert info["n_runs"] == 400 and info["alpha"] == 1.0
+    assert 0.0 < info["mc_standard_error"] < 0.05
+    assert 0.0 <= info["zero_mass_cell_fraction"] <= 1.0
+    assert info["n_train"] == int(hazard_fold.train.sum())
+
+
+def test_hazard_candidate_never_trains_on_the_evaluation_outcomes(hazard_pair, hazard_fold):
+    """Scrambling the evaluation rows' labels must not move a single
+    prediction -- the hazard rows are built from the training fights only."""
+    features, fights = hazard_pair
+    base, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    scrambled = features.copy()
+    scrambled.loc[hazard_fold.eval, "y_winner"] = 1 - scrambled.loc[hazard_fold.eval, "y_winner"]
+    scrambled.loc[hazard_fold.eval, "y_method"] = "decision"
+    scrambled.loc[hazard_fold.eval, "y_finish_round"] = None
+    other, _ = _hazard_candidate(fights).fit_predict(scrambled, hazard_fold, None)
+    assert np.array_equal(base["joint_cells"], other["joint_cells"])
+
+
+def test_hazard_candidate_needs_the_fights_table(hazard_pair, hazard_fold):
+    features, _ = hazard_pair
+    with pytest.raises(ValueError, match="fights"):
+        HazardCandidate(seeds=(0,), n_runs=100).fit_predict(features, hazard_fold, None)
+
+
+def test_hazard_seed_ensemble_averages_the_member_probabilities(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    one, info_one = _hazard_candidate(fights, seeds=(0,)).fit_predict(features, hazard_fold, None)
+    two, info_two = _hazard_candidate(fights, seeds=(0, 1)).fit_predict(features, hazard_fold, None)
+    assert isinstance(info_one["hazard"]["best_iteration"], int)
+    assert len(info_two["hazard"]["best_iteration"]) == 2
+    assert not np.array_equal(one["joint_cells"], two["joint_cells"])
