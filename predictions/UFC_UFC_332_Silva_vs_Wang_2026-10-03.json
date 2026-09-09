@@ -1,0 +1,261 @@
+{
+  "event_name": "UFC 332: Silva vs. Wang",
+  "event_date": "2026-10-03",
+  "source_page": "https://en.wikipedia.org/wiki/UFC_332",
+  "predicted_at_utc": "2026-09-07T17:39:56Z",
+  "model_version": "40df77ec43c7",
+  "fights": [
+    {
+      "fighter_a_name": "Nat\u00e1lia Silva",
+      "fighter_b_name": "Wang Cong",
+      "weight_class": "Women's Flyweight",
+      "fighter_a_id": "262d32ebda89efc4",
+      "fighter_b_id": "2997e7fe3c9d3d4a",
+      "match_tier": "accent_folded",
+      "title_fight": false,
+      "scheduled_rounds": 5,
+      "p_a_wins": 0.711009293794632,
+      "method_probs": {
+        "ko_tko": 0.3903101980686188,
+        "submission": 0.2650781273841858,
+        "decision": 0.3446117043495178
+      },
+      "round_probs": {
+        "1": 0.14106544852256775,
+        "2": 0.17091844975948334,
+        "3": 0.18416455388069153,
+        "45": 0.5038515329360962
+      },
+      "elo_a": 1702.8545441087351,
+      "elo_b": 1547.0148857751303,
+      "skipped": false,
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Deiveson Figueiredo",
+      "fighter_b_name": "Payton Talbott",
+      "weight_class": "Bantamweight",
+      "fighter_a_id": "aa72b0f831d0bfe5",
+      "fighter_b_id": "6e743a33d56bdaa4",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.4611005485057831,
+      "method_probs": {
+        "ko_tko": 0.36940866708755493,
+        "submission": 0.26779690384864807,
+        "decision": 0.3627944588661194
+      },
+      "round_probs": {
+        "1": 0.2969205379486084,
+        "2": 0.37332653999328613,
+        "3": 0.32975295186042786,
+        "45": 0.0
+      },
+      "elo_a": 1711.823873443956,
+      "elo_b": 1616.7185116965275,
+      "skipped": false,
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Khaos Williams",
+      "fighter_b_name": "Roberto Soldi\u0107",
+      "weight_class": "Welterweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Roberto Soldi\u0107' (exact or accent-folded)",
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Ateba Gautier",
+      "fighter_b_name": "Roman Kopylov",
+      "weight_class": "Middleweight",
+      "fighter_a_id": "2f815ed5f8278ba6",
+      "fighter_b_id": "9d83f6da776ff7d6",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5894352793693542,
+      "method_probs": {
+        "ko_tko": 0.3222072124481201,
+        "submission": 0.33863186836242676,
+        "decision": 0.3391609489917755
+      },
+      "round_probs": {
+        "1": 0.3230000138282776,
+        "2": 0.3582591712474823,
+        "3": 0.3187408447265625,
+        "45": 0.0
+      },
+      "elo_a": 1571.3827106671056,
+      "elo_b": 1607.397113417605,
+      "skipped": false,
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Imanol Rodr\u00edguez",
+      "fighter_b_name": "Alden Coria",
+      "weight_class": "Flyweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Imanol Rodr\u00edguez' (exact or accent-folded); no fighter in fighters.parquet matches name 'Alden Coria' (exact or accent-folded)",
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Damian Pinas",
+      "fighter_b_name": "Andrey Pulyaev",
+      "weight_class": "Middleweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Damian Pinas' (exact or accent-folded)",
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Marcus McGhee",
+      "fighter_b_name": "Bernardo Sopaj",
+      "weight_class": "Bantamweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Bernardo Sopaj' (exact or accent-folded)",
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "King Green",
+      "fighter_b_name": "Esteban Ribovics",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "887961364be5ceb3",
+      "fighter_b_id": "323d4ca260dfa0ba",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.3591764122247696,
+      "method_probs": {
+        "ko_tko": 0.40281134843826294,
+        "submission": 0.22164660692214966,
+        "decision": 0.3755420446395874
+      },
+      "round_probs": {
+        "1": 0.2940225601196289,
+        "2": 0.37412339448928833,
+        "3": 0.33185404539108276,
+        "45": 0.0
+      },
+      "elo_a": 1580.8324026173789,
+      "elo_b": 1582.6059842348504,
+      "skipped": false,
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Johnny Walker",
+      "fighter_b_name": "Mick Parkin",
+      "weight_class": "Heavyweight",
+      "fighter_a_id": "c21f26bbde777573",
+      "fighter_b_id": "0d5cc0170c1a7e71",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.5253206640481949,
+      "method_probs": {
+        "ko_tko": 0.4172540307044983,
+        "submission": 0.24610602855682373,
+        "decision": 0.3366399109363556
+      },
+      "round_probs": {
+        "1": 0.321033775806427,
+        "2": 0.3609364628791809,
+        "3": 0.3180297613143921,
+        "45": 0.0
+      },
+      "elo_a": 1627.5060932578535,
+      "elo_b": 1595.5899149798047,
+      "skipped": false,
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Rafael dos Anjos",
+      "fighter_b_name": "Alexander Hernandez",
+      "weight_class": "Lightweight",
+      "fighter_a_id": "6a2f7c151031653d",
+      "fighter_b_id": "262a7d06203657e6",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.38794608414173126,
+      "method_probs": {
+        "ko_tko": 0.3859438896179199,
+        "submission": 0.22698014974594116,
+        "decision": 0.3870760202407837
+      },
+      "round_probs": {
+        "1": 0.3209567666053772,
+        "2": 0.3716031312942505,
+        "3": 0.3074401021003723,
+        "45": 0.0
+      },
+      "elo_a": 1645.7818573948146,
+      "elo_b": 1600.3494152412802,
+      "skipped": false,
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Marvin Vettori",
+      "fighter_b_name": "Ismail Naurdiev",
+      "weight_class": "Middleweight",
+      "fighter_a_id": "7acbb0972e75281a",
+      "fighter_b_id": "6a96ad1bc34fb113",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.573315292596817,
+      "method_probs": {
+        "ko_tko": 0.36295241117477417,
+        "submission": 0.27236273884773254,
+        "decision": 0.3646848797798157
+      },
+      "round_probs": {
+        "1": 0.3222683072090149,
+        "2": 0.3633970022201538,
+        "3": 0.3143346905708313,
+        "45": 0.0
+      },
+      "elo_a": 1612.3844724556177,
+      "elo_b": 1530.5232039594016,
+      "skipped": false,
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Court McGee",
+      "fighter_b_name": "Eric Nolan",
+      "weight_class": "Welterweight",
+      "fighter_a_id": "523fa774700d7d3f",
+      "fighter_b_id": "64b12fe31be7560c",
+      "match_tier": "exact",
+      "title_fight": false,
+      "scheduled_rounds": 3,
+      "p_a_wins": 0.38124309480190277,
+      "method_probs": {
+        "ko_tko": 0.39873206615448,
+        "submission": 0.24061483144760132,
+        "decision": 0.3606531023979187
+      },
+      "round_probs": {
+        "1": 0.321901798248291,
+        "2": 0.3550952672958374,
+        "3": 0.32300296425819397,
+        "45": 0.0
+      },
+      "elo_a": 1486.557609319551,
+      "elo_b": 1455.2,
+      "skipped": false,
+      "predicted_at_utc": "2026-09-07T17:39:56Z",
+      "model_version": "40df77ec43c7"
+    }
+  ]
+}
