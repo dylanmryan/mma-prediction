@@ -10,6 +10,10 @@ Examples:
   python scripts/run_walkforward.py --candidate torch --name torch_refit_recent --fixed-epochs 18 --temperature 0.98
   python scripts/run_walkforward.py --candidate torch --name torch_v1_extslice --drop-columns external_missing,same_country
   python scripts/run_walkforward.py --candidate xgb --name xgb_v1_seed1 --model-seed 1
+  python scripts/run_walkforward.py --candidate xgb --name xgb_ens5 --seeds 0,1,2,3,4
+  python scripts/run_walkforward.py --candidate blend --name blend_b0 --seeds 0,1,2,3,4 --blend-weight 0.5
+  python scripts/run_walkforward.py --candidate blend --name blend_b1_isotonic --blend-calibrator isotonic
+  python scripts/run_walkforward.py --candidate torch --name torch_v1 --dump-predictions models/walkforward/preds/torch_v1.json
 
 Reports land in models/walkforward/<name>.json. Nothing here touches the
 deployed artifacts under models/torch or models/xgb_*.json.
@@ -28,12 +32,18 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mma.candidates import EloCandidate, TorchCandidate, XGBCandidate  # noqa: E402
+from mma.candidates import (  # noqa: E402
+    CALIBRATORS, BlendCandidate, EloCandidate, TorchCandidate, XGBCandidate,
+)
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES  # noqa: E402
-from mma.walkforward import build_report, make_folds, recency_weights  # noqa: E402
+from mma.walkforward import build_report, make_folds, pool, recency_weights  # noqa: E402
 
 PROCESSED = ROOT / "data" / "processed"
 OUT_DIR = ROOT / "models" / "walkforward"
+# The ensemble the torch candidate has always run, and the one SP2.2's blend
+# gives both of its members.
+DEFAULT_SEEDS = (0, 1, 2, 3, 4)
+SEEDED = ("torch", "blend")
 
 
 def fixed_budget_from(report: dict) -> dict:
@@ -170,8 +180,81 @@ def check_drop_columns(drop_columns, features: pd.DataFrame) -> None:
         )
 
 
-def build_candidate(kind: str, name: str, seeds: str, config: dict, budget: dict | None,
-                    drop_columns: tuple[str, ...] = ()):
+def resolve_seeds(args: argparse.Namespace) -> tuple[int, ...] | None:
+    """The seed ensemble for this run, or None for a single-fit candidate.
+
+    torch and blend default to ``DEFAULT_SEEDS``. XGBoost does NOT: every
+    committed XGB report is a single fit at ``mma.models.xgb.BASE_PARAMS``'
+    ``random_state``, and defaulting the new seed-ensembling path on would
+    silently change what ``--candidate xgb`` means. It becomes an ensemble only
+    when ``--seeds`` names one, and ``--seeds 0`` is bit-identical to the
+    single fit. ``--model-seed`` is the other way to set the XGB seed, so the
+    two together are a usage error rather than a silent winner. The elo floor
+    fits nothing.
+    """
+    if args.candidate == "xgb" and args.seeds is not None and args.model_seed is not None:
+        raise SystemExit(
+            "--seeds and --model-seed both set the xgb random_state; pass one of them "
+            "(--seeds for a seed ensemble, --model-seed for one fit at one seed)"
+        )
+    if args.seeds is None:
+        return DEFAULT_SEEDS if args.candidate in SEEDED else None
+    if args.candidate == "elo":
+        raise SystemExit(
+            "--seeds applies to the fitted candidates only; the elo candidate "
+            "reads elo_diff directly and fits nothing"
+        )
+    seeds: list[int] = []
+    for token in args.seeds.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        value = int(token)
+        if value not in seeds:
+            seeds.append(value)
+    if not seeds:
+        raise SystemExit(f"--seeds names no seeds (got {args.seeds!r})")
+    return tuple(seeds)
+
+
+def resolve_blend(args: argparse.Namespace) -> dict | None:
+    """The blend's fixed weight and calibration switch, or None for other candidates.
+
+    The weight is on the XGB member and is FIXED at 0.5 by SP2.2's
+    pre-registration; the flag exists so the 0.3/0.7 flatness diagnostic and
+    the uncalibrated diagnostic can be run and reported, not so a better cell
+    can be shipped.
+    """
+    if args.candidate != "blend":
+        if args.blend_weight is not None:
+            raise SystemExit(
+                f"--blend-weight applies to the blend candidate only (got {args.candidate!r})"
+            )
+        if args.no_blend_calibration:
+            raise SystemExit(
+                f"--no-blend-calibration applies to the blend candidate only (got {args.candidate!r})"
+            )
+        return None
+    weight = 0.5 if args.blend_weight is None else float(args.blend_weight)
+    if not 0.0 <= weight <= 1.0:
+        raise SystemExit(f"--blend-weight must be in [0, 1] (got {args.blend_weight})")
+    if args.blend_calibrator not in CALIBRATORS:
+        raise SystemExit(
+            f"--blend-calibrator must be one of {CALIBRATORS} (got {args.blend_calibrator!r})"
+        )
+    if args.no_blend_calibration and args.blend_calibrator != "temperature":
+        raise SystemExit(
+            "--no-blend-calibration turns the post-average calibrator off, so it cannot be "
+            f"combined with --blend-calibrator {args.blend_calibrator}"
+        )
+    out = {"blend_weight": weight, "blend_calibrated": not args.no_blend_calibration}
+    if args.blend_calibrator != "temperature":  # keep the committed reports' config shape
+        out["blend_calibrator"] = args.blend_calibrator
+    return out
+
+
+def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | None,
+                    drop_columns: tuple[str, ...] = (), blend: dict | None = None):
     """``budget`` is None in early-stopping mode; otherwise the dict from
     resolve_budget, which must carry the key this learner consumes
     (fixed_rounds for xgb, fixed_epochs for torch) -- a budget derived from
@@ -180,6 +263,21 @@ def build_candidate(kind: str, name: str, seeds: str, config: dict, budget: dict
         if budget is not None:
             raise SystemExit("--fixed-budget-from does not apply to the elo candidate (nothing is fit)")
         return EloCandidate()  # resolve_drop_columns already rejected --drop-columns here
+    if kind == "blend":
+        if budget is not None:
+            raise SystemExit(
+                "fixed-budget mode does not apply to the blend candidate: its post-average "
+                "temperature is fitted on the inner-validation year, which a fixed budget "
+                "trains on"
+            )
+        if config:
+            raise SystemExit(
+                "--config-json does not apply to the blend candidate: it has two members and "
+                "the flag cannot say which one it configures; both run their deployed configs"
+            )
+        return BlendCandidate(name=name, seeds=tuple(seeds), weight=blend["blend_weight"],
+                              calibrate=blend["blend_calibrated"], drop_columns=drop_columns,
+                              calibrator=blend.get("blend_calibrator", "temperature"))
     needed = "fixed_rounds" if kind == "xgb" else "fixed_epochs"
     if budget is not None and needed not in budget:
         raise SystemExit(
@@ -189,17 +287,48 @@ def build_candidate(kind: str, name: str, seeds: str, config: dict, budget: dict
     budget = budget or {}
     if kind == "xgb":
         return XGBCandidate(name=name, params=config, fixed_rounds=budget.get("fixed_rounds"),
-                            drop_columns=drop_columns)
-    return TorchCandidate(name=name, seeds=tuple(int(s) for s in seeds.split(",")), config=config,
+                            drop_columns=drop_columns,
+                            seeds=None if seeds is None else tuple(seeds))
+    return TorchCandidate(name=name, seeds=tuple(seeds), config=config,
                          fixed_epochs=budget.get("fixed_epochs"), temperature=budget.get("temperature"),
                          drop_columns=drop_columns)
 
 
+def prediction_dump(name: str, features: pd.DataFrame, fold_results: list) -> dict:
+    """Pooled evaluation rows as (fold year, y_winner, p_winner), row-aligned.
+
+    Row order is `walkforward.pool`'s -- the concatenation order of the folds,
+    which is also the order every pooled metric in the report is computed over,
+    so a metric recomputed from this dump is the report's metric and not a
+    lookalike over a different row set. Winner probabilities are written at
+    full precision: ECE at a different bin count moves in the fourth decimal,
+    which rounding to the report's 4 dp would erase.
+
+    It exists because the reports carry metrics and no predictions, and SP2.2's
+    ECE gate needs the underlying calibration curve -- which bins a candidate
+    is miscalibrated in, and whether the incumbent/candidate gap survives a
+    different `n_bins` -- to be applied as anything other than two rounded
+    numbers compared with no known precision.
+    """
+    pooled_feats, pooled_pred = pool(features, [(m, p) for _, m, p, _ in fold_results])
+    years = np.concatenate([np.full(int(np.asarray(m, dtype=bool).sum()), int(y))
+                            for y, m, _, _ in fold_results])
+    return {
+        "name": name,
+        "n": int(len(pooled_feats)),
+        "fold_year": [int(v) for v in years],
+        "y_winner": [float(v) for v in pooled_feats["y_winner"].to_numpy(dtype=float)],
+        "p_winner": [float(v) for v in np.asarray(pooled_pred["winner"], dtype=float)],
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--candidate", choices=["elo", "xgb", "torch"], required=True)
+    parser.add_argument("--candidate", choices=["elo", "xgb", "torch", "blend"], required=True)
     parser.add_argument("--name", required=True)
-    parser.add_argument("--seeds", default="0,1,2,3,4")
+    parser.add_argument("--seeds", default=None,
+                        help="seed ensemble (default 0,1,2,3,4 for torch and blend; xgb is a "
+                             "single fit unless this names seeds)")
     parser.add_argument("--config-json", default=None, help="JSON dict of XGB params / torch config")
     parser.add_argument("--train-start", default=None, help="drop training fights before this date")
     parser.add_argument("--half-life", type=float, default=None, help="recency half-life in years")
@@ -212,10 +341,25 @@ def main() -> None:
     parser.add_argument("--model-seed", type=int, default=None,
                         help="xgb random_state (subsample/colsample draws); the XGB analogue "
                              "of torch's --seeds, used for fresh-seed re-scoring")
+    parser.add_argument("--blend-weight", type=float, default=None,
+                        help="blend candidate: weight on the XGB member (default 0.5, the "
+                             "pre-registered value; 0.3/0.7 are a flatness diagnostic only)")
+    parser.add_argument("--blend-calibrator", default="temperature", choices=list(CALIBRATORS),
+                        help="blend candidate: post-average calibrator fitted on the fold's "
+                             "inner-validation year. 'temperature' is the pre-registered "
+                             "step; 'isotonic' is SP2.2 Task 3's post-hoc remediation "
+                             "diagnostic and is not a shipping form")
+    parser.add_argument("--no-blend-calibration", action="store_true",
+                        help="blend candidate: skip the post-average temperature (diagnostic)")
     parser.add_argument("--drop-columns", default=None,
                         help="comma-separated feature columns to hold out of the model matrix "
                              "(they stay in the table, so slices keyed on them still report)")
     parser.add_argument("--out-dir", type=Path, default=OUT_DIR)
+    parser.add_argument("--dump-predictions", type=Path, default=None,
+                        help="also write the pooled evaluation rows' y_winner/p_winner to "
+                             "this JSON path, so calibration diagnostics (reliability "
+                             "curves, ECE at other bin counts) are computable without a "
+                             "re-run. The report itself is unaffected")
     args = parser.parse_args()
 
     features = (
@@ -226,7 +370,9 @@ def main() -> None:
     budget = resolve_budget(args)
     drop_columns = resolve_drop_columns(args)
     check_drop_columns(drop_columns, features)
-    candidate = build_candidate(args.candidate, args.name, args.seeds, config, budget, drop_columns)
+    seeds = resolve_seeds(args)
+    blend = resolve_blend(args)
+    candidate = build_candidate(args.candidate, args.name, seeds, config, budget, drop_columns, blend)
     budget = budget or {}  # report shape: always a dict
 
     fold_results = []
@@ -238,7 +384,8 @@ def main() -> None:
         print(f"fold {fold.year}: n_train={int(fold.train.sum())} n_eval={int(fold.eval.sum())} info={info}")
 
     run_config = {
-        "candidate": args.candidate, "seeds": args.seeds if args.candidate == "torch" else None,
+        "candidate": args.candidate,
+        "seeds": None if seeds is None else ",".join(str(s) for s in seeds),
         "model_seed": args.model_seed,
         "config": config, "train_start": args.train_start, "half_life": args.half_life,
         "fixed_budget_from": str(args.fixed_budget_from) if args.fixed_budget_from else None,
@@ -247,6 +394,8 @@ def main() -> None:
         "features_max_date": str(features["date"].max().date()),
         "runtime_sec": round(time.time() - started, 1),
     }
+    if blend is not None:  # only the blend carries these, so other reports keep their shape
+        run_config.update(blend)
     report = build_report(args.name, run_config, features, fold_results, METHOD_CLASSES, ROUND_CLASSES)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     out = args.out_dir / f"{args.name}.json"
@@ -254,6 +403,11 @@ def main() -> None:
     print(json.dumps({"pooled": report["pooled"],
                       "folds": {y: f["winner_log_loss"] for y, f in report["folds"].items()}}, indent=2))
     print(f"wrote {out}")
+    if args.dump_predictions is not None:
+        dump = prediction_dump(args.name, features, fold_results)
+        args.dump_predictions.parent.mkdir(parents=True, exist_ok=True)
+        args.dump_predictions.write_text(json.dumps(dump) + "\n")
+        print(f"wrote {args.dump_predictions} ({dump['n']} pooled rows)")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,7 @@
+{
+  "weight": 0.5,
+  "temperature": 0.85,
+  "derivation": "weight is the pre-registered 0.5, read from the source report's own config.blend_weight (mma.blend.blend_heads: fixed by SP2.2's pre-registration, never fitted); temperature is the WALK-FORWARD temperature from scripts.derive_blend_temperature -- fitted by mma.models.train_loop.fit_temperature on the pooled out-of-fold pre-temperature predictions of every fold before the one being served, which at serving time is all of them, because deployment has no held-out year to fit one on directly. It supersedes the median of the per-fold fits (0.80), a rule borrowed from training-budget derivation that no harness run validated as a calibration rule; see models/walkforward/blend_temperature.json for the rule comparison and the deployed form's own pooled log-loss and ECE.",
+  "source_report": "models/walkforward/blend_b1.json",
+  "source_predictions": "models/walkforward/preds/blend_b1.json"
+}

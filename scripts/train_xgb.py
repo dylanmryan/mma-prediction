@@ -1,5 +1,16 @@
 """Train the XGBoost heads (winner, method, finish round) and write metrics.
 
+Since SP2.2 each head is a FIVE-SEED ENSEMBLE, not a single fit: one model per
+``random_state`` in ``SEEDS``, averaged over ``predict_proba``. XGBoost has no
+seed ensemble of its own -- its stochasticity is ``subsample``/
+``colsample_bytree`` under one seed -- and SP2.1 measured the price of scoring
+a single fit at sigma 0.00087-0.00125 pooled winner log-loss, three times the
+torch ensemble's 0.000346. Half of that noise would land in the deployed blend,
+so the ensemble is required rather than optional; the artifacts are
+``models/xgb_<head>_seed<seed>.json`` and ``mma.inference.BlendedPredictor``
+loads all of them. This is exactly what ``mma.candidates.XGBCandidate(seeds=
+(0, 1, 2, 3, 4))`` does in the harness, which is what B1 was measured with.
+
 Two protocols, selected by the flags given:
 
 * refit-through (DEFAULT; a bare ``python scripts/train_xgb.py``, which is
@@ -21,11 +32,12 @@ Why refit is the default: the walk-forward harness (scripts/run_walkforward.py)
 compared early-stopping on a held-out year against a fixed budget on all
 data through the newest year, on the same 2018-2025 eval folds; the fixed
 budget was not worse by more than the seed noise floor, and its pre-
-registered rule then ships it (models/walkforward/refit_decision_v3.json,
-``deployment_recipe: refit_through_latest``). The deployed models thereby
-train on ~5 more years of fights than the pre-2021 split. BUDGET, REPORT and
-REFIT_THROUGH below are that decision's numbers; re-derive them via
-run_walkforward.py --fixed-budget-from rather than editing them by hand.
+registered rule then ships it (models/walkforward/refit_decision_b1.json,
+``deployment_recipe: refit_through_latest``: B -0.0007 against A, inside
+sigma_seed). The deployed models thereby train on ~5 more years of fights than
+the pre-2021 split. BUDGET, REPORT and REFIT_THROUGH below are that decision's
+numbers; re-derive them via ``scripts/refit_decision.py --reports b1`` and
+``run_walkforward.py --fixed-budget-from`` rather than editing them by hand.
 
 The two flag families are mutually exclusive.
 """
@@ -36,8 +48,8 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
-import xgboost as xgb
 
 from mma.evaluate import accuracy, brier_score, log_loss, macro_f1
 from mma.models.xgb import feature_frame, train_binary, train_multiclass
@@ -50,16 +62,22 @@ VAL_START, VAL_END = "2021-01-01", "2023-12-31"
 METHOD_CLASSES = ["ko_tko", "submission", "decision"]
 ROUND_CLASSES = ["1", "2", "3", "45"]
 HEADS = ("winner", "method", "round")
+# The seed ensemble (SP2.2). Each seed is an xgboost ``random_state``; the head's
+# prediction is the mean of the five models' ``predict_proba``. The same five
+# seeds the torch ensemble uses and the same five ``mma.candidates.BlendCandidate``
+# gave its XGB member when B1 was measured.
+SEEDS = (0, 1, 2, 3, 4)
 
 MODE_SPLIT, MODE_REFIT = "split", "refit_through"
 DEFAULT_MODE = MODE_REFIT
-# Refit-mode defaults: models/walkforward/refit_decision_v3.json -> xgb.budget.
-# The budget belongs to a FEATURE TABLE: these are the SP2 `base,external`
-# table's numbers; the SP1 46-column table's (82/80/76) stay in
-# refit_decision.json for the record.
+# Refit-mode defaults: models/walkforward/refit_decision_b1.json -> xgb.budget.
+# The budget belongs to a FEATURE TABLE *and* to a fit shape: these are the
+# SP2.2 S1 table's numbers for the FIVE-SEED ensemble. The SP2 `base,external`
+# single-fit numbers (105/61/75) stay in refit_decision_v3.json and the SP1
+# 46-column table's (82/80/76) in refit_decision.json, for the record.
 REFIT_THROUGH = "latest"
-BUDGET = {"winner": 105, "method": 61, "round": 75}
-REPORT = ROOT / "models" / "walkforward" / "xgb_v3_refit.json"
+BUDGET = {"winner": 109, "method": 73, "round": 71}
+REPORT = ROOT / "models" / "walkforward" / "xgb_ens5_s1_refit.json"
 
 
 def parse_budget(spec) -> dict:
@@ -102,6 +120,7 @@ def refit_metrics(train_through: str, n_train: int, budget: dict, report_path: s
         "harness_report": report_path,
         "harness_features_max_date": harness_features_max_date,
         "harness_fold_years": [int(year) for year in harness_fold_years],
+        "seeds": list(SEEDS),
         "walkforward_pooled": pooled,
         "winner": {
             "n_val": pooled["n"],
@@ -159,32 +178,74 @@ def display_path(path: Path) -> str:
     return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
 
 
-def run_split(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -> tuple[dict, xgb.XGBClassifier]:
+def head_path(models_dir: Path, head: str, seed: int) -> Path:
+    """models/xgb_<head>_seed<seed>.json -- one artifact per head per seed.
+
+    `mma.versioning.MODEL_ARTIFACT_GLOBS` hashes exactly this shape, so the
+    deployed model version changes when any member of the ensemble does.
+    """
+    return Path(models_dir) / f"xgb_{head}_seed{int(seed)}.json"
+
+
+def mean_proba(models, x) -> "np.ndarray":
+    """The seed ensemble's prediction: the mean of the members' predict_proba.
+
+    Identical to `mma.candidates._mean_over_members`, including its "a single
+    member is returned untouched" behaviour, so a one-seed deployment is
+    bit-identical to that seed's own fit.
+    """
+    if len(models) == 1:
+        return models[0].predict_proba(x)
+    return np.mean([model.predict_proba(x) for model in models], axis=0)
+
+
+def run_split(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -> tuple[dict, list]:
     train = features["date"] < args.train_end
     val = (features["date"] >= args.val_start) & (features["date"] <= args.val_end)
     metrics = {}
 
-    # winner
+    known = features["y_method"].notna()
+    finish = features["y_finish_round"].notna()
+    winners, methods, rounds = [], [], []
+    for seed in SEEDS:
+        params = {"random_state": int(seed)}
+        winner = train_binary(x[train], features.loc[train, "y_winner"],
+                              x[val], features.loc[val, "y_winner"], params=params)
+        winner.save_model(head_path(models_dir, "winner", seed))
+        winners.append(winner)
+
+        method = train_multiclass(
+            x[train & known], features.loc[train & known, "y_method"],
+            x[val & known], features.loc[val & known, "y_method"],
+            METHOD_CLASSES, params=params,
+        )
+        method.save_model(head_path(models_dir, "method", seed))
+        methods.append(method)
+
+        rounds_model = train_multiclass(
+            x[train & finish], features.loc[train & finish, "y_finish_round"],
+            x[val & finish], features.loc[val & finish, "y_finish_round"],
+            ROUND_CLASSES, params=params,
+        )
+        rounds_model.save_model(head_path(models_dir, "round", seed))
+        rounds.append(rounds_model)
+
+    # winner -- the ensemble's mean probability, not any one member's
     y = features["y_winner"]
-    winner = train_binary(x[train], y[train], x[val], y[val])
-    p_val = winner.predict_proba(x[val])[:, 1]
+    p_val = mean_proba(winners, x[val])[:, 1]
     metrics["winner"] = {
         "n_val": int(val.sum()),
         "accuracy": round(accuracy(y[val], p_val), 4),
         "log_loss": round(log_loss(y[val], p_val), 4),
         "brier": round(brier_score(y[val], p_val), 4),
-        "best_iteration": int(winner.best_iteration),
+        # one per seed: early stopping is per member, so there is no single
+        # "the" best iteration for an ensemble
+        "best_iteration": [int(model.best_iteration) for model in winners],
     }
-    winner.save_model(models_dir / "xgb_winner.json")
 
     # method (rows with known method)
-    known = features["y_method"].notna()
     y = features["y_method"]
-    method = train_multiclass(
-        x[train & known], y[train & known], x[val & known], y[val & known],
-        METHOD_CLASSES,
-    )
-    pred = [METHOD_CLASSES[i] for i in method.predict(x[val & known])]
+    pred = [METHOD_CLASSES[i] for i in mean_proba(methods, x[val & known]).argmax(axis=1)]
     truth = list(y[val & known])
     majority = y[train & known].mode()[0]
     metrics["method"] = {
@@ -193,16 +254,10 @@ def run_split(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -
         "macro_f1": round(macro_f1(truth, pred), 4),
         "majority_baseline_accuracy": round(float(sum(t == majority for t in truth) / len(truth)), 4),
     }
-    method.save_model(models_dir / "xgb_method.json")
 
     # finish round (finishes only)
-    finish = features["y_finish_round"].notna()
     y = features["y_finish_round"]
-    rounds = train_multiclass(
-        x[train & finish], y[train & finish], x[val & finish], y[val & finish],
-        ROUND_CLASSES,
-    )
-    pred = [ROUND_CLASSES[i] for i in rounds.predict(x[val & finish])]
+    pred = [ROUND_CLASSES[i] for i in mean_proba(rounds, x[val & finish]).argmax(axis=1)]
     truth = list(y[val & finish])
     majority = y[train & finish].mode()[0]
     metrics["finish_round"] = {
@@ -211,42 +266,47 @@ def run_split(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -
         "macro_f1": round(macro_f1(truth, pred), 4),
         "majority_baseline_accuracy": round(float(sum(t == majority for t in truth) / len(truth)), 4),
     }
-    rounds.save_model(models_dir / "xgb_round.json")
-    return metrics, winner
+    metrics["seeds"] = list(SEEDS)
+    return metrics, winners
 
 
-def run_refit(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -> tuple[dict, xgb.XGBClassifier]:
+def run_refit(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -> tuple[dict, list]:
     cutoff = refit_cutoff(features, args.refit_through)
     budget = parse_budget(args.budget)
     report = json.loads(Path(args.report).read_text())
     pooled = report["pooled"]
     harness_max_date = report["config"]["features_max_date"]
     train = features["date"] <= cutoff
-    print(f"refit through {cutoff.date()}: n_train={int(train.sum())} budget={budget}")
+    print(f"refit through {cutoff.date()}: n_train={int(train.sum())} budget={budget} "
+          f"seeds={list(SEEDS)}")
     warning = stale_harness_warning(str(cutoff.date()), harness_max_date)
     if warning:
         print(warning, file=sys.stderr)
 
-    y = features["y_winner"]
-    winner = train_binary(x[train], y[train], None, None, fixed_rounds=budget["winner"])
-    winner.save_model(models_dir / "xgb_winner.json")
-
     known = features["y_method"].notna()
-    y = features["y_method"]
-    method = train_multiclass(x[train & known], y[train & known], None, None,
-                              METHOD_CLASSES, fixed_rounds=budget["method"])
-    method.save_model(models_dir / "xgb_method.json")
-
     finish = features["y_finish_round"].notna()
-    y = features["y_finish_round"]
-    rounds = train_multiclass(x[train & finish], y[train & finish], None, None,
-                              ROUND_CLASSES, fixed_rounds=budget["round"])
-    rounds.save_model(models_dir / "xgb_round.json")
+    winners = []
+    for seed in SEEDS:
+        params = {"random_state": int(seed)}
+        winner = train_binary(x[train], features.loc[train, "y_winner"], None, None,
+                              params=params, fixed_rounds=budget["winner"])
+        winner.save_model(head_path(models_dir, "winner", seed))
+        winners.append(winner)
+
+        method = train_multiclass(x[train & known], features.loc[train & known, "y_method"],
+                                  None, None, METHOD_CLASSES, params=params,
+                                  fixed_rounds=budget["method"])
+        method.save_model(head_path(models_dir, "method", seed))
+
+        rounds = train_multiclass(x[train & finish], features.loc[train & finish, "y_finish_round"],
+                                  None, None, ROUND_CLASSES, params=params,
+                                  fixed_rounds=budget["round"])
+        rounds.save_model(head_path(models_dir, "round", seed))
 
     metrics = refit_metrics(str(cutoff.date()), int(train.sum()), budget,
                             display_path(args.report), pooled,
                             harness_max_date, report["fold_years"])
-    return metrics, winner
+    return metrics, winners
 
 
 def main() -> None:
@@ -278,15 +338,17 @@ def main() -> None:
     models_dir.mkdir(exist_ok=True, parents=True)
 
     run = run_split if mode == MODE_SPLIT else run_refit
-    metrics, winner = run(features, x, args, models_dir)
+    metrics, winners = run(features, x, args, models_dir)
 
     (models_dir / "xgb_metrics_val.json").write_text(json.dumps(metrics, indent=2))
     print(json.dumps(metrics, indent=2))
 
+    # Averaged over the ensemble, because no single member is the model now.
     importances = pd.Series(
-        winner.feature_importances_, index=x.columns
+        np.mean([model.feature_importances_ for model in winners], axis=0),
+        index=x.columns,
     ).sort_values(ascending=False)
-    print("\ntop 15 winner-model features:")
+    print(f"\ntop 15 winner-model features (mean over {len(winners)} seeds):")
     print(importances.head(15).round(4).to_string())
 
 

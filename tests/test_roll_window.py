@@ -279,6 +279,40 @@ def test_execute_always_cleans_temp_dir(staged, monkeypatch):
     assert not (models_dir / roll_window.BACKUP_DIR_NAME).exists()
 
 
+def test_blended_incumbent_is_detected_from_the_artifacts(tmp_path):
+    models = tmp_path / "models"
+    (models / "torch").mkdir(parents=True)
+    assert roll_window.blended_incumbent(models) is False
+    (models / "xgb_winner_seed0.json").write_text("{}")
+    assert roll_window.blended_incumbent(models) is True
+
+
+def test_execute_aborts_on_a_blended_incumbent_before_touching_anything(staged, monkeypatch):
+    """Since SP2.2 the served model is a blend and this gate scores the torch
+    member alone. A number about half the served model is not a promotion gate
+    for the served model, so --execute refuses to produce one."""
+    models_dir, torch_dir = staged
+    (models_dir / "xgb_winner_seed0.json").write_text("{}")
+    called = {"retrain": False, "eval": False}
+    monkeypatch.setattr(roll_window, "_retrain_candidate",
+                        lambda *a, **k: called.__setitem__("retrain", True))
+    monkeypatch.setattr(roll_window, "_ensemble_val_log_loss",
+                        lambda *a, **k: called.__setitem__("eval", True) or 0.65)
+    features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
+    with pytest.raises(SystemExit, match="BLEND"):
+        roll_window._execute(features, cutoff=pd.Timestamp("2024-06-01"))
+
+    assert called == {"retrain": False, "eval": False}
+    assert (torch_dir / "net_seed0.pt").read_bytes() == INCUMBENT_FILES["net_seed0.pt"]
+    assert not (models_dir / roll_window.BACKUP_DIR_NAME).exists()
+    assert not (models_dir / roll_window.CANDIDATE_DIR_NAME).exists()
+
+
+def test_the_dry_run_protocol_text_says_the_gate_covers_half_the_model():
+    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"))
+    assert "BLEND" in text and "HALF the served model" in text
+
+
 def test_execute_aborts_when_incumbent_is_refit_in_sample(staged, monkeypatch):
     """A refit_through incumbent trained through the latest date is in-sample
     on the newest-2-years slice: --execute must refuse before scoring or

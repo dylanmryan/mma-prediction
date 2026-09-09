@@ -213,18 +213,18 @@ def test_the_flag_stays_excluded_even_though_the_block_is_unregistered():
     rather than one fighter from the other. Measured in SP2 Task 12: torch
     0.6482 with the flag in the model, 0.6472 with it held out.
 
-    The block itself is not registered: it was rejected in SP2 and again in
-    SP2.1, where it was one of the four blocks combined into the treatment arm
-    (neither that arm nor its control cleared the bar). What this test pins is
-    that the two exclusion lists still name the flag, so re-registering the
-    block is uncommenting `feature_blocks.py` and nothing else -- an exclusion
-    silently dropped in the meantime is how the rejected variant would ship by
-    accident.
+    What this test pins is that the two exclusion lists name the flag whether
+    or not the block is registered -- rejected and unregistered in SP2 and
+    SP2.1, registered again in SP2.2 for the S1 table its blend candidate B1 is
+    scored on. Re-registering the block must be uncommenting
+    `feature_blocks.py` and nothing else; an exclusion silently dropped in the
+    meantime is how the rejected variant would ship by accident.
     """
-    from mma.feature_blocks import BLOCKS, NOTICE_BLOCK
+    from mma.feature_blocks import BLOCKS, NOTICE_BLOCK, columns_for
     from mma.models.xgb import NON_FEATURES
     from mma.tensors import DROPPED
 
-    assert NOTICE_BLOCK not in BLOCKS, "rejected in SP2 and again in SP2.1"
     assert "notice_unknown" in NON_FEATURES
     assert "notice_unknown" in DROPPED
+    if NOTICE_BLOCK in BLOCKS:  # registered: produced, and still not modelled
+        assert "notice_unknown" in columns_for([NOTICE_BLOCK])

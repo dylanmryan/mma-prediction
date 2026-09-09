@@ -1,0 +1,637 @@
+{
+  "what": "the fixed post-average temperature models/blend.json serves, and the honest pooled score of the fixed-temperature form -- derived by re-scoring the committed per-row dump under each candidate rule",
+  "generated_by": "scripts/derive_blend_temperature.py",
+  "source_report": "models/walkforward/blend_b1.json",
+  "source_predictions": "models/walkforward/preds/blend_b1.json",
+  "why": "The harness fits one temperature per fold on that fold's inner-validation year; deployment has no held-out year and applies one fixed value to every prediction. They are different scorers and only the second ships, so the harness's pooled ECE does not describe the deployed model. Before this artifact existed the deployed value was the median of the per-fold fits (0.80) -- a rule borrowed from training-BUDGET derivation (scripts.run_walkforward.fixed_budget_from), where a median epoch count is a central tendency of a budget. It has no calibration justification and no harness run validated it.",
+  "selection_rule": "Stated before the numbers were computed: prefer R2, the walk-forward temperature, because it is the only rule that is both fixed at serving time and validated without using the evaluation rows to choose it. R1 only if R2 were unavailable for a structural reason. R3 is reported for context and is not a candidate.",
+  "round_trip_verification": {
+    "checked": "invert each fold's fitted temperature, re-apply it, and re-score: the result must equal the source report's own pooled winner log-loss and ECE at the report's 4 dp",
+    "max_abs_probability_error": 2.220446049250313e-16,
+    "winner_log_loss": 0.6437,
+    "report_winner_log_loss": 0.6437,
+    "ece_10_bins": 0.0124,
+    "report_ece": 0.0124,
+    "passed": true
+  },
+  "fold_years": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "harness_per_fold_temperatures": {
+    "2018": 0.73,
+    "2019": 0.76,
+    "2020": 0.93,
+    "2021": 0.76,
+    "2022": 1.0,
+    "2023": 0.78,
+    "2024": 0.88,
+    "2025": 0.82
+  },
+  "rules": {
+    "per_fold_fitted": {
+      "label": "the form the harness measured (NOT deployable)",
+      "candidate": false,
+      "deployment_temperature": null,
+      "note": "One temperature per fold, fitted on that fold's inner-validation year. Reproduces models/walkforward/blend_b1.json's pooled numbers exactly; it is here so the published harness figures stay visible beside the deployed ones. Deployment cannot do this: there is no held-out year to fit on.",
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6437,
+        "accuracy": 0.6216,
+        "brier": 0.2264,
+        "ece": {
+          "5": 0.0059,
+          "10": 0.0124,
+          "15": 0.0117,
+          "20": 0.0158
+        }
+      },
+      "folds": {
+        "2018": {
+          "temperature": 0.73,
+          "n": 522,
+          "winner_log_loss": 0.6367,
+          "accuracy": 0.6322,
+          "brier": 0.2237,
+          "ece": {
+            "5": 0.0209,
+            "10": 0.0485,
+            "15": 0.0416,
+            "20": 0.0497
+          }
+        },
+        "2019": {
+          "temperature": 0.76,
+          "n": 553,
+          "winner_log_loss": 0.666,
+          "accuracy": 0.5805,
+          "brier": 0.2366,
+          "ece": {
+            "5": 0.0468,
+            "10": 0.064,
+            "15": 0.059,
+            "20": 0.0804
+          }
+        },
+        "2020": {
+          "temperature": 0.93,
+          "n": 492,
+          "winner_log_loss": 0.6519,
+          "accuracy": 0.6423,
+          "brier": 0.2294,
+          "ece": {
+            "5": 0.0406,
+            "10": 0.0606,
+            "15": 0.0728,
+            "20": 0.0667
+          }
+        },
+        "2021": {
+          "temperature": 0.76,
+          "n": 546,
+          "winner_log_loss": 0.674,
+          "accuracy": 0.5733,
+          "brier": 0.2404,
+          "ece": {
+            "5": 0.0554,
+            "10": 0.0723,
+            "15": 0.0809,
+            "20": 0.1031
+          }
+        },
+        "2022": {
+          "temperature": 1.0,
+          "n": 582,
+          "winner_log_loss": 0.6455,
+          "accuracy": 0.6031,
+          "brier": 0.2271,
+          "ece": {
+            "5": 0.0394,
+            "10": 0.0395,
+            "15": 0.044,
+            "20": 0.0527
+          }
+        },
+        "2023": {
+          "temperature": 0.78,
+          "n": 581,
+          "winner_log_loss": 0.6377,
+          "accuracy": 0.6489,
+          "brier": 0.2237,
+          "ece": {
+            "5": 0.0231,
+            "10": 0.0461,
+            "15": 0.0414,
+            "20": 0.0603
+          }
+        },
+        "2024": {
+          "temperature": 0.88,
+          "n": 593,
+          "winner_log_loss": 0.6326,
+          "accuracy": 0.6324,
+          "brier": 0.2212,
+          "ece": {
+            "5": 0.0307,
+            "10": 0.0311,
+            "15": 0.04,
+            "20": 0.0529
+          }
+        },
+        "2025": {
+          "temperature": 0.82,
+          "n": 935,
+          "winner_log_loss": 0.6218,
+          "accuracy": 0.6449,
+          "brier": 0.2167,
+          "ece": {
+            "5": 0.0172,
+            "10": 0.0371,
+            "15": 0.0408,
+            "20": 0.0423
+          }
+        }
+      },
+      "temperature_spread": {
+        "min": 0.73,
+        "max": 1.0,
+        "distinct": [
+          0.73,
+          0.76,
+          0.78,
+          0.82,
+          0.88,
+          0.93,
+          1.0
+        ]
+      }
+    },
+    "R1": {
+      "label": "median of the per-fold fits (the rule that shipped before)",
+      "candidate": true,
+      "deployment_temperature": 0.8,
+      "note": "scripts.run_walkforward.fixed_budget_from's median rule, applied to fit_info.temperature. Fixed at serving time, but the rule is borrowed from training-budget derivation and nothing validated it as a calibration rule.",
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6428,
+        "accuracy": 0.6216,
+        "brier": 0.226,
+        "ece": {
+          "5": 0.0093,
+          "10": 0.0177,
+          "15": 0.0144,
+          "20": 0.0202
+        }
+      },
+      "folds": {
+        "2018": {
+          "temperature": 0.8,
+          "n": 522,
+          "winner_log_loss": 0.6372,
+          "accuracy": 0.6322,
+          "brier": 0.2238,
+          "ece": {
+            "5": 0.0243,
+            "10": 0.0278,
+            "15": 0.0394,
+            "20": 0.0577
+          }
+        },
+        "2019": {
+          "temperature": 0.8,
+          "n": 553,
+          "winner_log_loss": 0.6648,
+          "accuracy": 0.5805,
+          "brier": 0.2362,
+          "ece": {
+            "5": 0.0416,
+            "10": 0.0582,
+            "15": 0.049,
+            "20": 0.0672
+          }
+        },
+        "2020": {
+          "temperature": 0.8,
+          "n": 492,
+          "winner_log_loss": 0.6519,
+          "accuracy": 0.6423,
+          "brier": 0.2291,
+          "ece": {
+            "5": 0.0377,
+            "10": 0.0483,
+            "15": 0.0641,
+            "20": 0.0742
+          }
+        },
+        "2021": {
+          "temperature": 0.8,
+          "n": 546,
+          "winner_log_loss": 0.6726,
+          "accuracy": 0.5733,
+          "brier": 0.2398,
+          "ece": {
+            "5": 0.0439,
+            "10": 0.0728,
+            "15": 0.067,
+            "20": 0.0897
+          }
+        },
+        "2022": {
+          "temperature": 0.8,
+          "n": 582,
+          "winner_log_loss": 0.641,
+          "accuracy": 0.6031,
+          "brier": 0.2253,
+          "ece": {
+            "5": 0.043,
+            "10": 0.0559,
+            "15": 0.043,
+            "20": 0.0579
+          }
+        },
+        "2023": {
+          "temperature": 0.8,
+          "n": 581,
+          "winner_log_loss": 0.6374,
+          "accuracy": 0.6489,
+          "brier": 0.2236,
+          "ece": {
+            "5": 0.0271,
+            "10": 0.0366,
+            "15": 0.0318,
+            "20": 0.0534
+          }
+        },
+        "2024": {
+          "temperature": 0.8,
+          "n": 593,
+          "winner_log_loss": 0.6325,
+          "accuracy": 0.6324,
+          "brier": 0.2211,
+          "ece": {
+            "5": 0.0154,
+            "10": 0.0304,
+            "15": 0.0419,
+            "20": 0.0521
+          }
+        },
+        "2025": {
+          "temperature": 0.8,
+          "n": 935,
+          "winner_log_loss": 0.6219,
+          "accuracy": 0.6449,
+          "brier": 0.2167,
+          "ece": {
+            "5": 0.0156,
+            "10": 0.0314,
+            "15": 0.0372,
+            "20": 0.0417
+          }
+        }
+      },
+      "temperature_spread": {
+        "min": 0.8,
+        "max": 0.8,
+        "distinct": [
+          0.8
+        ]
+      }
+    },
+    "R2": {
+      "label": "walk-forward: fold Y uses a temperature fitted on folds < Y",
+      "candidate": true,
+      "deployment_temperature": 0.85,
+      "note": "The first fold (2018) has no earlier fold and keeps the harness's own inner-validation fit; every later fold's temperature is fitted on the pooled out-of-fold rows of the strictly earlier folds only, which is exactly the information a deployed model has. The pooled numbers here are therefore an honest out-of-sample score for the fixed-temperature form. `deployment_temperature` is the same rule run one fold past the last: at serving time every fold is 'before', so it is fitted on all of them.",
+      "per_fold_temperature": {
+        "2018": 0.73,
+        "2019": 0.72,
+        "2020": 0.87,
+        "2021": 0.86,
+        "2022": 0.92,
+        "2023": 0.86,
+        "2024": 0.86,
+        "2025": 0.86
+      },
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6432,
+        "accuracy": 0.6216,
+        "brier": 0.2262,
+        "ece": {
+          "5": 0.0034,
+          "10": 0.0108,
+          "15": 0.0108,
+          "20": 0.0155
+        }
+      },
+      "folds": {
+        "2018": {
+          "temperature": 0.73,
+          "n": 522,
+          "winner_log_loss": 0.6367,
+          "accuracy": 0.6322,
+          "brier": 0.2237,
+          "ece": {
+            "5": 0.0209,
+            "10": 0.0485,
+            "15": 0.0416,
+            "20": 0.0497
+          }
+        },
+        "2019": {
+          "temperature": 0.72,
+          "n": 553,
+          "winner_log_loss": 0.6677,
+          "accuracy": 0.5805,
+          "brier": 0.2373,
+          "ece": {
+            "5": 0.0539,
+            "10": 0.0612,
+            "15": 0.0618,
+            "20": 0.0757
+          }
+        },
+        "2020": {
+          "temperature": 0.87,
+          "n": 492,
+          "winner_log_loss": 0.6517,
+          "accuracy": 0.6423,
+          "brier": 0.2292,
+          "ece": {
+            "5": 0.0394,
+            "10": 0.0606,
+            "15": 0.059,
+            "20": 0.0703
+          }
+        },
+        "2021": {
+          "temperature": 0.86,
+          "n": 546,
+          "winner_log_loss": 0.6709,
+          "accuracy": 0.5733,
+          "brier": 0.2391,
+          "ece": {
+            "5": 0.0214,
+            "10": 0.0593,
+            "15": 0.0626,
+            "20": 0.0669
+          }
+        },
+        "2022": {
+          "temperature": 0.92,
+          "n": 582,
+          "winner_log_loss": 0.6436,
+          "accuracy": 0.6031,
+          "brier": 0.2263,
+          "ece": {
+            "5": 0.037,
+            "10": 0.0373,
+            "15": 0.0384,
+            "20": 0.0511
+          }
+        },
+        "2023": {
+          "temperature": 0.86,
+          "n": 581,
+          "winner_log_loss": 0.637,
+          "accuracy": 0.6489,
+          "brier": 0.2234,
+          "ece": {
+            "5": 0.0267,
+            "10": 0.0395,
+            "15": 0.0303,
+            "20": 0.0495
+          }
+        },
+        "2024": {
+          "temperature": 0.86,
+          "n": 593,
+          "winner_log_loss": 0.6325,
+          "accuracy": 0.6324,
+          "brier": 0.2211,
+          "ece": {
+            "5": 0.0284,
+            "10": 0.0288,
+            "15": 0.0486,
+            "20": 0.0479
+          }
+        },
+        "2025": {
+          "temperature": 0.86,
+          "n": 935,
+          "winner_log_loss": 0.622,
+          "accuracy": 0.6449,
+          "brier": 0.2167,
+          "ece": {
+            "5": 0.0231,
+            "10": 0.0398,
+            "15": 0.0498,
+            "20": 0.0569
+          }
+        }
+      },
+      "temperature_spread": {
+        "min": 0.72,
+        "max": 0.92,
+        "distinct": [
+          0.72,
+          0.73,
+          0.86,
+          0.87,
+          0.92
+        ]
+      }
+    },
+    "R3": {
+      "label": "one temperature fitted on every out-of-fold row",
+      "candidate": false,
+      "deployment_temperature": 0.85,
+      "note": "Reported for context only: it is fitted on the very rows it is then scored on, so its pooled metrics are in-sample on the evaluation rows and optimistic. Its FITTED VALUE coincides with R2's deployment temperature -- same rows, same grid -- which is arithmetic, not a change of rule: R2 and R3 differ in which rows are SCORED, and R2 never scores a row whose temperature saw it.",
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6427,
+        "accuracy": 0.6216,
+        "brier": 0.226,
+        "ece": {
+          "5": 0.0055,
+          "10": 0.013,
+          "15": 0.0142,
+          "20": 0.0164
+        }
+      },
+      "folds": {
+        "2018": {
+          "temperature": 0.85,
+          "n": 522,
+          "winner_log_loss": 0.6379,
+          "accuracy": 0.6322,
+          "brier": 0.224,
+          "ece": {
+            "5": 0.0219,
+            "10": 0.028,
+            "15": 0.0403,
+            "20": 0.0572
+          }
+        },
+        "2019": {
+          "temperature": 0.85,
+          "n": 553,
+          "winner_log_loss": 0.6637,
+          "accuracy": 0.5805,
+          "brier": 0.2357,
+          "ece": {
+            "5": 0.026,
+            "10": 0.0488,
+            "15": 0.0436,
+            "20": 0.0523
+          }
+        },
+        "2020": {
+          "temperature": 0.85,
+          "n": 492,
+          "winner_log_loss": 0.6517,
+          "accuracy": 0.6423,
+          "brier": 0.2291,
+          "ece": {
+            "5": 0.0388,
+            "10": 0.0559,
+            "15": 0.0552,
+            "20": 0.0745
+          }
+        },
+        "2021": {
+          "temperature": 0.85,
+          "n": 546,
+          "winner_log_loss": 0.6711,
+          "accuracy": 0.5733,
+          "brier": 0.2392,
+          "ece": {
+            "5": 0.029,
+            "10": 0.0588,
+            "15": 0.0596,
+            "20": 0.0702
+          }
+        },
+        "2022": {
+          "temperature": 0.85,
+          "n": 582,
+          "winner_log_loss": 0.642,
+          "accuracy": 0.6031,
+          "brier": 0.2257,
+          "ece": {
+            "5": 0.0376,
+            "10": 0.0448,
+            "15": 0.0386,
+            "20": 0.0448
+          }
+        },
+        "2023": {
+          "temperature": 0.85,
+          "n": 581,
+          "winner_log_loss": 0.6371,
+          "accuracy": 0.6489,
+          "brier": 0.2234,
+          "ece": {
+            "5": 0.0266,
+            "10": 0.0394,
+            "15": 0.0283,
+            "20": 0.0528
+          }
+        },
+        "2024": {
+          "temperature": 0.85,
+          "n": 593,
+          "winner_log_loss": 0.6325,
+          "accuracy": 0.6324,
+          "brier": 0.2211,
+          "ece": {
+            "5": 0.0276,
+            "10": 0.0297,
+            "15": 0.0504,
+            "20": 0.0457
+          }
+        },
+        "2025": {
+          "temperature": 0.85,
+          "n": 935,
+          "winner_log_loss": 0.6219,
+          "accuracy": 0.6449,
+          "brier": 0.2167,
+          "ece": {
+            "5": 0.0203,
+            "10": 0.0371,
+            "15": 0.0501,
+            "20": 0.0558
+          }
+        }
+      },
+      "temperature_spread": {
+        "min": 0.85,
+        "max": 0.85,
+        "distinct": [
+          0.85
+        ]
+      }
+    }
+  },
+  "deployed": {
+    "rule": "R2",
+    "temperature": 0.85,
+    "derivation": "walk-forward temperature: fitted by mma.models.train_loop.fit_temperature on the pooled out-of-fold pre-temperature predictions of every fold before the one being served (at deployment, all of them), via scripts/derive_blend_temperature.py",
+    "honest_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6432,
+      "accuracy": 0.6216,
+      "brier": 0.2262,
+      "ece": {
+        "5": 0.0034,
+        "10": 0.0108,
+        "15": 0.0108,
+        "20": 0.0155
+      }
+    },
+    "honest_pooled_is": "R2's walk-forward pooled score -- the out-of-sample estimate of what this fixed-temperature procedure achieves. It is the number the project publishes for the deployed model.",
+    "in_sample_at_the_deployed_value": {
+      "n": 4804,
+      "winner_log_loss": 0.6427,
+      "accuracy": 0.6216,
+      "brier": 0.226,
+      "ece": {
+        "5": 0.0055,
+        "10": 0.013,
+        "15": 0.0142,
+        "20": 0.0164
+      }
+    },
+    "in_sample_note": "The same rows scored at the deployed temperature itself. Optimistic, because that temperature was fitted on them; recorded so the gap between the honest and the flattering figure is visible.",
+    "supersedes": {
+      "rule": "R1",
+      "temperature": 0.8,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6428,
+        "accuracy": 0.6216,
+        "brier": 0.226,
+        "ece": {
+          "5": 0.0093,
+          "10": 0.0177,
+          "15": 0.0144,
+          "20": 0.0202
+        }
+      },
+      "note": "What the deployed artifact carried before this derivation, re-scored here for the first time."
+    },
+    "vs_harness_form": {
+      "winner_log_loss": -0.0005,
+      "ece_10_bins": -0.0016,
+      "convention": "deployed minus harness; negative = the deployed form is better"
+    },
+    "seed_set": "seeds 0-4 only. models/walkforward/preds/ carries a dump for blend_b1 alone, so the deployed form cannot be re-scored on the seeds 5-9 and 10-14 reports; its ECE here is one measurement, not a three-seed-set mean like the amended rule-4 gate's arms."
+  }
+}

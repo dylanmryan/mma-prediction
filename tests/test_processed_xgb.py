@@ -7,11 +7,13 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 METRICS = ROOT / "models" / "xgb_metrics_val.json"
-# The decision the DEPLOYED budget came from. It is per feature table --
-# refit_decision.json is the SP1 46-column table's, refit_decision_v3.json
-# the SP2 `base,external` table's -- so this tracks whichever set the train
-# scripts default to (their REPORT is that set's B report).
-REFIT_DECISION = ROOT / "models" / "walkforward" / "refit_decision_v3.json"
+# The decision the DEPLOYED budget came from. It is per feature table AND per
+# fit shape -- refit_decision.json is the SP1 46-column table's,
+# refit_decision_v3.json the SP2 `base,external` table's single fit,
+# refit_decision_b1.json the SP2.2 S1 table's five-seed ensemble -- so this
+# tracks whichever set the train scripts default to (their REPORT is that
+# set's B report).
+REFIT_DECISION = ROOT / "models" / "walkforward" / "refit_decision_b1.json"
 
 pytestmark = pytest.mark.skipif(
     not METRICS.exists(),
@@ -19,9 +21,24 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_artifacts_exist():
+def test_the_seed_ensemble_artifacts_exist():
+    """Since SP2.2 each head is a five-seed ensemble and all fifteen boosters
+    are half of what serves -- a missing one is half a member of the blend."""
+    from scripts.train_xgb import SEEDS
+
     for head in ("winner", "method", "round"):
-        assert (ROOT / "models" / f"xgb_{head}.json").exists()
+        for seed in SEEDS:
+            assert (ROOT / "models" / f"xgb_{head}_seed{seed}.json").exists()
+    # the pre-SP2.2 single-fit artifacts are gone, not merely unused
+    for head in ("winner", "method", "round"):
+        assert not (ROOT / "models" / f"xgb_{head}.json").exists()
+
+
+def test_the_metrics_file_records_the_seed_ensemble():
+    from scripts.train_xgb import SEEDS
+
+    metrics = json.loads(METRICS.read_text())
+    assert metrics["seeds"] == list(SEEDS)
 
 
 def test_refit_metrics_provenance_matches_harness_and_decision():

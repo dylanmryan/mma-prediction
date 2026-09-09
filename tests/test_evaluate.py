@@ -8,6 +8,7 @@ from mma.evaluate import (
     joint_outcome_log_loss,
     log_loss,
     macro_f1,
+    reliability_curve,
 )
 
 
@@ -83,3 +84,48 @@ def test_joint_outcome_log_loss_skips_unknown_method():
         ["ko_tko", "submission", "decision"], ["1", "2", "3", "45"],
     )
     assert got == pytest.approx(-np.log(0.5 * 0.6))
+
+
+# --- reliability_curve ------------------------------------------------------
+
+
+def test_reliability_curve_reconstructs_the_ece_it_summarises():
+    """The gate SP2.2 applies compares two ECEs; this is the table each of them
+    collapses, so it has to collapse back to exactly the same number."""
+    rng = np.random.default_rng(0)
+    p = rng.uniform(0.05, 0.95, size=500)
+    y = (rng.uniform(size=500) < p).astype(float)
+    for n_bins in (5, 10, 15, 20):
+        rows = reliability_curve(y, p, n_bins=n_bins)
+        assert len(rows) == n_bins
+        rebuilt = sum(r["weight"] * abs(r["gap"]) for r in rows if r["n"])
+        assert rebuilt == pytest.approx(expected_calibration_error(y, p, n_bins=n_bins))
+        assert sum(r["n"] for r in rows) == len(y)
+
+
+def test_reliability_curve_keeps_empty_bins_so_two_curves_stay_row_comparable():
+    y = np.array([1.0, 0.0, 1.0, 1.0])
+    p = np.array([0.42, 0.44, 0.46, 0.48])  # all in bin 4 of 10
+    rows = reliability_curve(y, p, n_bins=10)
+    assert [r["n"] for r in rows] == [0, 0, 0, 0, 4, 0, 0, 0, 0, 0]
+    empty = rows[0]
+    assert empty["mean_pred"] is None and empty["empirical_rate"] is None and empty["gap"] is None
+    filled = rows[4]
+    assert (filled["lo"], filled["hi"]) == (0.4, 0.5)
+    assert filled["weight"] == pytest.approx(1.0)
+    assert filled["mean_pred"] == pytest.approx(0.45)
+    assert filled["empirical_rate"] == pytest.approx(0.75)
+    assert filled["gap"] == pytest.approx(0.45 - 0.75)
+
+
+def test_reliability_curve_bins_the_endpoints_the_way_ece_does():
+    """0.0 lands in the first bin and 1.0 in the last -- `np.digitize` against
+    the interior edges, clipped, exactly as expected_calibration_error does."""
+    rows = reliability_curve([0.0, 1.0], [0.0, 1.0], n_bins=10)
+    assert rows[0]["n"] == 1 and rows[-1]["n"] == 1
+    assert sum(r["n"] for r in rows) == 2
+
+
+def test_reliability_curve_rejects_mismatched_lengths():
+    with pytest.raises(ValueError, match="same length"):
+        reliability_curve([1.0, 0.0], [0.5])

@@ -1,0 +1,20 @@
+{
+  "n_reports": 3,
+  "pooled_winner_log_loss": [
+    0.6453,
+    0.6451,
+    0.6452
+  ],
+  "sigma_seed": 9.999999999998899e-05,
+  "bar": 0.003,
+  "reports": [
+    "models/walkforward/blend_b0_seeds0.json",
+    "models/walkforward/blend_b0_seeds5.json",
+    "models/walkforward/blend_b0_seeds10.json"
+  ],
+  "seed_sets": [
+    "0,1,2,3,4",
+    "5,6,7,8,9",
+    "10,11,12,13,14"
+  ]
+}
