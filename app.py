@@ -20,8 +20,6 @@ import streamlit as st
 from mma.explain import contributions, humanize, load_boosters
 from mma.inference import (
     BLEND_REPORT,
-    BLEND_TEMPERATURE,
-    BLEND_WEIGHT,
     BlendedPredictor,
     apply_prior_correction,
     build_matchup,
@@ -52,28 +50,32 @@ def _fold_span(fold_years: list) -> str:
     return f"{min(fold_years)}-{max(fold_years)} (+{max(fold_years) + 1})"
 
 
-def model_card_text() -> str:
+def model_card_text(weight: float, temperature: float) -> str:
     """Model-card caption built from the committed metrics files and the
     deployed blend's own harness report.
 
-    The deployed scorer is a BLEND, so the card's headline numbers are the
-    blend's -- models/walkforward/blend_b1.json, the report SP2.2's decision
-    shipped -- and the two members' own pooled numbers are shown beside it, as
-    the comparison that makes the case for blending them. Under the
-    refit_through recipe the metrics files carry no held-out slice of their
-    own; they carry the harness evidence behind each member's budget, and the
-    training cutoff. Falls back to a numberless card if a file is missing or
-    unreadable.
+    `weight`/`temperature` are the deployed scorer's own committed
+    configuration (`models/blend.json`, via `mma.inference.load_blend_config`
+    -- the caller passes `predictor.weight`/`predictor.temperature` so the
+    card names the numbers actually serving rather than a re-read that could
+    disagree with them). The deployed scorer is a BLEND, so the card's
+    headline numbers are the blend's -- models/walkforward/blend_b1.json, the
+    report SP2.2's decision shipped -- and the two members' own pooled
+    numbers are shown beside it, as the comparison that makes the case for
+    blending them. Under the refit_through recipe the metrics files carry no
+    held-out slice of their own; they carry the harness evidence behind each
+    member's budget, and the training cutoff. Falls back to a numberless
+    card if a file is missing or unreadable.
     """
     torch_m = _read_json(TORCH_METRICS)
     xgb_m = _read_json(XGB_METRICS)
     elo_m = _read_json(ELO_WALKFORWARD).get("pooled", {})
     blend = _read_json(BLEND_REPORT)
     head = (
-        f"Model card: a blend — {BLEND_WEIGHT:g}/{1 - BLEND_WEIGHT:g} average of a "
+        f"Model card: a blend — {weight:g}/{1 - weight:g} average of a "
         "5-seed XGBoost ensemble and a 5-seed multi-task net "
         "(winner/method/finish-round), temperature-calibrated after averaging "
-        f"(T={BLEND_TEMPERATURE:g}). ")
+        f"(T={temperature:g}). ")
     tail = ("The prospective track record (predictions/track_record.json) is the "
             "only true holdout. Method and round probabilities assume independence "
             "from the winner, and predictions are symmetrized across both fighter "
@@ -142,8 +144,9 @@ def load_everything():
     fighters = pd.read_parquet(PROCESSED / "fighters.parquet")
     ratings = pd.read_parquet(PROCESSED / "ratings.parquet")
     snapshots = build_snapshots(fights, stats, ratings)
-    # The deployed scorer: both members, the deployed weight and the deployed
-    # post-average temperature (mma.inference.BLEND_WEIGHT / BLEND_TEMPERATURE).
+    # The deployed scorer: both members, plus the deployed weight and
+    # post-average temperature it was loaded with (models/blend.json, via
+    # mma.inference.load_blend_config -- see predictor.weight/.temperature).
     predictor = BlendedPredictor.load()
     as_of = fights["date"].max()
     weight_classes = sorted(fights["weight_class"].dropna().unique().tolist())
@@ -273,7 +276,7 @@ if name_a and name_b and name_a != name_b:
         st.bar_chart(chart, horizontal=True, height=260)
         st.caption(
             "Factor attributions from the XGBoost half of the blend (TreeSHAP, "
-            f"exact, averaged over its 5 seeds) — {BLEND_WEIGHT:.0%} of the "
+            f"exact, averaged over its 5 seeds) — {predictor.weight:.0%} of the "
             "probability above. The neural half is not decomposed, so read "
             "these as what the tree half saw rather than the whole story."
         )
@@ -438,4 +441,4 @@ if MARKET_BENCHMARK.exists():
     )
 
 st.divider()
-st.caption(model_card_text())
+st.caption(model_card_text(predictor.weight, predictor.temperature))

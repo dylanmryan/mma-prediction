@@ -304,6 +304,25 @@ budgets re-derived on S1 (`refit_decision_b1.json`): torch 6 epochs at
 temperature 1.15, XGB 109/73/71 trees on each of five seeds; blend weight
 0.5, blend temperature **0.80**. Suite 700 passed, 1 skipped.
 
+**Pre-merge review addendum (same branch, before merge): `5aa33460ef40` was
+itself incomplete.** The blend weight and post-average temperature above
+were module constants (`mma.inference.BLEND_WEIGHT` / `BLEND_TEMPERATURE`),
+not artifacts, so `MODEL_ARTIFACT_GLOBS` did not hash them: editing either
+number would have changed every recorded probability while leaving the model
+hash byte-identical -- the same failure the artifact-hash design replaced
+git-sha stamping to prevent, reintroduced one level down. Fix: both numbers
+are now derived by `scripts/build_blend_config.py` from
+`models/walkforward/blend_b1.json` (the same report and the same median rule
+described above) and committed to `models/blend.json`, which
+`MODEL_ARTIFACT_GLOBS` now hashes. `BlendedPredictor.load` reads the artifact
+by default; the module constants are deleted rather than kept as a silent
+fallback. **Deployed hash after: `6207d19d615b`** (was `5aa33460ef40`) --
+the weight (0.5) and temperature (0.80) are unchanged, so every prediction
+this produces is numerically identical to before; only where the two numbers
+live moved, from code into a hashed, committed artifact. Suite 707 passed
+(5 new tests for the artifact-vs-report consistency, 2 for the hash's
+sensitivity to the artifact), 1 skipped.
+
 **Two bugs found while deploying, both silent.**
 1. `scripts/build_features.py` defaulted to `base` only while the weekly
    Action invokes it bare, so the next data refresh would have rebuilt the
