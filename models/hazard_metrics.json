@@ -1,0 +1,51 @@
+{
+  "mode": "refit_through",
+  "train_through": "2026-08-08",
+  "n_train_fights": 11238,
+  "n_hazard_rows": 25336,
+  "n_decision_rows": 4925,
+  "budget": {
+    "hazard": 138,
+    "decision": 114
+  },
+  "harness_report": "models/walkforward/hybrid_e2.json",
+  "harness_features_max_date": "2026-08-08",
+  "harness_fold_years": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "walkforward_pooled": {
+    "n": 4804,
+    "winner_log_loss": 0.6437,
+    "accuracy": 0.6216,
+    "brier": 0.2264,
+    "ece": 0.0124,
+    "joint_log_loss": 2.1432,
+    "method_macro_f1": 0.3398,
+    "round_macro_f1": 0.1686,
+    "n_method": 4792,
+    "n_round": 2446,
+    "zero_mass_cell_fraction": 0.0
+  },
+  "joint": {
+    "n": 4804,
+    "joint_log_loss": 2.1432,
+    "method_macro_f1": 0.3398,
+    "round_macro_f1": 0.1686,
+    "zero_mass_cell_fraction": 0.0,
+    "source": "walk-forward pooled (models/walkforward/hybrid_e2.json); these are the HYBRID's numbers -- the simulator supplies P(method, round | winner) and the blend supplies the winner, so neither member has a walk-forward number of its own"
+  }
+}

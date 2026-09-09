@@ -13,6 +13,7 @@ import pytest
 
 from mma.models.xgb import feature_frame
 
+import scripts.train_hazard as train_hazard
 import scripts.train_torch as train_torch
 import scripts.train_xgb as train_xgb
 
@@ -201,6 +202,127 @@ def test_torch_refit_metrics_shape():
     }
 
 
+# --- hazard / decision (the simulator's two members, SP3) ------------------
+
+def test_hazard_parse_budget_shapes():
+    assert train_hazard.parse_budget('{"hazard": 138, "decision": 114}') == {
+        "hazard": 138, "decision": 114,
+    }
+    assert train_hazard.parse_budget("120") == {"hazard": 120, "decision": 120}
+    with pytest.raises(ValueError, match="missing"):
+        train_hazard.parse_budget('{"hazard": 138}')
+    with pytest.raises(ValueError, match="extra"):
+        train_hazard.parse_budget('{"hazard": 1, "decision": 1, "winner": 1}')
+    with pytest.raises(ValueError, match="positive"):
+        train_hazard.parse_budget("0")
+
+
+def test_hazard_budget_is_the_committed_report_read_through_the_harness_rule():
+    """The deployed budget must be what the harness report says it is.
+
+    `BUDGET` is a constant so a retrain does not have to parse a report, but a
+    constant that drifts from its source is exactly the failure the artifact
+    hash exists to prevent one level down. This pins the two together.
+    """
+    report = json.loads(train_hazard.REPORT.read_text())
+    assert train_hazard.budget_from_report(report) == train_hazard.BUDGET
+    assert report["config"]["candidate"] == "hybrid"
+    assert report["config"]["seeds"] == ",".join(str(s) for s in train_hazard.SEEDS)
+
+
+def test_hazard_budget_from_report_applies_median_over_seeds_then_folds():
+    report = {"fit_info": {"hazard": [
+        {"hazard": {"best_iteration": [10, 20, 30]}, "decision": {"best_iteration": 5}},
+        {"hazard": {"best_iteration": [40, 50, 60]}, "decision": {"best_iteration": 9}},
+        {"hazard": {"best_iteration": [70, 80, 90]}, "decision": {"best_iteration": 7}},
+    ]}}
+    # per fold: 20, 50, 80 -> median 50 -> +1; decisions 5, 9, 7 -> 7 -> +1
+    assert train_hazard.budget_from_report(report) == {"hazard": 51, "decision": 8}
+
+
+def test_hazard_head_path_is_one_artifact_per_member_per_seed():
+    for head in train_hazard.HEADS:
+        for seed in train_hazard.SEEDS:
+            path = train_hazard.head_path(Path("models"), head, seed)
+            assert path.name == f"xgb_{head}_seed{seed}.json"
+
+
+def test_hazard_seeds_match_the_rest_of_the_deployment():
+    assert train_hazard.SEEDS == train_xgb.SEEDS == (0, 1, 2, 3, 4)
+
+
+def _hazard_frames(n=240):
+    rng = np.random.default_rng(0)
+    scheduled = rng.choice([3, 5], size=n, p=[0.85, 0.15])
+    method = np.array([["ko_tko", "submission", "decision"][i % 3] for i in range(n)])
+    finish = np.array([0 if m == "decision" else int(rng.integers(1, s + 1))
+                       for m, s in zip(method, scheduled)])
+    bucket = np.where(method == "decision", None,
+                      np.where(finish >= 4, "45", finish.astype(str)))
+    features = pd.DataFrame({
+        "fight_id": [f"f{i}" for i in range(n)],
+        "date": pd.date_range("2015-01-01", periods=n, freq="7D"),
+        "swapped": False,
+        "weight_class": pd.array(["Lightweight"] * n, dtype="string"),
+        "scheduled_rounds": pd.array(scheduled, dtype="Int64"),
+        "elo_diff": rng.normal(size=n),
+        "reach_diff": rng.normal(size=n),
+        "y_winner": rng.integers(0, 2, size=n),
+        "y_method": pd.array(method, dtype="string"),
+        "y_finish_round": pd.array(bucket, dtype="string"),
+    })
+    fights = pd.DataFrame({
+        "fight_id": features["fight_id"],
+        "finish_round": pd.array([None if m == "decision" else int(r)
+                                  for m, r in zip(method, finish)], dtype="Int64"),
+        "scheduled_rounds": features["scheduled_rounds"],
+    })
+    return features, fights
+
+
+def test_hazard_refit_writes_a_model_per_member_per_seed_and_they_differ(tmp_path):
+    """End-to-end on a tiny frame: ten artifacts, and the five hazard models
+    must not be five copies of one fit -- that would be a seed ensemble in
+    name only."""
+    features, fights = _hazard_frames()
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps({
+        "pooled": {**POOLED, "zero_mass_cell_fraction": 0.0}, "fold_years": FOLD_YEARS,
+        "config": {"features_max_date": HARNESS_MAX_DATE},
+    }))
+    args = argparse.Namespace(refit_through="latest",
+                              budget={"hazard": 4, "decision": 4}, report=report)
+    metrics, models = train_hazard.run_refit(features, fights, args, tmp_path)
+
+    written = sorted(q.name for q in tmp_path.glob("xgb_*_seed*.json"))
+    assert written == sorted(f"xgb_{head}_seed{seed}.json"
+                             for head in train_hazard.HEADS for seed in train_hazard.SEEDS)
+    x = feature_frame(
+        train_hazard.build_hazard_rows(features, fights).drop(columns=["hazard_label"]))
+    probs = [model.predict_proba(x) for model in models["hazard"]]
+    assert not all(np.array_equal(probs[0], other) for other in probs[1:])
+    assert metrics["n_train_fights"] == len(features)
+    assert metrics["n_hazard_rows"] > len(features)  # one row per round fought
+    assert metrics["n_decision_rows"] == int((features["y_method"] == "decision").sum())
+
+
+def test_hazard_refit_metrics_shape():
+    pooled = {**POOLED, "joint_log_loss": 2.1432, "zero_mass_cell_fraction": 0.0}
+    out = train_hazard.refit_metrics(
+        "2026-08-08", {"fights": 11238, "hazard": 25336, "decision": 4925},
+        {"hazard": 138, "decision": 114}, "models/walkforward/hybrid_e2.json",
+        pooled, HARNESS_MAX_DATE, FOLD_YEARS)
+    assert out["mode"] == "refit_through" and out["train_through"] == "2026-08-08"
+    assert out["n_train_fights"] == 11238
+    assert out["n_hazard_rows"] == 25336 and out["n_decision_rows"] == 4925
+    assert out["budget"] == {"hazard": 138, "decision": 114}
+    assert out["seeds"] == list(train_hazard.SEEDS)
+    assert out["harness_fold_years"] == FOLD_YEARS
+    assert out["joint"]["joint_log_loss"] == 2.1432
+    # the simulator supplies no winner -- the blend does, so no winner block
+    assert "winner" not in out
+
+
 # --- shared plumbing -------------------------------------------------------
 
 @pytest.mark.parametrize("module", [train_xgb, train_torch])
@@ -216,7 +338,7 @@ def test_resolve_mode(module):
         module.resolve_mode(_args(refit_through="latest", train_end="2021-01-01"))
 
 
-@pytest.mark.parametrize("module", [train_xgb, train_torch])
+@pytest.mark.parametrize("module", [train_xgb, train_torch, train_hazard])
 def test_stale_harness_warning(module):
     # training data no newer than the harness saw -> no warning
     assert module.stale_harness_warning("2026-08-08", "2026-08-08") is None
@@ -228,7 +350,7 @@ def test_stale_harness_warning(module):
     assert "scripts/run_walkforward.py" in warning
 
 
-@pytest.mark.parametrize("module", [train_xgb, train_torch])
+@pytest.mark.parametrize("module", [train_xgb, train_torch, train_hazard])
 def test_refit_cutoff(module):
     features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-08-08", "2024-05-05"])})
     assert module.refit_cutoff(features, "latest") == pd.Timestamp("2026-08-08")
