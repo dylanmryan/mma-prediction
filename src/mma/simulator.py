@@ -210,6 +210,13 @@ def simulate(
     # One draw per (run, round), resolved against the round's cumulative
     # distribution: `draws[i, r]` is the class index round r produced in run i.
     cumulative = np.cumsum(hazard[:n_rounds], axis=1)
+    # A row's cumsum can stop a few ulps short of 1 -- `_validate` allows 1e-6,
+    # and averaging several seeds' softmax rows lands there routinely. A
+    # uniform falling in that gap would be counted past the last class, i.e.
+    # as a sixth outcome that does not exist. Pinning the final edge at 1.0
+    # gives the residual to `survive`, which is what an inverse-CDF sampler
+    # should do with it.
+    cumulative[:, -1] = 1.0
     uniforms = rng.random((n_runs, n_rounds))
     draws = (uniforms[:, :, None] >= cumulative[None, :, :]).sum(axis=2)
 

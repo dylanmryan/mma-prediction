@@ -292,3 +292,32 @@ def test_ten_thousand_runs_stay_cheap_enough_for_a_walk_forward():
     for _ in range(10):
         simulate(hazard, 0.6, 5, N, rng)
     assert (time.perf_counter() - start) / 10 < 0.05
+
+
+# --------------------------------------------------------------------------
+# the last bucket absorbs the float residual
+# --------------------------------------------------------------------------
+
+class _FixedRng:
+    """A generator that always draws the same value, so the residual gap at
+    the top of a round's cumulative distribution can be hit on purpose."""
+
+    def __init__(self, value):
+        self.value = float(value)
+
+    def random(self, shape):
+        return np.full(shape, self.value)
+
+
+def test_a_draw_above_the_cumulative_total_stays_inside_the_class_range():
+    """A hazard row whose floating-point cumsum stops a hair short of 1 leaves
+    a gap at the top, and a uniform landing in it must read as `survive` -- the
+    last class -- rather than as a sixth class that does not exist. Averaging
+    several seeds' softmax rows makes rows like this routine, and the failure
+    was not a wrong number but a crash inside the bincount."""
+    row = np.array([0.1, 0.1, 0.1, 0.1, 0.6]) * (1 - 1e-7)
+    hazard = np.tile(row, (3, 1))
+    assert hazard.sum(axis=1)[0] < 1.0
+    out = simulate(hazard, 0.5, 3, 100, _FixedRng(1 - 1e-9))
+    assert out.finish_counts.sum() == 0
+    assert out.decision_counts.sum() == 100
