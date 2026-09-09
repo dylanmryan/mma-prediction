@@ -25,6 +25,7 @@ from sklearn.isotonic import IsotonicRegression
 from mma.blend import LOGIT_EPS, apply_temperature, blend_heads, logit, mask_round_45
 from mma.hazard import (
     HAZARD_CLASSES, build_decision_rows, build_hazard_rows, mirror_corners,
+    round_frame,
 )
 from mma.joint import (
     compose_joint_cells, impose_winner_marginal, marginals_from_cells,
@@ -34,7 +35,10 @@ from mma.models.train_loop import (
     METHOD_CLASSES, ROUND_CLASSES, encode_targets, fit_temperature, predict, train_one,
 )
 from mma.models.xgb import feature_frame, train_binary, train_multiclass
-from mma.simulator import simulate
+from mma.simulator import (
+    DEFAULT_ALPHA, DEFAULT_N_RUNS, DEFAULT_ROUNDS, DEFAULT_SIM_SEED,
+    mean_over_seeds, normalise_rows, simulate_fights,
+)
 from mma.tensors import Preprocessor
 from mma.walkforward import Fold
 
@@ -395,43 +399,13 @@ class BlendCandidate:
 # The round-by-round simulator as a harness candidate (SP3)
 # --------------------------------------------------------------------------
 
-#: Fixed by the SP3 plan before any run: 10,000 simulated fights per member
-#: per orientation, and Laplace alpha = 1 over the cells a fight can reach.
-#: Both are part of what a prediction IS, so both are reported in `info`.
-HAZARD_N_RUNS = 10_000
-HAZARD_ALPHA = 1.0
-#: Rounds simulated for the 45 fights with no recorded `scheduled_rounds`.
-#: `mma.hazard` keeps them (their rounds fought are known from the finish) and
-#: leaves the column NA so the model sees it as missing; the simulator still
-#: needs a bound, and 3 is the harness's standing default for a missing
-#: scheduled-round value (`slice_masks`, `TorchCandidate`, `BlendCandidate`).
-HAZARD_DEFAULT_ROUNDS = 3
-
-
-def _round_frame(features: pd.DataFrame, n_rounds: np.ndarray) -> pd.DataFrame:
-    """`features` repeated once per round, with a 1-based `round_no`.
-
-    The prediction-time twin of `hazard.build_hazard_rows`' expansion, and
-    deliberately column-for-column identical to it once the label is dropped:
-    the two frames are concatenated into one model matrix, so a different
-    column order here would be a silently mis-fed model.
-    """
-    counts = np.asarray(n_rounds, dtype=int)
-    out = features.iloc[np.repeat(np.arange(len(features)), counts)].reset_index(drop=True)
-    starts = np.repeat(np.cumsum(counts) - counts, counts)
-    out["round_no"] = np.arange(len(out), dtype=int) - starts + 1
-    return out
-
-
-def _bucket_rounds(array: np.ndarray, n_classes: int = len(ROUND_CLASSES)) -> np.ndarray:
-    """`(2, 2, R)` over rounds 1..R -> `(2, 2, n_classes)` over the harness's
-    round classes, folding rounds 4 and up into the trailing '45' class."""
-    head = n_classes - 1
-    out = np.zeros(array.shape[:2] + (n_classes,), dtype=array.dtype)
-    out[:, :, :min(array.shape[2], head)] = array[:, :, :head]
-    if array.shape[2] > head:
-        out[:, :, head] = array[:, :, head:].sum(axis=2)
-    return out
+#: The simulation parameters the SP3 plan fixed before any run, re-exported
+#: from `mma.simulator` where the served path reads them too. They are the
+#: HARNESS defaults; the deployed values live in `models/simulator.json` and
+#: are hashed, because both are part of what a prediction is.
+HAZARD_N_RUNS = DEFAULT_N_RUNS
+HAZARD_ALPHA = DEFAULT_ALPHA
+HAZARD_DEFAULT_ROUNDS = DEFAULT_ROUNDS
 
 
 @dataclass
@@ -544,8 +518,8 @@ class HazardCandidate:
         # set and the column order are identical across all four.
         haz_frames = [haz_train.drop(columns=["hazard_label"]),
                       haz_val.drop(columns=["hazard_label"]),
-                      _round_frame(sim_feats, n_rounds),
-                      _round_frame(sim_mirror, n_rounds)]
+                      round_frame(sim_feats, n_rounds),
+                      round_frame(sim_mirror, n_rounds)]
         dec_frames = [dec_train.drop(columns=["decision_label"]),
                       dec_val.drop(columns=["decision_label"]),
                       sim_feats, sim_mirror]
@@ -575,49 +549,26 @@ class HazardCandidate:
             iterations["hazard"].append(int(hz.best_iteration))
             iterations["decision"].append(int(dc.best_iteration))
 
-        hazard = _normalise_rows(_mean_over_seeds(hazard_probs))
-        mirrored = _normalise_rows(_mean_over_seeds(mirror_probs))
-        decision = _mean_over_seeds(decision_probs)
-        mirror_dec = _mean_over_seeds(mirror_decision)
+        hazard = normalise_rows(mean_over_seeds(hazard_probs))
+        mirrored = normalise_rows(mean_over_seeds(mirror_probs))
+        decision = mean_over_seeds(decision_probs)
+        mirror_dec = mean_over_seeds(mirror_decision)
 
-        n_classes = len(ROUND_CLASSES)
-        finish = np.zeros((n_sim, 2, 2, n_classes))
-        cards = np.zeros((n_sim, 2))
-        finish_zero = np.zeros((n_sim, 2, 2, n_classes), dtype=bool)
-        cards_zero = np.zeros((n_sim, 2), dtype=bool)
-        starts = np.cumsum(n_rounds) - n_rounds
-        errors, empty, valid = [], 0, 0
-        for i in range(n_sim):
-            rounds = int(n_rounds[i])
-            window = slice(int(starts[i]), int(starts[i]) + rounds)
-            runs = []
-            for probs, p_cards in ((hazard[window], decision[i]), (mirrored[window], mirror_dec[i])):
-                # A fresh generator per orientation from the SAME seed: the
-                # mirrored run must consume an identical random stream, or a
-                # self-mirroring matchup would not average to exactly 0.5.
-                runs.append(simulate(probs, float(p_cards), rounds, self.n_runs,
-                                     np.random.default_rng([self.sim_seed, i]), alpha=self.alpha))
-            straight, flipped = runs
-            # `flipped` is in the mirrored frame, where corner A is this
-            # table's corner B, so its winner axis is reversed before it is
-            # averaged in. Getting this backwards would invert half of every
-            # method and round prediction.
-            finish[i] = 0.5 * (_bucket_rounds(straight.finish_probs)
-                               + _bucket_rounds(flipped.finish_probs)[::-1])
-            cards[i] = 0.5 * (straight.decision_probs + flipped.decision_probs[::-1])
-            raw = (_bucket_rounds(straight.finish_counts) == 0) & (
-                _bucket_rounds(flipped.finish_counts)[::-1] == 0)
-            finish_zero[i] = raw
-            cards_zero[i] = (straight.decision_counts == 0) & (flipped.decision_counts[::-1] == 0)
-            if i < n_eval:  # the diagnostics describe the SCORED rows only
-                reachable = min(rounds, n_classes)
-                empty += int(raw[:, :, :reachable].sum()) + int(cards_zero[i].sum())
-                valid += 4 * reachable + 2
-                errors.extend(
-                    (straight.p_a_wins_standard_error, flipped.p_a_wins_standard_error))
-
-        cells = np.concatenate([finish.reshape(n_sim, -1), cards], axis=1)
-        zero_mass = np.concatenate([finish_zero.reshape(n_sim, -1), cards_zero], axis=1)
+        # The simulation itself, and the corner-averaging that composes the
+        # two orientations into one joint, live in `mma.simulator` -- the
+        # served predictor calls the SAME function, so the deployed hybrid
+        # cannot drift from the one the harness measured.
+        simulated = simulate_fights(
+            hazard, mirrored, decision, mirror_dec, n_rounds,
+            n_runs=self.n_runs, alpha=self.alpha, sim_seed=self.sim_seed,
+            n_round_classes=len(ROUND_CLASSES),
+        )
+        cells, zero_mass = simulated["cells"], simulated["zero_mass"]
+        # The diagnostics describe the SCORED rows only; with calibration on,
+        # the inner-validation rows are simulated too and appended after them.
+        errors = simulated["standard_errors"][:n_eval]
+        empty = int(simulated["n_zero_mass_reachable"][:n_eval].sum())
+        valid = int(simulated["n_reachable_cells"][:n_eval].sum())
 
         temperature = None
         if self.calibrate:
@@ -668,17 +619,6 @@ def _split_frames(matrix: pd.DataFrame, frames: list) -> list:
     """Slice one concatenated model matrix back into its parts, in order."""
     bounds = np.cumsum([0] + [len(f) for f in frames])
     return [matrix.iloc[bounds[i]:bounds[i + 1]] for i in range(len(frames))]
-
-
-def _mean_over_seeds(members: list) -> np.ndarray:
-    """Row-wise mean across seeds; one member is returned untouched."""
-    return np.asarray(members[0]) if len(members) == 1 else np.mean(members, axis=0)
-
-
-def _normalise_rows(probs: np.ndarray) -> np.ndarray:
-    """Rescale each row to sum to 1 -- averaging softmax rows across seeds
-    leaves them a few ulps off, which `simulate` rejects outright."""
-    return probs / probs.sum(axis=1, keepdims=True)
 
 
 def _one_or_all(values: list):

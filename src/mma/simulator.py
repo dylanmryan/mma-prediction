@@ -256,3 +256,144 @@ def simulate(
         n_rounds=n_rounds,
         alpha=float(alpha),
     )
+
+
+# --------------------------------------------------------------------------
+# The ensemble -> joint-cells arithmetic, shared by the evaluated path
+# (`mma.candidates.HazardCandidate`) and the served one
+# (`mma.inference.SimulatorPredictor`).
+#
+# Everything below moves a probability, so it lives in exactly one place.
+# `mma.serving` enforces the same discipline for the feature row: the model
+# that serves has to compute the number the harness measured, and the only
+# way to guarantee that is for both callers to run the same code rather than
+# two copies of it.
+# --------------------------------------------------------------------------
+
+#: Fixed by the SP3 plan before any run: 10,000 simulated fights per member
+#: per orientation, and Laplace alpha = 1 over the cells a fight can reach.
+#: These are the DEFAULTS the harness ran with; the deployed values live in
+#: `models/simulator.json` and are hashed, because both are part of what a
+#: prediction is.
+DEFAULT_N_RUNS = 10_000
+DEFAULT_ALPHA = 1.0
+DEFAULT_SIM_SEED = 0
+#: Rounds simulated for a fight with no recorded `scheduled_rounds` (45 of
+#: them in the training table). `mma.hazard` keeps those fights and leaves the
+#: column NA so the model sees it as missing; the simulator still needs a
+#: bound, and 3 is the project's standing default for a missing scheduled-round
+#: value (`walkforward.slice_masks`, the torch round mask, `mma.blend`).
+DEFAULT_ROUNDS = 3
+
+
+def bucket_rounds(array: np.ndarray, n_classes: int) -> np.ndarray:
+    """`(2, 2, R)` over rounds 1..R -> `(2, 2, n_classes)` over the harness's
+    round classes, folding rounds 4 and up into the trailing '45' class."""
+    head = n_classes - 1
+    out = np.zeros(array.shape[:2] + (n_classes,), dtype=array.dtype)
+    out[:, :, :min(array.shape[2], head)] = array[:, :, :head]
+    if array.shape[2] > head:
+        out[:, :, head] = array[:, :, head:].sum(axis=2)
+    return out
+
+
+def mean_over_seeds(members: list) -> np.ndarray:
+    """Row-wise mean across seed members; one member is returned untouched.
+
+    The "average the probabilities" convention every ensemble in this project
+    uses (`mma.candidates._mean_over_members`, `scripts.train_xgb.mean_proba`),
+    including its bit-identical single-member behaviour.
+    """
+    return np.asarray(members[0]) if len(members) == 1 else np.mean(members, axis=0)
+
+
+def normalise_rows(probs: np.ndarray) -> np.ndarray:
+    """Rescale each row to sum to 1 -- averaging softmax rows across seeds
+    leaves them a few ulps off, which `simulate` rejects outright."""
+    probs = np.asarray(probs, dtype=float)
+    return probs / probs.sum(axis=1, keepdims=True)
+
+
+def simulate_fights(
+    hazard, mirrored, decision, mirror_decision, n_rounds, *,
+    n_runs: int, alpha: float, sim_seed: int, n_round_classes: int,
+) -> dict:
+    """Simulate a batch of fights in both corner orientations -> joint cells.
+
+    `hazard` and `mirrored` are the two orientations' per-round hazard
+    distributions, stacked fight after fight: fight i owns
+    ``hazard[starts[i] : starts[i] + n_rounds[i]]``, exactly the layout
+    `mma.hazard.build_hazard_rows` and `mma.hazard.round_frame` produce.
+    `decision` and `mirror_decision` are `(n,)` P(corner A wins on the cards).
+
+    Each fight is played out twice -- once as given, once mirrored -- and the
+    two distributions are averaged after the mirrored one is mapped back into
+    this table's frame, which for a joint means exchanging its A and B blocks
+    rather than flipping a scalar. Getting that backwards would invert half of
+    every method and round prediction.
+
+    **Both orientations share one RNG stream** (`default_rng([sim_seed, i])`
+    per fight, re-created for each orientation), so a matchup with no corner
+    asymmetry comes back at exactly 0.5 rather than 0.5 plus Monte Carlo
+    noise.
+
+    Returns the cell layout `mma.evaluate` defines -- the 2 x n_methods x
+    n_round_classes finish cells flattened, then the two decision cells --
+    plus, per fight, the raw zero-mass flags, the two orientations' Monte
+    Carlo standard errors on P(A wins), and how many of its cells were
+    reachable at all (a three-round fight can never reach the '45' class).
+    """
+    n_rounds = np.asarray(n_rounds, dtype=int)
+    n = len(n_rounds)
+    hazard = np.asarray(hazard, dtype=float)
+    mirrored = np.asarray(mirrored, dtype=float)
+    if int(n_rounds.sum()) != len(hazard) or len(mirrored) != len(hazard):
+        raise ValueError(
+            f"hazard rows ({len(hazard)}) and mirrored rows ({len(mirrored)}) must both "
+            f"equal the total rounds simulated ({int(n_rounds.sum())})"
+        )
+    if len(decision) != n or len(mirror_decision) != n:
+        raise ValueError(
+            f"decision probabilities must be one per fight ({n}); got "
+            f"{len(decision)} and {len(mirror_decision)}"
+        )
+
+    finish = np.zeros((n, 2, 2, n_round_classes))
+    cards = np.zeros((n, 2))
+    finish_zero = np.zeros((n, 2, 2, n_round_classes), dtype=bool)
+    cards_zero = np.zeros((n, 2), dtype=bool)
+    errors = np.zeros((n, 2))
+    starts = np.cumsum(n_rounds) - n_rounds
+    for i in range(n):
+        rounds = int(n_rounds[i])
+        window = slice(int(starts[i]), int(starts[i]) + rounds)
+        runs = [
+            simulate(probs, float(p_cards), rounds, n_runs,
+                     np.random.default_rng([sim_seed, i]), alpha=alpha)
+            for probs, p_cards in ((hazard[window], decision[i]),
+                                   (mirrored[window], mirror_decision[i]))
+        ]
+        straight, flipped = runs
+        finish[i] = 0.5 * (bucket_rounds(straight.finish_probs, n_round_classes)
+                           + bucket_rounds(flipped.finish_probs, n_round_classes)[::-1])
+        cards[i] = 0.5 * (straight.decision_probs + flipped.decision_probs[::-1])
+        finish_zero[i] = (
+            (bucket_rounds(straight.finish_counts, n_round_classes) == 0)
+            & (bucket_rounds(flipped.finish_counts, n_round_classes)[::-1] == 0)
+        )
+        cards_zero[i] = (straight.decision_counts == 0) & (flipped.decision_counts[::-1] == 0)
+        errors[i] = (straight.p_a_wins_standard_error, flipped.p_a_wins_standard_error)
+
+    reachable = np.minimum(n_rounds, n_round_classes)
+    zero_reachable = np.array(
+        [int(finish_zero[i, :, :, : reachable[i]].sum()) + int(cards_zero[i].sum())
+         for i in range(n)],
+        dtype=int,
+    )
+    return {
+        "cells": np.concatenate([finish.reshape(n, -1), cards], axis=1),
+        "zero_mass": np.concatenate([finish_zero.reshape(n, -1), cards_zero], axis=1),
+        "standard_errors": errors,
+        "n_zero_mass_reachable": zero_reachable,
+        "n_reachable_cells": 4 * reachable + 2,
+    }

@@ -192,3 +192,20 @@ def mirror_corners(features: pd.DataFrame) -> pd.DataFrame:
     if _ORIENTATION[1] in out.columns:
         out["swapped"] = ~features["swapped"].astype(bool)
     return out
+
+
+def round_frame(features: pd.DataFrame, n_rounds) -> pd.DataFrame:
+    """`features` repeated once per round, with a 1-based `round_no`.
+
+    The prediction-time twin of `build_hazard_rows`' expansion, and
+    deliberately column-for-column identical to it once the label is dropped:
+    in the harness the two frames are concatenated into one model matrix, so a
+    different column order here would be a silently mis-fed model. The served
+    path (`mma.inference.SimulatorPredictor`) builds its rows with this same
+    function for the same reason.
+    """
+    counts = np.asarray(n_rounds, dtype=int)
+    out = features.iloc[np.repeat(np.arange(len(features)), counts)].reset_index(drop=True)
+    starts = np.repeat(np.cumsum(counts) - counts, counts)
+    out["round_no"] = np.arange(len(out), dtype=int) - starts + 1
+    return out
