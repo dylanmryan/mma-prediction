@@ -43,6 +43,8 @@
       "pooled": {
         "n": 4804,
         "winner_log_loss": 0.6437,
+        "accuracy": 0.6216,
+        "brier": 0.2264,
         "ece": {
           "5": 0.0059,
           "10": 0.0124,
@@ -55,6 +57,8 @@
           "temperature": 0.73,
           "n": 522,
           "winner_log_loss": 0.6367,
+          "accuracy": 0.6322,
+          "brier": 0.2237,
           "ece": {
             "5": 0.0209,
             "10": 0.0485,
@@ -66,6 +70,8 @@
           "temperature": 0.76,
           "n": 553,
           "winner_log_loss": 0.666,
+          "accuracy": 0.5805,
+          "brier": 0.2366,
           "ece": {
             "5": 0.0468,
             "10": 0.064,
@@ -77,6 +83,8 @@
           "temperature": 0.93,
           "n": 492,
           "winner_log_loss": 0.6519,
+          "accuracy": 0.6423,
+          "brier": 0.2294,
           "ece": {
             "5": 0.0406,
             "10": 0.0606,
@@ -88,6 +96,8 @@
           "temperature": 0.76,
           "n": 546,
           "winner_log_loss": 0.674,
+          "accuracy": 0.5733,
+          "brier": 0.2404,
           "ece": {
             "5": 0.0554,
             "10": 0.0723,
@@ -99,6 +109,8 @@
           "temperature": 1.0,
           "n": 582,
           "winner_log_loss": 0.6455,
+          "accuracy": 0.6031,
+          "brier": 0.2271,
           "ece": {
             "5": 0.0394,
             "10": 0.0395,
@@ -110,6 +122,8 @@
           "temperature": 0.78,
           "n": 581,
           "winner_log_loss": 0.6377,
+          "accuracy": 0.6489,
+          "brier": 0.2237,
           "ece": {
             "5": 0.0231,
             "10": 0.0461,
@@ -121,6 +135,8 @@
           "temperature": 0.88,
           "n": 593,
           "winner_log_loss": 0.6326,
+          "accuracy": 0.6324,
+          "brier": 0.2212,
           "ece": {
             "5": 0.0307,
             "10": 0.0311,
@@ -132,6 +148,8 @@
           "temperature": 0.82,
           "n": 935,
           "winner_log_loss": 0.6218,
+          "accuracy": 0.6449,
+          "brier": 0.2167,
           "ece": {
             "5": 0.0172,
             "10": 0.0371,
@@ -162,6 +180,8 @@
       "pooled": {
         "n": 4804,
         "winner_log_loss": 0.6428,
+        "accuracy": 0.6216,
+        "brier": 0.226,
         "ece": {
           "5": 0.0093,
           "10": 0.0177,
@@ -174,6 +194,8 @@
           "temperature": 0.8,
           "n": 522,
           "winner_log_loss": 0.6372,
+          "accuracy": 0.6322,
+          "brier": 0.2238,
           "ece": {
             "5": 0.0243,
             "10": 0.0278,
@@ -185,6 +207,8 @@
           "temperature": 0.8,
           "n": 553,
           "winner_log_loss": 0.6648,
+          "accuracy": 0.5805,
+          "brier": 0.2362,
           "ece": {
             "5": 0.0416,
             "10": 0.0582,
@@ -196,6 +220,8 @@
           "temperature": 0.8,
           "n": 492,
           "winner_log_loss": 0.6519,
+          "accuracy": 0.6423,
+          "brier": 0.2291,
           "ece": {
             "5": 0.0377,
             "10": 0.0483,
@@ -207,6 +233,8 @@
           "temperature": 0.8,
           "n": 546,
           "winner_log_loss": 0.6726,
+          "accuracy": 0.5733,
+          "brier": 0.2398,
           "ece": {
             "5": 0.0439,
             "10": 0.0728,
@@ -218,6 +246,8 @@
           "temperature": 0.8,
           "n": 582,
           "winner_log_loss": 0.641,
+          "accuracy": 0.6031,
+          "brier": 0.2253,
           "ece": {
             "5": 0.043,
             "10": 0.0559,
@@ -229,6 +259,8 @@
           "temperature": 0.8,
           "n": 581,
           "winner_log_loss": 0.6374,
+          "accuracy": 0.6489,
+          "brier": 0.2236,
           "ece": {
             "5": 0.0271,
             "10": 0.0366,
@@ -240,6 +272,8 @@
           "temperature": 0.8,
           "n": 593,
           "winner_log_loss": 0.6325,
+          "accuracy": 0.6324,
+          "brier": 0.2211,
           "ece": {
             "5": 0.0154,
             "10": 0.0304,
@@ -251,6 +285,8 @@
           "temperature": 0.8,
           "n": 935,
           "winner_log_loss": 0.6219,
+          "accuracy": 0.6449,
+          "brier": 0.2167,
           "ece": {
             "5": 0.0156,
             "10": 0.0314,
@@ -285,6 +321,8 @@
       "pooled": {
         "n": 4804,
         "winner_log_loss": 0.6432,
+        "accuracy": 0.6216,
+        "brier": 0.2262,
         "ece": {
           "5": 0.0034,
           "10": 0.0108,
@@ -297,6 +335,8 @@
           "temperature": 0.73,
           "n": 522,
           "winner_log_loss": 0.6367,
+          "accuracy": 0.6322,
+          "brier": 0.2237,
           "ece": {
             "5": 0.0209,
             "10": 0.0485,
@@ -308,6 +348,8 @@
           "temperature": 0.72,
           "n": 553,
           "winner_log_loss": 0.6677,
+          "accuracy": 0.5805,
+          "brier": 0.2373,
           "ece": {
             "5": 0.0539,
             "10": 0.0612,
@@ -319,6 +361,8 @@
           "temperature": 0.87,
           "n": 492,
           "winner_log_loss": 0.6517,
+          "accuracy": 0.6423,
+          "brier": 0.2292,
           "ece": {
             "5": 0.0394,
             "10": 0.0606,
@@ -330,6 +374,8 @@
           "temperature": 0.86,
           "n": 546,
           "winner_log_loss": 0.6709,
+          "accuracy": 0.5733,
+          "brier": 0.2391,
           "ece": {
             "5": 0.0214,
             "10": 0.0593,
@@ -341,6 +387,8 @@
           "temperature": 0.92,
           "n": 582,
           "winner_log_loss": 0.6436,
+          "accuracy": 0.6031,
+          "brier": 0.2263,
           "ece": {
             "5": 0.037,
             "10": 0.0373,
@@ -352,6 +400,8 @@
           "temperature": 0.86,
           "n": 581,
           "winner_log_loss": 0.637,
+          "accuracy": 0.6489,
+          "brier": 0.2234,
           "ece": {
             "5": 0.0267,
             "10": 0.0395,
@@ -363,6 +413,8 @@
           "temperature": 0.86,
           "n": 593,
           "winner_log_loss": 0.6325,
+          "accuracy": 0.6324,
+          "brier": 0.2211,
           "ece": {
             "5": 0.0284,
             "10": 0.0288,
@@ -374,6 +426,8 @@
           "temperature": 0.86,
           "n": 935,
           "winner_log_loss": 0.622,
+          "accuracy": 0.6449,
+          "brier": 0.2167,
           "ece": {
             "5": 0.0231,
             "10": 0.0398,
@@ -402,6 +456,8 @@
       "pooled": {
         "n": 4804,
         "winner_log_loss": 0.6427,
+        "accuracy": 0.6216,
+        "brier": 0.226,
         "ece": {
           "5": 0.0055,
           "10": 0.013,
@@ -414,6 +470,8 @@
           "temperature": 0.85,
           "n": 522,
           "winner_log_loss": 0.6379,
+          "accuracy": 0.6322,
+          "brier": 0.224,
           "ece": {
             "5": 0.0219,
             "10": 0.028,
@@ -425,6 +483,8 @@
           "temperature": 0.85,
           "n": 553,
           "winner_log_loss": 0.6637,
+          "accuracy": 0.5805,
+          "brier": 0.2357,
           "ece": {
             "5": 0.026,
             "10": 0.0488,
@@ -436,6 +496,8 @@
           "temperature": 0.85,
           "n": 492,
           "winner_log_loss": 0.6517,
+          "accuracy": 0.6423,
+          "brier": 0.2291,
           "ece": {
             "5": 0.0388,
             "10": 0.0559,
@@ -447,6 +509,8 @@
           "temperature": 0.85,
           "n": 546,
           "winner_log_loss": 0.6711,
+          "accuracy": 0.5733,
+          "brier": 0.2392,
           "ece": {
             "5": 0.029,
             "10": 0.0588,
@@ -458,6 +522,8 @@
           "temperature": 0.85,
           "n": 582,
           "winner_log_loss": 0.642,
+          "accuracy": 0.6031,
+          "brier": 0.2257,
           "ece": {
             "5": 0.0376,
             "10": 0.0448,
@@ -469,6 +535,8 @@
           "temperature": 0.85,
           "n": 581,
           "winner_log_loss": 0.6371,
+          "accuracy": 0.6489,
+          "brier": 0.2234,
           "ece": {
             "5": 0.0266,
             "10": 0.0394,
@@ -480,6 +548,8 @@
           "temperature": 0.85,
           "n": 593,
           "winner_log_loss": 0.6325,
+          "accuracy": 0.6324,
+          "brier": 0.2211,
           "ece": {
             "5": 0.0276,
             "10": 0.0297,
@@ -491,6 +561,8 @@
           "temperature": 0.85,
           "n": 935,
           "winner_log_loss": 0.6219,
+          "accuracy": 0.6449,
+          "brier": 0.2167,
           "ece": {
             "5": 0.0203,
             "10": 0.0371,
@@ -515,6 +587,8 @@
     "honest_pooled": {
       "n": 4804,
       "winner_log_loss": 0.6432,
+      "accuracy": 0.6216,
+      "brier": 0.2262,
       "ece": {
         "5": 0.0034,
         "10": 0.0108,
@@ -526,6 +600,8 @@
     "in_sample_at_the_deployed_value": {
       "n": 4804,
       "winner_log_loss": 0.6427,
+      "accuracy": 0.6216,
+      "brier": 0.226,
       "ece": {
         "5": 0.0055,
         "10": 0.013,
@@ -540,6 +616,8 @@
       "pooled": {
         "n": 4804,
         "winner_log_loss": 0.6428,
+        "accuracy": 0.6216,
+        "brier": 0.226,
         "ece": {
           "5": 0.0093,
           "10": 0.0177,

@@ -7,11 +7,13 @@ plus **SP2.1**, a pre-registered re-test of SP2's rejections that shipped
 nothing, and **SP2.2**, a pre-registered blend experiment that **did** ship
 and changed what "the deployed model" means (see both subsections); SP3 and
 SP4 outstanding. **The deployed scorer is a blend of a 5-seed XGBoost
-ensemble and the 5-seed torch ensemble, hash `6207d19d615b`** (was
-`5aa33460ef40` before a pre-merge fix committed the blend's own weight and
-temperature to `models/blend.json` and hashed it too — same weight, same
-temperature, same predictions, see the blend experiment plan's completion
-addendum) — statements elsewhere in this document that the torch ensemble is
+ensemble and the 5-seed torch ensemble, hash `b863389f1760`** (was
+`5aa33460ef40`, then `6207d19d615b` once a pre-merge fix committed the blend's
+own weight and temperature to `models/blend.json` and hashed it too — same
+numbers, same predictions; the current hash is a second pre-merge fix, which
+replaced the temperature in that artifact with the walk-forward value 0.85 and
+does change every prediction, see the blend experiment plan's completion
+addenda) — statements elsewhere in this document that the torch ensemble is
 the deployed model describe the state before 2026-09-08.
 **Scope:** Predictions only. The value-betting / odds-analysis layer is a
 later, separate spec (see "Out of scope").
@@ -425,19 +427,26 @@ and a mechanical decision rule fixed before anything ran
 
 **What is deployed.** The equal-weight (0.5/0.5) average of a **5-seed
 XGBoost ensemble** and the **5-seed torch ensemble**, temperature-scaled
-*after* averaging (deployed **T = 0.80**, the median of the harness's eight
-per-fold fitted temperatures), on the S1 table
+*after* averaging (deployed **T = 0.85**, the walk-forward temperature: fitted
+on the pooled out-of-fold predictions of every fold before the one being
+served, which at serving time is all of them — it replaced the median of the
+harness's eight per-fold fits, 0.80, on 2026-09-09), on the S1 table
 `base,external,trajectory,notice,context,opponent_adjusted` (11,238 x 87)
 with `external_missing`, `same_country`, `notice_unknown`, `home_country_a`
 and `home_country_b` in the table and out of both model matrices. Deployment
 budgets re-derived on S1 (`refit_decision_b1.json`): torch 6 epochs at
-temperature 1.15, XGB 109/73/71 trees per seed. **Hash `6207d19d615b`**
+temperature 1.15, XGB 109/73/71 trees per seed. **Hash `b863389f1760`**
 (was `b617b96dae45`, then `5aa33460ef40` once the hash covered the XGBoost
-artifacts too, which it did not before). The current hash is a pre-merge
-fix on the same branch: the blend's own weight and temperature, until then
-module constants the hash did not cover, are now committed to
-`models/blend.json` and hashed alongside the model weights -- same 0.5/0.80,
-same predictions (see the blend experiment plan's completion addendum).
+artifacts too, which it did not before, then `6207d19d615b`). Two pre-merge
+fixes on the same branch produced the last two. The first: the blend's own
+weight and temperature, until then module constants the hash did not cover,
+were committed to `models/blend.json` and hashed alongside the model weights
+-- same 0.5/0.80, same predictions. The second: the temperature in that
+artifact was the median of the per-fold fits, a training-budget rule that
+re-scores to pooled ECE 0.0177, and is now the walk-forward value 0.85
+(pooled 0.6432 / ECE 0.0108, `models/walkforward/blend_temperature.json`) --
+which does change every prediction, each by sigma(logit(p)*0.80/0.85). See
+the blend experiment plan's two completion addenda.
 
 | candidate | table | pooled | Δ vs deployed 0.6476 | fresh seeds 5–9 | ships |
 |---|---|---|---|---|---|

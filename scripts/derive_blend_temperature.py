@@ -76,7 +76,9 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
 
 from mma.blend import apply_temperature, logit  # noqa: E402
-from mma.evaluate import expected_calibration_error, log_loss  # noqa: E402
+from mma.evaluate import (  # noqa: E402
+    accuracy, brier_score, expected_calibration_error, log_loss,
+)
 from mma.models.train_loop import fit_temperature  # noqa: E402
 from scripts.run_walkforward import fixed_budget_from  # noqa: E402
 
@@ -162,9 +164,18 @@ def deployed_temperature(pre, y) -> float:
 
 
 def pooled_metrics(y, p) -> dict:
+    """The report's own pooled shape, on this rule's re-scored probabilities.
+
+    `accuracy` is here because it is invariant to temperature -- scaling is
+    monotone and fixes 0.5 -- so a reader can see at a glance that only the
+    calibration-sensitive metrics moved. `brier` does move, and the model card
+    quotes it, so it cannot be taken from the harness form.
+    """
     return {
         "n": int(len(y)),
         "winner_log_loss": round(log_loss(y, p), DP),
+        "accuracy": round(accuracy(y, p), DP),
+        "brier": round(brier_score(y, p), DP),
         "ece": {str(b): round(expected_calibration_error(y, p, n_bins=b), DP)
                 for b in BIN_COUNTS},
     }

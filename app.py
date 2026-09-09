@@ -33,6 +33,13 @@ DISPLAY_PRIORS = ROOT / "models" / "torch" / "display_priors.json"
 TORCH_METRICS = ROOT / "models" / "torch" / "metrics_val.json"
 XGB_METRICS = ROOT / "models" / "xgb_metrics_val.json"
 ELO_WALKFORWARD = ROOT / "models" / "walkforward" / "elo.json"
+# The DEPLOYED blend's own pooled metrics. `BLEND_REPORT` scores the HARNESS
+# form, which fits one temperature per fold on that fold's inner-validation
+# year; this scorer applies one fixed temperature and cannot fit per fold, so
+# the card's numbers come from here instead
+# (`scripts/derive_blend_temperature.py`, which re-scores the committed
+# per-row dump under the deployed rule).
+BLEND_TEMPERATURE = ROOT / "models" / "walkforward" / "blend_temperature.json"
 
 
 def _read_json(path: Path) -> dict:
@@ -59,10 +66,15 @@ def model_card_text(weight: float, temperature: float) -> str:
     -- the caller passes `predictor.weight`/`predictor.temperature` so the
     card names the numbers actually serving rather than a re-read that could
     disagree with them). The deployed scorer is a BLEND, so the card's
-    headline numbers are the blend's -- models/walkforward/blend_b1.json, the
-    report SP2.2's decision shipped -- and the two members' own pooled
-    numbers are shown beside it, as the comparison that makes the case for
-    blending them. Under the refit_through recipe the metrics files carry no
+    headline numbers are the blend's -- and they are the DEPLOYED form's
+    (`models/walkforward/blend_temperature.json`), not the harness report's.
+    `blend_b1.json` scores a scorer that fits one temperature per fold on that
+    fold's inner-validation year; this one applies a single fixed temperature
+    to every prediction it makes and cannot fit per fold, so its calibration
+    is a different number and this card is about this one. The harness form's
+    ECE is quoted beside it, labelled, so the card cannot be read as
+    contradicting the report. The two members' own pooled numbers are shown
+    beside it, as the comparison that makes the case for blending them. Under the refit_through recipe the metrics files carry no
     held-out slice of their own; they carry the harness evidence behind each
     member's budget, and the training cutoff. Falls back to a numberless
     card if a file is missing or unreadable.
@@ -71,6 +83,7 @@ def model_card_text(weight: float, temperature: float) -> str:
     xgb_m = _read_json(XGB_METRICS)
     elo_m = _read_json(ELO_WALKFORWARD).get("pooled", {})
     blend = _read_json(BLEND_REPORT)
+    deployed = _read_json(BLEND_TEMPERATURE).get("deployed", {}).get("honest_pooled", {})
     head = (
         f"Model card: a blend — {weight:g}/{1 - weight:g} average of a "
         "5-seed XGBoost ensemble and a 5-seed multi-task net "
@@ -92,13 +105,22 @@ def model_card_text(weight: float, temperature: float) -> str:
         except (KeyError, TypeError, ValueError):
             return None
 
-    blend_line = _triple(blend.get("pooled", {}))
+    # The deployed form first. The harness report is a fallback that carries no
+    # calibration claim at all (see the ECE below), rather than one describing a
+    # scorer other than this one.
+    blend_line = _triple(deployed) or _triple(blend.get("pooled", {}))
     torch_line = _triple(torch_m.get("winner_ensemble", {}))
     if blend_line and torch_m.get("mode") == "refit_through":
         n = blend.get("pooled", {}).get("n")
         n_text = f"n={n:,} pooled fights" if isinstance(n, int) else "pooled"
-        ece = blend.get("pooled", {}).get("ece")
-        ece_text = f", ECE {ece:.4f}" if isinstance(ece, (int, float)) else ""
+        ece = deployed.get("ece", {}).get("10")
+        harness_ece = blend.get("pooled", {}).get("ece")
+        ece_text = ""
+        if isinstance(ece, (int, float)):
+            ece_text = f", ECE {ece:.4f}"
+            if isinstance(harness_ece, (int, float)):
+                ece_text += (" (this fixed-temperature form; the harness's "
+                             f"per-fold-fitted form reads {harness_ece:.4f})")
         rivals = []
         if torch_line:
             rivals.append(f"net alone {torch_line}")

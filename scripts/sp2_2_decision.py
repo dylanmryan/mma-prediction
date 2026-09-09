@@ -19,6 +19,13 @@ What this script does and does not do:
   precision had never been measured, so the artifact carries an ECE noise floor
   for both recipes, the same comparison at four bin counts, and the reliability
   curves the two ECEs summarise.
+* It reports what the DEPLOYED model scores, not only what the harness
+  measured (`deployed_form`). The harness fits one temperature per fold on
+  that fold's inner-validation year; deployment has no held-out year and
+  applies a single fixed temperature, so the two are different scorers and
+  only the second ships. The ECE gate -- as written and as amended -- was
+  applied to the harness form, and `deployed_form` states the deployed form's
+  standing against the amended gate's own threshold.
 * It does not INVENT a resolution of rule 4. Rule 4's text reserved the call
   for a human ("record it and stop for a human call"); the call was made on
   2026-09-08 -- B1 ships, with the ECE gate re-specified -- and this script
@@ -88,6 +95,11 @@ DIAGNOSTICS = {
 }
 NOISE_FLOOR_BLEND = WF / "noise_floor_blend.json"
 NOISE_FLOOR_ECE = WF / "noise_floor_ece.json"
+# The deployed scorer's own temperature derivation and its honest pooled
+# score (scripts/derive_blend_temperature.py). Every number in this file
+# above `deployed_form` describes the HARNESS form, which fits a temperature
+# per fold; the deployed model applies one fixed value and cannot.
+BLEND_TEMPERATURE = WF / "blend_temperature.json"
 
 # Pooled per-row predictions, written by run_walkforward.py --dump-predictions.
 # The reports carry metrics and no predictions, so the reliability curves and
@@ -332,6 +344,103 @@ def curve_block(path: Path, n_bins: int = 10) -> dict:
     }
 
 
+def deployed_form(amended_gate: dict, incumbent_log_loss: float, incumbent_ece: float,
+                  harness_log_loss: float, harness_ece: float) -> dict:
+    """What the SHIPPED scorer scores, as against what the harness measured.
+
+    `mma.candidates.BlendCandidate` fits one temperature per fold on that
+    fold's inner-validation year; `mma.inference.BlendedPredictor` has no
+    held-out year and applies the single fixed temperature committed to
+    `models/blend.json`. Every pooled number elsewhere in this artifact -- and
+    both forms of the rule-4 ECE gate -- describe the first scorer. This block
+    describes the second, from `models/walkforward/blend_temperature.json`,
+    which re-scores the committed per-row dump under the deployed rule.
+
+    The gate is NOT re-run here. Re-applying a gate to a form it was not
+    applied to, after the decision, would be a second post-hoc move on top of
+    the one already recorded; what is reported instead is the deployed form's
+    standing against the amended gate's own threshold, so a reader can see
+    that the correction does not rescue a failing candidate or sink a passing
+    one.
+    """
+    record = load(BLEND_TEMPERATURE)
+    deployed = record["deployed"]
+    pooled = deployed["honest_pooled"]
+    threshold = float(amended_gate["incumbent_mean"]) + float(amended_gate["tolerance_2sigma"])
+    return {
+        "label": "THE FORM THAT SHIPS -- fixed temperature, not the harness's per-fold fits",
+        "source": str(BLEND_TEMPERATURE.relative_to(ROOT)),
+        "derived_by": record["generated_by"],
+        "temperature": deployed["temperature"],
+        "derivation_rule": deployed["derivation"],
+        "selection_rule": record["selection_rule"],
+        "round_trip_verification": record["round_trip_verification"],
+        "why_this_block_exists": (
+            "The harness fits one temperature per fold on that fold's inner-validation "
+            "year and every other pooled number in this artifact describes that form. "
+            "Deployment applies one fixed temperature to every prediction it makes, so "
+            "the two are different scorers. The published calibration figure has to be "
+            "the deployed one."
+        ),
+        "pooled": pooled,
+        "folds": record["rules"]["R2"]["folds"],
+        "per_fold_temperature": record["rules"]["R2"]["per_fold_temperature"],
+        "seed_set": deployed["seed_set"],
+        "vs_harness_form": {
+            "harness_winner_log_loss": harness_log_loss,
+            "harness_ece_10_bins": harness_ece,
+            "deployed_winner_log_loss": pooled["winner_log_loss"],
+            "deployed_ece_10_bins": pooled["ece"]["10"],
+            "winner_log_loss_delta": round(pooled["winner_log_loss"] - harness_log_loss, 6),
+            "ece_10_bins_delta": round(pooled["ece"]["10"] - harness_ece, 6),
+            "convention": "deployed minus harness; negative = the deployed form is better",
+        },
+        "vs_incumbent_I": {
+            "incumbent_winner_log_loss": incumbent_log_loss,
+            "incumbent_ece_10_bins": incumbent_ece,
+            "winner_log_loss_delta": round(pooled["winner_log_loss"] - incumbent_log_loss, 6),
+            "ece_10_bins_delta": round(pooled["ece"]["10"] - incumbent_ece, 6),
+            "convention": "deployed minus incumbent; negative = the deployed blend is better",
+        },
+        "superseded_rule": record["deployed"]["supersedes"],
+        "against_the_amended_ece_gate": {
+            "gate_was_evaluated_on": (
+                "the HARNESS form. Both the gate as written and the gate as amended "
+                "compare pooled ECEs taken from walk-forward reports, and every such "
+                "report scores the per-fold-fitted form. No form of the gate was ever "
+                "applied to the scorer that ships."
+            ),
+            "threshold": round(threshold, 6),
+            "threshold_is": (
+                "the amended gate's incumbent mean plus its 2-sigma tolerance -- the "
+                "largest pooled ECE that would have passed"
+            ),
+            "deployed_ece_10_bins": pooled["ece"]["10"],
+            "deployed_within_the_threshold": bool(pooled["ece"]["10"] <= threshold),
+            "margin": round(threshold - pooled["ece"]["10"], 6),
+            "the_rule_that_shipped_before": {
+                "temperature": record["rules"]["R1"]["deployment_temperature"],
+                "ece_10_bins": record["rules"]["R1"]["pooled"]["ece"]["10"],
+                "within_the_threshold": bool(
+                    record["rules"]["R1"]["pooled"]["ece"]["10"] <= threshold),
+                "note": (
+                    "The median-of-per-fold rule this artifact's model shipped with until "
+                    "2026-09-09 re-scores OVER the amended gate's own threshold. That is "
+                    "the defect the derivation fixed, and it is recorded rather than "
+                    "quietly dropped."
+                ),
+            },
+            "not_a_re_run_of_the_gate": (
+                "The gate is not re-applied here. Rule 4 was resolved on 2026-09-08 on "
+                "the harness numbers; re-running it on a different form after the fact "
+                "would be a second post-hoc move. This states where the deployed form "
+                "falls against the same threshold, which is a correction of the record, "
+                "not a new decision."
+            ),
+        },
+    }
+
+
 def build() -> dict:
     plan_text = PLAN.read_text()
     rules = quoted_rules(plan_text)
@@ -361,6 +470,13 @@ def build() -> dict:
 
     amended_gate = amended_ece_gate(ece_floor["arms"][ECE_ARM_INCUMBENT],
                                     ece_floor["arms"][ECE_ARM_B1])
+    shipped = deployed_form(
+        amended_gate,
+        incumbent_log_loss=pooled(load(INCUMBENT)),
+        incumbent_ece=incumbent_ece,
+        harness_log_loss=pooled(load(B1)),
+        harness_ece=pooled(load(B1), "ece"),
+    )
 
     return {
         "experiment": "SP2.2 calibrated two-model blend",
@@ -376,7 +492,10 @@ def build() -> dict:
                 "5-seed torch ensemble, temperature-scaled after averaging, on S1 "
                 "(base,external,trajectory,notice,context,opponent_adjusted) with "
                 "external_missing, same_country, notice_unknown, home_country_a and "
-                "home_country_b held out of both model matrices."
+                "home_country_b held out of both model matrices. The served "
+                "temperature is a single fixed value (models/blend.json), derived by "
+                "the walk-forward rule in `deployed_form` -- the harness's per-fold "
+                "fitting is not a deployable form."
             ),
             "ships": {
                 "B1": True,
@@ -407,6 +526,7 @@ def build() -> dict:
                 "touched."
             ),
         },
+        "deployed_form": shipped,
         "incumbent": {
             "report": str(INCUMBENT.relative_to(ROOT)),
             "note": "I: the deployed scorer, a 5-seed torch ensemble on S0",
@@ -504,6 +624,15 @@ def build() -> dict:
                     "the candidate actually cleared was never touched."
                 ),
             },
+            "evaluated_on": (
+                "the HARNESS form -- one temperature fitted per fold on that fold's "
+                "inner-validation year. Every pooled ECE above comes from a walk-forward "
+                "report and every walk-forward report scores that form. The deployed "
+                "scorer applies one FIXED temperature and cannot fit per fold, so no "
+                "form of this gate was ever applied to the model that ships. See "
+                "`deployed_form.against_the_amended_ece_gate` for where the shipped "
+                "scorer falls against this same threshold."
+            ),
             "resolved_here": (
                 "Rule 4 sent this to a human; the human took it on 2026-09-08 and it is "
                 "recorded in `decision`. The facts above are what that call rested on."
@@ -638,6 +767,12 @@ def main(argv=None) -> None:
           f"({status['4']['gate_applied']} gate)")
     print(f"amended ECE gate: {gate['difference_candidate_minus_incumbent']:+.5f} against a "
           f"2-sigma tolerance of {gate['tolerance_2sigma']:.5f} -> passes={gate['passes']}")
+    shipped = decision["deployed_form"]
+    print(f"deployed form: T={shipped['temperature']:.2f} "
+          f"({shipped['derivation_rule'].split(':')[0]}), pooled "
+          f"{shipped['pooled']['winner_log_loss']:.4f} / ECE {shipped['pooled']['ece']['10']:.4f} "
+          f"vs the harness form's {shipped['vs_harness_form']['harness_winner_log_loss']:.4f} / "
+          f"{shipped['vs_harness_form']['harness_ece_10_bins']:.4f}")
     print(f"decision: {decision['decision']['outcome']} ({decision['decision']['taken_by']})")
     print(f"wrote {args.out}")
 

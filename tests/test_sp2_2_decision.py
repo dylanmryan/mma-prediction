@@ -298,3 +298,74 @@ def test_the_quoted_rules_match_the_pre_registration_on_disk():
     assert decision["rules"]["text"] == d.quoted_rules(d.PLAN.read_text())
 
     assert decision["rules"]["amendment"] == d.quoted_amendment(d.PLAN.read_text())
+
+
+# --- the form that actually ships -------------------------------------------
+
+
+def test_deployed_form_reports_the_fixed_temperature_scorer_not_the_harness_one():
+    """The harness fits a temperature per fold; deployment applies one fixed
+    value. Publishing the harness's calibration as the model's was the defect
+    this block exists to close, so the block must carry the deployed
+    temperature and the deployed form's own pooled metrics at all four bin
+    counts, per fold as well as pooled."""
+    import json
+
+    from mma.inference import load_blend_config
+
+    decision = json.loads(d.OUT.read_text())
+    shipped = decision["deployed_form"]
+    record = json.loads(d.BLEND_TEMPERATURE.read_text())
+
+    assert shipped["temperature"] == load_blend_config()["temperature"]
+    assert shipped["temperature"] == record["deployed"]["temperature"]
+    assert shipped["pooled"] == record["deployed"]["honest_pooled"]
+    assert sorted(shipped["pooled"]["ece"]) == ["10", "15", "20", "5"]
+    assert sorted(shipped["folds"]) == [str(y) for y in record["fold_years"]]
+    assert shipped["round_trip_verification"]["passed"] is True
+
+
+def test_deployed_form_compares_against_both_the_harness_form_and_the_incumbent():
+    import json
+
+    decision = json.loads(d.OUT.read_text())
+    shipped = decision["deployed_form"]
+    b1 = json.loads(d.B1.read_text())["pooled"]
+    incumbent = json.loads(d.INCUMBENT.read_text())["pooled"]
+
+    assert shipped["vs_harness_form"]["harness_winner_log_loss"] == b1["winner_log_loss"]
+    assert shipped["vs_harness_form"]["harness_ece_10_bins"] == b1["ece"]
+    assert shipped["vs_incumbent_I"]["incumbent_ece_10_bins"] == incumbent["ece"]
+    assert shipped["vs_incumbent_I"]["incumbent_winner_log_loss"] == incumbent["winner_log_loss"]
+
+
+def test_the_artifact_says_which_form_the_ece_gate_was_evaluated_on():
+    """Both forms of rule 4's gate compared numbers taken from walk-forward
+    reports, and every walk-forward report scores the per-fold-fitted form. The
+    artifact has to say so rather than let a reader assume the gate judged the
+    shipped scorer."""
+    import json
+
+    decision = json.loads(d.OUT.read_text())
+    assert "HARNESS form" in decision["ece_gate"]["evaluated_on"]
+    against = decision["deployed_form"]["against_the_amended_ece_gate"]
+    assert "HARNESS form" in against["gate_was_evaluated_on"]
+    assert against["not_a_re_run_of_the_gate"].startswith("The gate is not re-applied")
+
+
+def test_the_deployed_forms_standing_against_the_amended_threshold_is_stated():
+    """The threshold is the amended gate's own: the incumbent mean plus its
+    2-sigma tolerance. The deployed form is inside it; the median rule that
+    shipped before the derivation is not, and both facts are recorded."""
+    import json
+
+    decision = json.loads(d.OUT.read_text())
+    gate = decision["ece_gate"]["amended"]
+    against = decision["deployed_form"]["against_the_amended_ece_gate"]
+
+    assert against["threshold"] == round(gate["incumbent_mean"] + gate["tolerance_2sigma"], 6)
+    assert against["deployed_ece_10_bins"] <= against["threshold"]
+    assert against["deployed_within_the_threshold"] is True
+    superseded = against["the_rule_that_shipped_before"]
+    assert superseded["temperature"] == 0.8
+    assert superseded["within_the_threshold"] is False
