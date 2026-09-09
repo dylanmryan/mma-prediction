@@ -61,3 +61,68 @@ def test_the_model_card_quotes_the_deployed_forms_calibration_not_the_harness_fo
     # the harness figure appears only inside its own label
     assert f"per-fold-fitted form reads {harness['ece']:.4f}" in text
     assert f"ECE {harness['ece']:.4f}" not in text
+
+
+def _import_app():
+    import sys
+
+    sys.path.insert(0, str(ROOT))
+    import app
+
+    return app
+
+
+def test_outcome_rows_show_every_cell_exactly_once_in_reading_order():
+    """The outcome table is the user-visible payoff of the simulator, so it has
+    to be the WHOLE distribution -- every cell once, nothing double-counted."""
+    import numpy as np
+
+    from mma.joint import cells_to_dict, compose_joint_cells
+    from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
+
+    app = _import_app()
+    cells = compose_joint_cells(
+        [0.6], [[0.4, 0.2, 0.4]], [[0.4, 0.3, 0.2, 0.1]], METHOD_CLASSES, ROUND_CLASSES)
+    joint = cells_to_dict(cells[0], METHOD_CLASSES, ROUND_CLASSES)
+    rows = app.outcome_rows(joint, METHOD_CLASSES, ROUND_CLASSES)
+
+    assert [row[0] for row in rows] == [
+        "KO/TKO in round 1", "KO/TKO in round 2", "KO/TKO in round 3",
+        "KO/TKO in rounds 4-5",
+        "Submission in round 1", "Submission in round 2", "Submission in round 3",
+        "Submission in rounds 4-5",
+        "Decision",
+    ]
+    assert sum(row[1] + row[2] for row in rows) == pytest.approx(1.0)
+    # each column is that corner's win probability, because they are one
+    # distribution rather than three heads multiplied together
+    assert sum(row[1] for row in rows) == pytest.approx(0.6)
+    assert sum(row[2] for row in rows) == pytest.approx(0.4)
+    assert np.isclose([row[1] for row in rows][:4], cells[0][:4]).all()
+
+
+def test_outcome_rows_drop_rounds_a_three_round_bout_cannot_reach():
+    from mma.joint import cells_to_dict, compose_joint_cells
+    from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
+
+    app = _import_app()
+    cells = compose_joint_cells(
+        [0.5], [[0.4, 0.2, 0.4]], [[0.5, 0.3, 0.2, 0.0]], METHOD_CLASSES, ROUND_CLASSES)
+    joint = cells_to_dict(cells[0], METHOD_CLASSES, ROUND_CLASSES)
+    rows = app.outcome_rows(joint, METHOD_CLASSES, ROUND_CLASSES)
+    assert not any("rounds 4-5" in row[0] for row in rows)
+    assert sum(row[1] + row[2] for row in rows) == pytest.approx(1.0)
+
+
+def test_the_model_card_describes_the_hybrid_and_names_the_simulator_evidence():
+    """The card must say what the reader is looking at: a win probability from
+    the blend and an outcome table from the simulator, with the simulator's own
+    evidence quoted rather than folded into winner metrics."""
+    from mma.inference import load_blend_config
+
+    app = _import_app()
+    config = load_blend_config()
+    text = app.model_card_text(config["weight"], config["temperature"])
+    assert "hybrid" in text and "simulator" in text
+    assert "joint-outcome log-loss of 2.1432" in text
+    assert "leaves the win probability itself unchanged" in text

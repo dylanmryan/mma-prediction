@@ -3,13 +3,18 @@
 Fetches "List of UFC events" from Wikipedia, keeps events within the
 horizon, fetches each event's own page, parses its fight card, matches
 fighter names against fighters.parquet, and predicts each matched fight
-with the committed blended scorer (`mma.inference.BlendedPredictor`: the
-XGBoost seed ensemble and the torch ensemble, averaged and temperature-scaled).
-Writes one JSON record per event under
+with the committed hybrid scorer (`mma.inference.SimulatorPredictor`: the
+blend -- the XGBoost seed ensemble and the torch ensemble, averaged and
+temperature-scaled -- for P(A wins), and the Monte Carlo fight simulator for
+P(method, round | winner)). Each record therefore carries the full joint
+distribution over outcomes alongside `p_a_wins`, which is the blend's number
+unchanged. Writes one JSON record per event under
 predictions/ (idempotent -- see mma.prospective.write_event_prediction).
 Each record is stamped with `model_version`, a hash of the deployed
-artifacts of BOTH members (see `mma.versioning`), so the track record splits by
-model, not by commit -- and a retrain of either half opens a new section.
+artifacts of every member -- the blend's two, the simulator's two, and the
+committed configuration of each (see `mma.versioning`) -- so the track record
+splits by model, not by commit, and a retrain of any of them opens a new
+section.
 
 `select_upcoming_events`, `ensure_scheduled_events_parsed`, and
 `warn_if_empty_fight_card` are pure/printing functions (unit-tested); the
@@ -80,7 +85,7 @@ def warn_if_empty_fight_card(event_name: str, wiki_fights: list[dict]) -> bool:
 
 
 def main() -> None:
-    from mma.inference import BlendedPredictor
+    from mma.inference import SimulatorPredictor
     from mma.prospective import (
         build_name_index, predict_event, write_event_prediction,
     )
@@ -100,7 +105,7 @@ def main() -> None:
     snapshots = build_snapshots(fights_df, stats_df, ratings_df)
     fighters_indexed = fighters_df.set_index("fighter_id")
     name_index = build_name_index(fighters_df)
-    predictor = BlendedPredictor.load(ROOT)
+    predictor = SimulatorPredictor.load(ROOT)
     model_version = artifact_model_version(ROOT)
 
     print(f"Fetching scheduled events list (model_version={model_version})...")
@@ -143,10 +148,14 @@ def main() -> None:
                     " [accent-folded match]"
                     if f.get("match_tier") == "accent_folded" else ""
                 )
+                distance = f.get("p_distance")
+                distance_note = (
+                    f" | {distance:.0%} goes the distance" if distance is not None else ""
+                )
                 print(
                     f"  {f['fighter_a_name']} {f['p_a_wins']:.1%} vs "
                     f"{f['fighter_b_name']} {1 - f['p_a_wins']:.1%} "
-                    f"({f['weight_class']}){tier_note}"
+                    f"({f['weight_class']}){tier_note}{distance_note}"
                 )
 
     total = total_matched + total_skipped

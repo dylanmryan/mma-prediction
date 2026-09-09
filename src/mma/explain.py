@@ -14,6 +14,19 @@ blended logit. Read them as "what the XGBoost half of the model saw", which is
 a stronger claim than this module could make before and a weaker one than
 "this is why the model said 0.63".
 
+**What SP3 did and did not change here.** The deployed scorer is now the
+hybrid (`mma.inference.SimulatorPredictor`), and its WINNER probability is
+still the blend's, unchanged -- so everything above still describes exactly
+the number these contributions sit under in the app. What this module does
+NOT explain is the rest of what the hybrid now shows: the method, the finish
+round, the joint outcome table and P(goes the distance) all come from the
+Monte Carlo simulator's two models (a per-round hazard model and a decision
+model), and no contribution here is computed from either of them. A feature
+can therefore push the winner probability one way while moving the simulator's
+KO-versus-decision split another, and nothing in this decomposition would show
+it. Explaining the simulator would mean attributing a per-round hazard, which
+is a different object from a single logit and is not attempted.
+
 XGBoost's TreeSHAP implementation (`Booster.predict(..., pred_contribs=True)`)
 gives exact, per-feature contributions to one model's logit for a single
 prediction, with no sampling and no approximation. Contributions are averaged

@@ -151,6 +151,32 @@ class _FakeEnsemble:
         }
 
 
+class _FakeHybrid(_FakeEnsemble):
+    """`_FakeEnsemble` plus a joint distribution, as `SimulatorPredictor`
+    returns one: the cells composed from the marginals above, so the record's
+    joint and its marginals agree the way the real one's do."""
+
+    def predict(self, features: pd.DataFrame) -> dict:
+        from mma.joint import compose_joint_cells
+
+        result = super().predict(features)
+        # `compose_joint_cells` wants the decision class last; the fake's
+        # method order puts it first, so reorder for the composition only.
+        method = result["method_probs"][:, [1, 2, 0]]
+        cells = compose_joint_cells(
+            result["winner_prob"], method, result["round_probs"],
+            ["ko_tko", "submission", "decision"], result["round_classes"],
+        )
+        return {
+            **result,
+            "method_classes": ["ko_tko", "submission", "decision"],
+            "method_probs": method,
+            "joint_cells": cells,
+            "joint_zero_mass": np.zeros(cells.shape, dtype=bool),
+            "p_distance": cells[:, -2:].sum(axis=1),
+        }
+
+
 def _snapshots():
     return pd.DataFrame(
         {
@@ -222,6 +248,54 @@ def test_predict_fight_success_case():
     assert result["elo_a"] == 1600.0
     assert result["elo_b"] == 1450.0
     assert set(result["method_probs"]) == {"decision", "ko_tko", "submission"}
+    assert sum(result["method_probs"].values()) == pytest.approx(1.0)
+
+
+def test_predict_fight_records_the_joint_when_the_scorer_supplies_one():
+    """SP3: the record gains the whole outcome distribution, and the fields
+    that were already there keep their meaning."""
+    wiki_fight = {
+        "fighter_a_name": "Fighter A", "fighter_b_name": "Fighter B",
+        "weight_class": "Lightweight", "title_fight": False, "main_event": False,
+    }
+    result = predict_fight(
+        wiki_fight, _name_index(), _snapshots(), _fighters_bio(),
+        _FakeHybrid(), as_of=pd.Timestamp("2026-07-18"),
+    )
+    joint = result["joint_probs"]
+    assert set(joint) == {"a", "b"}
+    assert set(joint["a"]) == {"ko_tko", "submission", "decision"}
+    assert set(joint["a"]["ko_tko"]) == {"1", "2", "3", "45"}
+    total = sum(
+        value if method == "decision" else sum(value.values())
+        for corner in joint.values() for method, value in corner.items()
+    )
+    assert total == pytest.approx(1.0)
+
+    # the joint's own marginals are the record's other fields
+    a_mass = sum(
+        value if method == "decision" else sum(value.values())
+        for method, value in joint["a"].items()
+    )
+    assert a_mass == pytest.approx(result["p_a_wins"])
+    assert result["p_distance"] == pytest.approx(
+        joint["a"]["decision"] + joint["b"]["decision"])
+    assert result["p_distance"] == pytest.approx(result["method_probs"]["decision"])
+
+
+def test_predict_fight_omits_the_joint_for_a_scorer_without_one():
+    """Old records stay readable and a blend-only scorer still works: the
+    joint fields are added, never substituted."""
+    wiki_fight = {
+        "fighter_a_name": "Fighter A", "fighter_b_name": "Fighter B",
+        "weight_class": "Lightweight", "title_fight": False, "main_event": False,
+    }
+    result = predict_fight(
+        wiki_fight, _name_index(), _snapshots(), _fighters_bio(),
+        _FakeEnsemble(), as_of=pd.Timestamp("2026-07-18"),
+    )
+    assert "joint_probs" not in result and "p_distance" not in result
+    assert 0.0 <= result["p_a_wins"] <= 1.0
     assert sum(result["method_probs"].values()) == pytest.approx(1.0)
 
 
