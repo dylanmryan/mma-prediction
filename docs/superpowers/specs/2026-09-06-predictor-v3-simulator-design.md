@@ -7,9 +7,12 @@ plus **SP2.1**, a pre-registered re-test of SP2's rejections that shipped
 nothing, and **SP2.2**, a pre-registered blend experiment that **did** ship
 and changed what "the deployed model" means (see both subsections); SP3 and
 SP4 outstanding. **The deployed scorer is a blend of a 5-seed XGBoost
-ensemble and the 5-seed torch ensemble, hash `5aa33460ef40`** — statements
-elsewhere in this document that the torch ensemble is the deployed model
-describe the state before 2026-09-08.
+ensemble and the 5-seed torch ensemble, hash `6207d19d615b`** (was
+`5aa33460ef40` before a pre-merge fix committed the blend's own weight and
+temperature to `models/blend.json` and hashed it too — same weight, same
+temperature, same predictions, see the blend experiment plan's completion
+addendum) — statements elsewhere in this document that the torch ensemble is
+the deployed model describe the state before 2026-09-08.
 **Scope:** Predictions only. The value-betting / odds-analysis layer is a
 later, separate spec (see "Out of scope").
 
@@ -428,9 +431,13 @@ per-fold fitted temperatures), on the S1 table
 with `external_missing`, `same_country`, `notice_unknown`, `home_country_a`
 and `home_country_b` in the table and out of both model matrices. Deployment
 budgets re-derived on S1 (`refit_decision_b1.json`): torch 6 epochs at
-temperature 1.15, XGB 109/73/71 trees per seed. **Hash `5aa33460ef40`**
-(was `b617b96dae45`), and the hash now covers the XGBoost artifacts too,
-which it did not before.
+temperature 1.15, XGB 109/73/71 trees per seed. **Hash `6207d19d615b`**
+(was `b617b96dae45`, then `5aa33460ef40` once the hash covered the XGBoost
+artifacts too, which it did not before). The current hash is a pre-merge
+fix on the same branch: the blend's own weight and temperature, until then
+module constants the hash did not cover, are now committed to
+`models/blend.json` and hashed alongside the model weights -- same 0.5/0.80,
+same predictions (see the blend experiment plan's completion addendum).
 
 | candidate | table | pooled | Δ vs deployed 0.6476 | fresh seeds 5–9 | ships |
 |---|---|---|---|---|---|

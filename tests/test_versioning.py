@@ -8,8 +8,9 @@ from scripts.migrate_model_versions import rekey_record
 
 
 def _make_models(root, seed_bytes=b"seed0"):
-    """Both halves of the deployed scorer: the torch ensemble and the XGBoost
-    seed ensemble the blend averages with it."""
+    """Both halves of the deployed scorer -- the torch ensemble and the
+    XGBoost seed ensemble -- plus the committed weight/temperature the blend
+    combines them with."""
     models = root / "models"
     torch_dir = models / "torch"
     torch_dir.mkdir(parents=True)
@@ -17,6 +18,7 @@ def _make_models(root, seed_bytes=b"seed0"):
     (torch_dir / "preprocess.json").write_text(json.dumps({"medians": {}}))
     for head in ("winner", "method", "round"):
         (models / f"xgb_{head}_seed0.json").write_text(json.dumps({"head": head}))
+    (models / "blend.json").write_text(json.dumps({"weight": 0.5, "temperature": 0.8}))
 
 
 def test_version_is_12_hex_and_stable(tmp_path):
@@ -60,6 +62,29 @@ def test_version_covers_every_head_of_the_xgb_member(tmp_path):
         assert model_version(tmp_path / head) != before, head
 
 
+def test_version_changes_when_the_blend_weight_changes(tmp_path):
+    """The blend's mixing weight is part of the scorer, not display
+    configuration -- changing it changes every recorded probability, so it
+    must move the hash exactly as a retrained booster does."""
+    _make_models(tmp_path)
+    before = model_version(tmp_path)
+    (tmp_path / "models" / "blend.json").write_text(
+        json.dumps({"weight": 0.7, "temperature": 0.8})
+    )
+    assert model_version(tmp_path) != before
+
+
+def test_version_changes_when_the_blend_temperature_changes(tmp_path):
+    """Same as the weight above: the post-average temperature is part of the
+    scorer, so it must move the hash too."""
+    _make_models(tmp_path)
+    before = model_version(tmp_path)
+    (tmp_path / "models" / "blend.json").write_text(
+        json.dumps({"weight": 0.5, "temperature": 1.0})
+    )
+    assert model_version(tmp_path) != before
+
+
 def test_version_ignores_non_artifact_files(tmp_path):
     _make_models(tmp_path)
     before = model_version(tmp_path)
@@ -87,15 +112,18 @@ def test_version_changes_when_preprocess_changes(tmp_path):
 
 def test_globs_match_what_the_deployed_predictor_loads():
     # mma.inference.BlendedPredictor.load reads exactly these: the torch
-    # ensemble's per-seed checkpoints and preprocessor, and the XGBoost
-    # member's per-seed boosters for all three heads. Nothing else feeds the
-    # recorded probabilities, so the glob set must match them exactly.
+    # ensemble's per-seed checkpoints and preprocessor, the XGBoost member's
+    # per-seed boosters for all three heads, and models/blend.json -- the
+    # committed mixing weight and post-average temperature the two members
+    # are combined with. Nothing else feeds the recorded probabilities, so
+    # the glob set must match them exactly.
     assert MODEL_ARTIFACT_GLOBS == (
         "models/torch/net_seed*.pt",
         "models/torch/preprocess.json",
         "models/xgb_winner_seed*.json",
         "models/xgb_method_seed*.json",
         "models/xgb_round_seed*.json",
+        "models/blend.json",
     )
 
 

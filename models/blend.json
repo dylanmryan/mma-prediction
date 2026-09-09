@@ -1,0 +1,6 @@
+{
+  "weight": 0.5,
+  "temperature": 0.8,
+  "derivation": "weight is the pre-registered 0.5, read from the source report's own config.blend_weight (mma.blend.blend_heads: fixed by SP2.2's pre-registration, never fitted); temperature is the median of the source report's per-fold fitted temperatures (fit_info.temperature), recomputed via scripts.run_walkforward.fixed_budget_from's median rule -- the same rule the refit recipe uses to derive the torch member's own deployment temperature, because deployment has no held-out year to fit one on directly.",
+  "source_report": "models/walkforward/blend_b1.json"
+}

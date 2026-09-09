@@ -41,20 +41,34 @@ TORCH_METRICS = ROOT / "models" / "torch" / "metrics_val.json"
 # --- the deployed blend (SP2.2) --------------------------------------------
 # The walk-forward report the deployed scorer's evidence comes from: B1, the
 # candidate the pre-registration's rules shipped. Its `config` records the
-# weight and its `fit_info` the per-fold temperatures below.
+# weight and its `fit_info` the per-fold temperatures that
+# `scripts/build_blend_config.py` derives BLEND_CONFIG from.
 BLEND_REPORT = ROOT / "models" / "walkforward" / "blend_b1.json"
-# Weight on the XGB member; the torch member gets 1 - weight. FIXED at 0.5 by
-# the pre-registration and never fitted -- see `mma.blend.blend_heads`.
-BLEND_WEIGHT = 0.5
-# The deployed post-average temperature. The harness fits one per fold on that
-# fold's inner-validation year; deployment has no held-out year, so it applies
-# a fixed value derived from those fits, by the same rule the refit recipe uses
-# for the torch member's own temperature (`run_walkforward.fixed_budget_from`:
-# the median across folds, rounded to 2 dp). B1's eight per-fold temperatures
-# are 0.73 0.76 0.93 0.76 1.00 0.78 0.88 0.82, whose median is 0.80.
-# `tests/test_inference.py` recomputes this from the committed report rather
-# than trusting the number here.
-BLEND_TEMPERATURE = 0.80
+# The committed weight and post-average temperature `BlendedPredictor.load`
+# combines the two members with (`scripts/build_blend_config.py` writes it
+# from BLEND_REPORT). Both numbers move every recorded probability exactly as
+# a retrained booster does, so they are hashed by
+# `mma.versioning.MODEL_ARTIFACT_GLOBS` alongside the model weights -- there
+# used to be module constants here instead (BLEND_WEIGHT / BLEND_TEMPERATURE),
+# which the hash never covered: editing one silently changed every recorded
+# probability while leaving `model_version` byte-identical. There is
+# deliberately no in-code fallback value for a missing artifact -- silently
+# serving a guessed weight or temperature is a milder version of the same
+# failure the artifact-hash design exists to prevent.
+BLEND_CONFIG = ROOT / "models" / "blend.json"
+
+
+def load_blend_config(path: Path = BLEND_CONFIG) -> dict:
+    """The committed {"weight": ..., "temperature": ...} the deployed blend
+    combines its two members with. Raises if the artifact is missing rather
+    than falling back to a guessed value -- see BLEND_CONFIG above."""
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found; run scripts/build_blend_config.py to derive it "
+            "from the walk-forward report (models/walkforward/blend_b1.json)"
+        )
+    return json.loads(path.read_text())
 
 
 def load_deployed_metrics(path: Path = TORCH_METRICS) -> dict:
@@ -290,9 +304,10 @@ class BlendedPredictor:
     * the members are the REFIT-through-latest fits (fixed budgets, all data)
       rather than per-fold early-stopped ones, exactly as the torch member
       alone was before this;
-    * the post-average temperature is the fixed `BLEND_TEMPERATURE` rather than
-      one fitted per fold, derived from the harness report's per-fold
-      temperatures by the median rule `run_walkforward.fixed_budget_from` uses.
+    * the post-average temperature is the fixed value committed to
+      `models/blend.json` (`BLEND_CONFIG`) rather than one fitted per fold,
+      derived from the harness report's per-fold temperatures by the median
+      rule `run_walkforward.fixed_budget_from` uses.
 
     `winner_spread` is the spread of the five PER-SEED blends -- seed i's XGB
     booster blended with seed i's net, temperature-scaled. Their mean is the
@@ -310,8 +325,8 @@ class BlendedPredictor:
         self.preprocessor = ensemble.preprocessor  # callers introspect the contract
 
     @classmethod
-    def load(cls, root: Path = ROOT, weight: float = BLEND_WEIGHT,
-             temperature: float = BLEND_TEMPERATURE) -> "BlendedPredictor":
+    def load(cls, root: Path = ROOT, weight: float | None = None,
+             temperature: float | None = None) -> "BlendedPredictor":
         """Load both members from the committed artifacts.
 
         The XGBoost heads are `models/xgb_<head>_seed<seed>.json`, sorted by
@@ -319,8 +334,19 @@ class BlendedPredictor:
         no artifacts is a loud error: silently serving a four-model blend, or a
         torch-only one, is exactly the failure the model hash exists to make
         impossible.
+
+        `weight`/`temperature` default to the committed `models/blend.json`
+        (`root / "models" / "blend.json"`, via `load_blend_config`) -- the
+        deployed configuration the version hash covers. Pass them explicitly
+        to override for a test or an experiment against a candidate that isn't
+        deployed; that override is never read from disk and is exactly what it
+        says, nothing more.
         """
         root = Path(root)
+        if weight is None or temperature is None:
+            config = load_blend_config(root / "models" / "blend.json")
+            weight = config["weight"] if weight is None else weight
+            temperature = config["temperature"] if temperature is None else temperature
         ensemble = Ensemble.load(root / "models" / "torch")
         boosters = {}
         for head in ("winner", "method", "round"):

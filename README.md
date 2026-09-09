@@ -717,10 +717,17 @@ stays gradeable even as ratings keep moving). Aggregate stats land in
 2026-08-08): 0.667 accuracy, 0.616 log-loss, 0.213 Brier — against a
 coin-flip baseline of 0.476 accuracy on the same fights. Those 78 predictions
 were made by model `40df77ec43c7`, the SP1 model trained on the 46-column
-table. Two redeployments have happened since: the SP2 feature set and
-re-derived budget (`b617b96dae45`), and the SP2.2 blend that serves today
-(**`5aa33460ef40`**). The next weekly run opens a new section for the current
-hash rather than mixing different scorers' predictions into one row. 29 further
+table. Three redeployments have happened since: the SP2 feature set and
+re-derived budget (`b617b96dae45`), the SP2.2 blend (`5aa33460ef40`), and a
+pre-merge fix to that blend's own deployment: its mixing weight and
+post-average temperature used to be module constants the model hash never
+covered, so editing either one would have silently changed every recorded
+probability under an unchanged hash; both now live in a committed artifact,
+`models/blend.json`, hashed alongside the model weights
+(**`6207d19d615b`** — the number itself, and every prediction, is unchanged,
+since only where the two constants live moved). The next weekly run opens a
+new section for the current hash rather than mixing different scorers'
+predictions into one row. 29 further
 predictions are awaiting results, and the rest cover events that haven't
 happened yet. Grading itself can lag a finished event by days to weeks,
 because it depends on the Kaggle mirror picking up the result — the same

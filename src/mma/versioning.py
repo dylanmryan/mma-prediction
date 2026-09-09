@@ -6,18 +6,30 @@ the model does not. Hashing the artifact bytes that inference actually
 loads gives a version that changes exactly when the model changes.
 
 The version identifies the *scorer*: since SP2.2 that is a blend, so the
-glob set covers BOTH members -- the torch ensemble weights plus the
-preprocessing statistics, and the per-seed XGBoost boosters -- because
-``mma.inference.BlendedPredictor.load`` reads all of them and every one of
-them moves a recorded probability. Before SP2.2 only the torch half was
-hashed, which was correct then (the XGBoost models were an explainer, not a
-scorer) and would have covered half of what serves now.
+glob set covers every artifact ``mma.inference.BlendedPredictor.load`` reads
+-- the torch ensemble weights plus the preprocessing statistics, the
+per-seed XGBoost boosters, AND ``models/blend.json``, the committed weight
+and post-average temperature the two members are combined with -- because
+every one of them moves a recorded probability. Before SP2.2 only the torch
+half was hashed, which was correct then (the XGBoost models were an
+explainer, not a scorer) and would have covered half of what serves now.
+
+``models/blend.json`` is hashed for the same reason as the model weights: the
+blend's mixing weight and post-average temperature are as much a part of the
+scorer as any trained parameter is -- changing either one changes every
+recorded probability just as retraining a booster does, even though neither
+number is learned by gradient descent. Before that file existed, both were
+hand-set module constants that this hash never covered, so editing one
+silently changed what every future prediction meant while leaving this
+version byte-identical; see ``scripts/build_blend_config.py``, which derives
+the file from the walk-forward report rather than letting it drift.
 
 Display priors (applied only in ``app.py``, after the probability the track
 record stores) remain deliberately excluded, so regenerating them does not
 open a new track-record section for byte-identical predictions. The hash
-changes exactly when a retrain or a walk-forward promotion changes what gets
-scored, on either side of the blend.
+changes exactly when a retrain, a walk-forward promotion, or a change to the
+blend's own weight or temperature changes what gets scored, on either side
+of the blend.
 """
 from __future__ import annotations
 
@@ -30,6 +42,7 @@ MODEL_ARTIFACT_GLOBS = (
     "models/xgb_winner_seed*.json",
     "models/xgb_method_seed*.json",
     "models/xgb_round_seed*.json",
+    "models/blend.json",
 )
 
 

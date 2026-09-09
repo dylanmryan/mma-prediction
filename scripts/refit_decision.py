@@ -125,8 +125,9 @@ REPORT_SETS = {
             "decide: the blend's own post-average temperature. The harness fits that on "
             "each fold's inner-validation year, which fixed-budget mode trains on, so a "
             "refit-mode blend report cannot exist by construction; the deployed value is "
-            "the median of blend_b1.json's per-fold temperatures (mma.inference."
-            "BLEND_TEMPERATURE), derived by this same fixed_budget_from median rule."
+            "the median of blend_b1.json's per-fold temperatures, committed to "
+            "models/blend.json by scripts/build_blend_config.py via this same "
+            "fixed_budget_from median rule."
         ),
     },
 }

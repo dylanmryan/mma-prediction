@@ -105,10 +105,15 @@ def test_mask_round_45_does_not_mutate_its_input():
 
 
 def test_the_deployed_weight_is_the_one_the_shipped_report_was_scored_with():
-    from mma.inference import BLEND_REPORT, BLEND_WEIGHT
+    """`models/blend.json` (`mma.inference.BLEND_CONFIG`), not a module
+    constant, now carries the deployed weight -- `mma.versioning` hashes the
+    file, so this is what actually varies the recorded probabilities.
+    `tests/test_build_blend_config.py` covers the artifact-vs-report
+    consistency; this pins the value itself."""
+    from mma.inference import BLEND_REPORT, load_blend_config
 
     report = json.loads(BLEND_REPORT.read_text())
-    assert report["config"]["blend_weight"] == BLEND_WEIGHT == 0.5
+    assert report["config"]["blend_weight"] == load_blend_config()["weight"] == 0.5
     assert report["config"]["blend_calibrated"] is True
 
 
@@ -117,12 +122,12 @@ def test_the_deployed_temperature_is_the_median_of_the_reports_per_fold_fits():
     fixed value derived from the harness's per-fold fits -- by exactly the rule
     `run_walkforward.fixed_budget_from` uses for the torch member's own
     temperature under the refit recipe. This recomputes it from the committed
-    report rather than trusting the constant."""
+    report rather than trusting the committed `models/blend.json`."""
     from scripts.run_walkforward import fixed_budget_from
-    from mma.inference import BLEND_REPORT, BLEND_TEMPERATURE
+    from mma.inference import BLEND_REPORT, load_blend_config
 
     report = json.loads(BLEND_REPORT.read_text())
-    assert fixed_budget_from(report)["temperature"] == BLEND_TEMPERATURE
+    assert fixed_budget_from(report)["temperature"] == load_blend_config()["temperature"]
 
 
 def test_the_deployed_blend_names_the_report_the_decision_shipped():

@@ -77,9 +77,10 @@ MODE_SPLIT, MODE_REFIT = "split", "refit_through"
 DEFAULT_MODE = MODE_REFIT
 # Refit-mode defaults: models/walkforward/refit_decision_b1.json -> torch.budget.
 # NOTE these are the TORCH MEMBER's per-seed temperatures. The blend applies a
-# SECOND, post-average temperature on top of them
-# (`mma.inference.BLEND_TEMPERATURE`), which this script knows nothing about
-# because it is a property of the two members combined, not of either one.
+# SECOND, post-average temperature on top of them (committed to
+# models/blend.json by scripts/build_blend_config.py), which this script knows
+# nothing about because it is a property of the two members combined, not of
+# either one.
 REFIT_THROUGH = "latest"
 BUDGET = 6
 TEMPERATURE = 1.15
