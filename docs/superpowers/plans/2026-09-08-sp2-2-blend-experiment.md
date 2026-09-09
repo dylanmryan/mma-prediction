@@ -58,6 +58,14 @@ The blend has never had one. Measure σ_blend by constructing B0 three times fro
 > The gate as written compared the candidate's pooled ECE against a single incumbent value (0.0088), which the ECE noise floor later showed to be the incumbent's *best* of three disjoint seed sets, at a bin count (10) that nothing in this document justified. The incumbent's own ECE ranges 0.0088–0.0160 (sd 0.0038), so the gate's 0.0036 gap is smaller than one standard deviation of the metric it tests, and the sign of the gap reverses at 5, 15 and 20 bins. The gate is therefore re-specified to the same form every other bar in this project uses: **a candidate's mean pooled ECE across three disjoint seed sets must not exceed the incumbent's mean across three disjoint seed sets by more than 2σ of the pooled spread.** This form is stricter in what it demands (three seed sets rather than one) and is applied here: B1 0.01337 ± 0.00100 vs incumbent 0.01163 ± 0.00384, difference +0.0017 against a 2σ tolerance of ≈0.0056 — passes. Amending a pre-registered gate after seeing results is a real weakness and is recorded as one; the mitigation is that the amendment is written down, the original is preserved, the replacement is the project's standard form rather than a bespoke threshold, and the log-loss bar it reports to was never touched.
 
 **The call, taken 2026-09-08: B1 ships, with the ECE gate re-specified as above.** Rule 2 was already satisfied by B1 at both seed sets against its own paired incumbent; the amended rule 4 passes; rules 3 and 5 do not apply (B0 does not clear, so there is no choice to make and the nothing-clears branch is not reached). The isotonic remediation remains a post-hoc variant and does not ship in any form. Deployment work is the Task 4 list under "If it ships, what changes".
+
+**SUB-NOTE, added 2026-09-09 (pre-merge). Nothing above is edited; this records two things the amendment got wrong.**
+
+1. **The gate — in both forms — judged a scorer that does not ship.** Every pooled ECE either version compares comes from a walk-forward report, and every walk-forward report scores the HARNESS form: one temperature refit on each fold's inner-validation year. `mma.inference.BlendedPredictor` has no held-out year and applies a single fixed post-average temperature to every prediction it makes. The two are different scorers, so no version of rule 4 was ever applied to the deployed model.
+
+2. **Where the deployed form stands against this gate's own threshold.** The amended gate's largest passing pooled ECE is 0.011633 + 0.005607 = **0.017241** (incumbent mean plus the 2σ tolerance). Re-scoring the committed per-row dump under the deployed form — one fixed temperature, derived by the walk-forward rule in `scripts/derive_blend_temperature.py` — gives pooled log-loss **0.6432** and ECE **0.0108** (0.0034 / 0.0108 / 0.0108 / 0.0155 at 5 / 10 / 15 / 20 bins), inside that threshold by 0.0064 and better than the harness form's 0.6437 and 0.0124 on both axes. The gate is **not** re-run here: rule 4 was resolved on 2026-09-08 on the harness numbers, and re-applying a gate to a different form after the fact would be a second post-hoc move on top of the one already recorded. This states where the shipped scorer falls, as a correction of the record. It is also one seed set (0–4) rather than the three the amended gate's arms use, because `models/walkforward/preds/` holds a dump for B1 alone. The fixed value the model shipped with until 2026-09-09 — the median of the per-fold fits, 0.80 — re-scores to ECE **0.0177**, *outside* the threshold; that is the defect this sub-note's derivation fixed, and the deployed value is now 0.85.
+
+3. **"Stricter in what it demands" was wrong, and the error runs in the direction that decided the outcome.** The replacement is stricter on one axis — three seed sets rather than one — but **looser on the axis the decision turned on**: it introduced a ±2σ tolerance where the original had none. B1 fails the gate as written outright (0.0124 against 0.0088), and it also fails a mean-vs-mean comparison with no tolerance (0.01337 against the incumbent's 0.01163, +0.0017 the wrong way). It passes only because the amendment permits a candidate to be worse by up to 0.0056. Calling the replacement stricter overstated the mitigation; the honest statement is that the amendment traded one-number-vs-one-number for means over three seed sets *and* granted a tolerance the original did not have, and B1 needed the tolerance.
 <!-- END AMENDMENT -->
 
 ### What would make this experiment wrong, stated in advance
@@ -323,6 +331,48 @@ live moved, from code into a hashed, committed artifact. Suite 707 passed
 (5 new tests for the artifact-vs-report consistency, 2 for the hash's
 sensitivity to the artifact), 1 skipped.
 
+**Second pre-merge review addendum (2026-09-09): the number in that artifact
+was the wrong one.** Making the temperature a hashed artifact fixed where it
+lived, not what it was. The value was 0.80, the median of the harness's eight
+per-fold fits, by `run_walkforward.fixed_budget_from`'s rule -- which selects
+a training BUDGET. A median epoch count is a central tendency of a budget; a
+median temperature has no calibration justification, and no harness run had
+measured it. It has been measured now, by re-scoring the committed per-row
+dump: 0.80 gives pooled ECE **0.0177**, against the **0.0124** the project was
+publishing for the blend and against the amended rule-4 gate's own threshold
+of 0.017241. The published calibration figure described the harness form (a
+temperature refit per fold), which is not a form anything can deploy.
+
+Fix: `scripts/derive_blend_temperature.py` derives the served value by the
+**walk-forward rule** -- for fold Y, one temperature fitted on the pooled
+out-of-fold predictions of the folds strictly before Y; at serving time every
+fold is "before", so it is fitted on all of them. It is the only candidate
+that is both fixed at serving time and validated without using the evaluation
+rows to choose it, and the preference was written into the script's docstring
+before the numbers were computed. The script refuses to derive anything unless
+inverting the per-fold temperatures reproduces `blend_b1.json`'s own pooled
+log-loss and ECE exactly (it does: 0.6437 / 0.0124, max probability error
+2.2e-16). Every candidate rule is scored side by side in
+`models/walkforward/blend_temperature.json`:
+
+| rule | T | log-loss | ECE@5 | ECE@10 | ECE@15 | ECE@20 |
+|---|---|---|---|---|---|---|
+| per-fold fitted (the harness form, not deployable) | per fold | 0.6437 | 0.0059 | 0.0124 | 0.0117 | 0.0158 |
+| R1 median of the per-fold fits (shipped until now) | 0.80 | 0.6428 | 0.0093 | 0.0177 | 0.0144 | 0.0202 |
+| **R2 walk-forward (deployed)** | **0.85** | **0.6432** | **0.0034** | **0.0108** | **0.0108** | **0.0155** |
+| R3 fitted on all out-of-fold rows (in-sample, not a candidate) | 0.85 | 0.6427 | 0.0055 | 0.0130 | 0.0142 | 0.0164 |
+
+**Deployed hash after: `b863389f1760`** (was `6207d19d615b`). Unlike the
+previous addendum, this one **does** change every prediction the model makes:
+each moves exactly as sigma(logit(p)*0.80/0.85), a shrink toward 0.5, verified
+against `BlendedPredictor` on served rows to 8.3e-17. The published numbers
+were corrected with it -- `sp2_2_decision.json` gained a `deployed_form`
+block, the README's walk-forward table gained a labelled deployed row beside
+the harness one, the app's model card renders the deployed ECE, and the rule-4
+amendment above gained a dated sub-note. Suite 731 passed, 1 skipped
+(11 new tests for the derivation and the walk-forward construction, 5 for the
+corrected record).
+
 **Two bugs found while deploying, both silent.**
 1. `scripts/build_features.py` defaulted to `base` only while the weekly
    Action invokes it bare, so the next data refresh would have rebuilt the
@@ -344,18 +394,32 @@ sensitivity to the artifact), 1 skipped.
 
 **Follow-ups (carried into SP3/SP4):**
 
-1. **The deployed blend temperature T = 0.80 is an extrapolation the
-   walk-forward never validated.** The harness fits one temperature per fold
-   on that fold's inner-validation year (B1's eight are 0.73, 0.76, 0.93,
-   0.76, 1.00, 0.78, 0.88, 0.82); deployment has no held-out year and applies
-   their median as a fixed constant, by the same rule the refit recipe uses
-   for the torch member's own temperature. A refit-mode blend report cannot
-   exist by construction -- protocol B trains on the year the temperature
-   would be fitted on -- so **nothing has measured what a fixed 0.80 costs
-   against per-fold fitting**. The fitted values also trend upward across
-   folds (0.73 in 2018 to 0.82-1.00 in the recent ones), which is the same
-   temperature drift SP2 recorded as its follow-up 6. This needs its own
-   check before anyone treats the blend's calibration as settled.
+1. **CLOSED 2026-09-09: the deployed blend temperature is derived and
+   measured.** As written, this follow-up said T = 0.80 was an extrapolation
+   the walk-forward never validated, and that nothing had measured what a
+   fixed temperature costs against per-fold fitting. Both were true, and worse
+   than stated: measured, the median rule scored pooled ECE 0.0177 -- worse
+   than the 0.0124 the project was publishing and over the amended rule-4
+   gate's own 0.017241 threshold. The served value is now the walk-forward
+   temperature **0.85** (`scripts/derive_blend_temperature.py`,
+   `models/walkforward/blend_temperature.json`), and the cost of fixing a
+   temperature instead of refitting one per fold is now a measured number
+   rather than an open question: pooled 0.6432 / ECE 0.0108 against the
+   per-fold-fitted 0.6437 / 0.0124 -- the fixed form is *better* on both, and
+   it is what ships. See the second pre-merge review addendum above.
+
+   **What remains open** is the drift, not the derivation. The per-fold fits
+   trend upward across folds (0.73 in 2018 to 0.82-1.00 in the recent ones)
+   and the walk-forward temperatures track it (0.72 by 2019, 0.86-0.92 from
+   2021 on) -- the same temperature drift SP2 recorded as its follow-up 6. The
+   walk-forward rule follows a drift rather than averaging it away, but it
+   still assumes the next period looks like the pooled past; if the drift
+   continues, a recency-weighted or window-limited temperature fit is the next
+   question. Nothing here is measured on more than one seed set either: the
+   deployed form's ECE is seeds 0-4 only, because `models/walkforward/preds/`
+   holds a dump for B1 alone. Dumping the seeds 5-9 and 10-14 runs would give
+   the deployed form the same three-seed-set treatment the ECE gate's arms
+   have.
 2. **The static-snapshot coverage decay now touches three shipped blocks,
    not one.** `ehan03/jds-mma-data` ends 2024-12-14. `external_missing` is
    0.201 of all rows, 0.359 of 2025 and **0.534 of 2026**; `notice`'s columns

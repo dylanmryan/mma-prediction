@@ -7,7 +7,7 @@
     "outcome": "ship B1",
     "date": "2026-09-08",
     "taken_by": "human call reserved by rule 4",
-    "what_ships": "B1: the equal-weight (0.5) blend of a 5-seed XGBoost ensemble and the 5-seed torch ensemble, temperature-scaled after averaging, on S1 (base,external,trajectory,notice,context,opponent_adjusted) with external_missing, same_country, notice_unknown, home_country_a and home_country_b held out of both model matrices.",
+    "what_ships": "B1: the equal-weight (0.5) blend of a 5-seed XGBoost ensemble and the 5-seed torch ensemble, temperature-scaled after averaging, on S1 (base,external,trajectory,notice,context,opponent_adjusted) with external_missing, same_country, notice_unknown, home_country_a and home_country_b held out of both model matrices. The served temperature is a single fixed value (models/blend.json), derived by the walk-forward rule in `deployed_form` -- the harness's per-fold fitting is not a deployable form.",
     "ships": {
       "B1": true,
       "B0": false,
@@ -15,6 +15,201 @@
     },
     "why": "Rule 2 is satisfied by B1 and only by B1: it clears the bar against I at seeds 0-4 and clears it again at seeds 5-9 against its own fresh-seed paired incumbent. Rule 3 does not apply (B0 does not clear, so there is no choice between candidates) and rule 5 does not apply (something clears). Rule 4 is the only rule left, and its gate AS WRITTEN fails: B1's pooled ECE 0.0124 against the single incumbent value 0.0088 the rule names. That rule reserved the case for a human, and the human amended the gate -- see `ece_gate.amended` and the amendment quoted from the plan file -- because the incumbent's own ECE ranges 0.0088-0.0160 across three disjoint seed sets, the 0.0036 gap is smaller than one sd of the metric it tests, and the sign of the gap reverses at 5, 15 and 20 bins. Under the amended gate B1 passes.",
     "recorded_weakness": "The ECE gate was re-specified AFTER the numbers were seen. That is the weakest part of this experiment and is recorded rather than smoothed over: the original gate is preserved verbatim in the plan and in `ece_gate.rule_as_written`, the replacement is the project's standard measured-difference-against-a-measured-noise-floor form rather than a bespoke threshold, and the log-loss bar B1 actually cleared was never touched."
+  },
+  "deployed_form": {
+    "label": "THE FORM THAT SHIPS -- fixed temperature, not the harness's per-fold fits",
+    "source": "models/walkforward/blend_temperature.json",
+    "derived_by": "scripts/derive_blend_temperature.py",
+    "temperature": 0.85,
+    "derivation_rule": "walk-forward temperature: fitted by mma.models.train_loop.fit_temperature on the pooled out-of-fold pre-temperature predictions of every fold before the one being served (at deployment, all of them), via scripts/derive_blend_temperature.py",
+    "selection_rule": "Stated before the numbers were computed: prefer R2, the walk-forward temperature, because it is the only rule that is both fixed at serving time and validated without using the evaluation rows to choose it. R1 only if R2 were unavailable for a structural reason. R3 is reported for context and is not a candidate.",
+    "round_trip_verification": {
+      "checked": "invert each fold's fitted temperature, re-apply it, and re-score: the result must equal the source report's own pooled winner log-loss and ECE at the report's 4 dp",
+      "max_abs_probability_error": 2.220446049250313e-16,
+      "winner_log_loss": 0.6437,
+      "report_winner_log_loss": 0.6437,
+      "ece_10_bins": 0.0124,
+      "report_ece": 0.0124,
+      "passed": true
+    },
+    "why_this_block_exists": "The harness fits one temperature per fold on that fold's inner-validation year and every other pooled number in this artifact describes that form. Deployment applies one fixed temperature to every prediction it makes, so the two are different scorers. The published calibration figure has to be the deployed one.",
+    "pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6432,
+      "accuracy": 0.6216,
+      "brier": 0.2262,
+      "ece": {
+        "5": 0.0034,
+        "10": 0.0108,
+        "15": 0.0108,
+        "20": 0.0155
+      }
+    },
+    "folds": {
+      "2018": {
+        "temperature": 0.73,
+        "n": 522,
+        "winner_log_loss": 0.6367,
+        "accuracy": 0.6322,
+        "brier": 0.2237,
+        "ece": {
+          "5": 0.0209,
+          "10": 0.0485,
+          "15": 0.0416,
+          "20": 0.0497
+        }
+      },
+      "2019": {
+        "temperature": 0.72,
+        "n": 553,
+        "winner_log_loss": 0.6677,
+        "accuracy": 0.5805,
+        "brier": 0.2373,
+        "ece": {
+          "5": 0.0539,
+          "10": 0.0612,
+          "15": 0.0618,
+          "20": 0.0757
+        }
+      },
+      "2020": {
+        "temperature": 0.87,
+        "n": 492,
+        "winner_log_loss": 0.6517,
+        "accuracy": 0.6423,
+        "brier": 0.2292,
+        "ece": {
+          "5": 0.0394,
+          "10": 0.0606,
+          "15": 0.059,
+          "20": 0.0703
+        }
+      },
+      "2021": {
+        "temperature": 0.86,
+        "n": 546,
+        "winner_log_loss": 0.6709,
+        "accuracy": 0.5733,
+        "brier": 0.2391,
+        "ece": {
+          "5": 0.0214,
+          "10": 0.0593,
+          "15": 0.0626,
+          "20": 0.0669
+        }
+      },
+      "2022": {
+        "temperature": 0.92,
+        "n": 582,
+        "winner_log_loss": 0.6436,
+        "accuracy": 0.6031,
+        "brier": 0.2263,
+        "ece": {
+          "5": 0.037,
+          "10": 0.0373,
+          "15": 0.0384,
+          "20": 0.0511
+        }
+      },
+      "2023": {
+        "temperature": 0.86,
+        "n": 581,
+        "winner_log_loss": 0.637,
+        "accuracy": 0.6489,
+        "brier": 0.2234,
+        "ece": {
+          "5": 0.0267,
+          "10": 0.0395,
+          "15": 0.0303,
+          "20": 0.0495
+        }
+      },
+      "2024": {
+        "temperature": 0.86,
+        "n": 593,
+        "winner_log_loss": 0.6325,
+        "accuracy": 0.6324,
+        "brier": 0.2211,
+        "ece": {
+          "5": 0.0284,
+          "10": 0.0288,
+          "15": 0.0486,
+          "20": 0.0479
+        }
+      },
+      "2025": {
+        "temperature": 0.86,
+        "n": 935,
+        "winner_log_loss": 0.622,
+        "accuracy": 0.6449,
+        "brier": 0.2167,
+        "ece": {
+          "5": 0.0231,
+          "10": 0.0398,
+          "15": 0.0498,
+          "20": 0.0569
+        }
+      }
+    },
+    "per_fold_temperature": {
+      "2018": 0.73,
+      "2019": 0.72,
+      "2020": 0.87,
+      "2021": 0.86,
+      "2022": 0.92,
+      "2023": 0.86,
+      "2024": 0.86,
+      "2025": 0.86
+    },
+    "seed_set": "seeds 0-4 only. models/walkforward/preds/ carries a dump for blend_b1 alone, so the deployed form cannot be re-scored on the seeds 5-9 and 10-14 reports; its ECE here is one measurement, not a three-seed-set mean like the amended rule-4 gate's arms.",
+    "vs_harness_form": {
+      "harness_winner_log_loss": 0.6437,
+      "harness_ece_10_bins": 0.0124,
+      "deployed_winner_log_loss": 0.6432,
+      "deployed_ece_10_bins": 0.0108,
+      "winner_log_loss_delta": -0.0005,
+      "ece_10_bins_delta": -0.0016,
+      "convention": "deployed minus harness; negative = the deployed form is better"
+    },
+    "vs_incumbent_I": {
+      "incumbent_winner_log_loss": 0.6476,
+      "incumbent_ece_10_bins": 0.0088,
+      "winner_log_loss_delta": -0.0044,
+      "ece_10_bins_delta": 0.002,
+      "convention": "deployed minus incumbent; negative = the deployed blend is better"
+    },
+    "superseded_rule": {
+      "rule": "R1",
+      "temperature": 0.8,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6428,
+        "accuracy": 0.6216,
+        "brier": 0.226,
+        "ece": {
+          "5": 0.0093,
+          "10": 0.0177,
+          "15": 0.0144,
+          "20": 0.0202
+        }
+      },
+      "note": "What the deployed artifact carried before this derivation, re-scored here for the first time."
+    },
+    "against_the_amended_ece_gate": {
+      "gate_was_evaluated_on": "the HARNESS form. Both the gate as written and the gate as amended compare pooled ECEs taken from walk-forward reports, and every such report scores the per-fold-fitted form. No form of the gate was ever applied to the scorer that ships.",
+      "threshold": 0.017241,
+      "threshold_is": "the amended gate's incumbent mean plus its 2-sigma tolerance -- the largest pooled ECE that would have passed",
+      "deployed_ece_10_bins": 0.0108,
+      "deployed_within_the_threshold": true,
+      "margin": 0.006441,
+      "the_rule_that_shipped_before": {
+        "temperature": 0.8,
+        "ece_10_bins": 0.0177,
+        "within_the_threshold": false,
+        "note": "The median-of-per-fold rule this artifact's model shipped with until 2026-09-09 re-scores OVER the amended gate's own threshold. That is the defect the derivation fixed, and it is recorded rather than quietly dropped."
+      },
+      "not_a_re_run_of_the_gate": "The gate is not re-applied here. Rule 4 was resolved on 2026-09-08 on the harness numbers; re-running it on a different form after the fact would be a second post-hoc move. This states where the deployed form falls against the same threshold, which is a correction of the record, not a new decision."
+    }
   },
   "incumbent": {
     "report": "models/walkforward/torch_external_diffsonly_extslice.json",
@@ -1558,7 +1753,7 @@
     },
     "amended": {
       "label": "RULE 4 AS AMENDED 2026-09-08, AFTER SEEING THE NUMBERS",
-      "text": "**AMENDMENT \u2014 rule 4, amended 2026-09-08 AFTER SEEING THE NUMBERS, and recorded as such.** The five rules above are the pre-registration as written on 2026-09-08 before anything was run, and rule 4's original wording is left in place above, unedited. This block replaces the *gate* rule 4 states; it does not touch rule 4's status as a gate, and it does not touch any other rule.\n\n> The gate as written compared the candidate's pooled ECE against a single incumbent value (0.0088), which the ECE noise floor later showed to be the incumbent's *best* of three disjoint seed sets, at a bin count (10) that nothing in this document justified. The incumbent's own ECE ranges 0.0088\u20130.0160 (sd 0.0038), so the gate's 0.0036 gap is smaller than one standard deviation of the metric it tests, and the sign of the gap reverses at 5, 15 and 20 bins. The gate is therefore re-specified to the same form every other bar in this project uses: **a candidate's mean pooled ECE across three disjoint seed sets must not exceed the incumbent's mean across three disjoint seed sets by more than 2\u03c3 of the pooled spread.** This form is stricter in what it demands (three seed sets rather than one) and is applied here: B1 0.01337 \u00b1 0.00100 vs incumbent 0.01163 \u00b1 0.00384, difference +0.0017 against a 2\u03c3 tolerance of \u22480.0056 \u2014 passes. Amending a pre-registered gate after seeing results is a real weakness and is recorded as one; the mitigation is that the amendment is written down, the original is preserved, the replacement is the project's standard form rather than a bespoke threshold, and the log-loss bar it reports to was never touched.\n\n**The call, taken 2026-09-08: B1 ships, with the ECE gate re-specified as above.** Rule 2 was already satisfied by B1 at both seed sets against its own paired incumbent; the amended rule 4 passes; rules 3 and 5 do not apply (B0 does not clear, so there is no choice to make and the nothing-clears branch is not reached). The isotonic remediation remains a post-hoc variant and does not ship in any form. Deployment work is the Task 4 list under \"If it ships, what changes\".",
+      "text": "**AMENDMENT \u2014 rule 4, amended 2026-09-08 AFTER SEEING THE NUMBERS, and recorded as such.** The five rules above are the pre-registration as written on 2026-09-08 before anything was run, and rule 4's original wording is left in place above, unedited. This block replaces the *gate* rule 4 states; it does not touch rule 4's status as a gate, and it does not touch any other rule.\n\n> The gate as written compared the candidate's pooled ECE against a single incumbent value (0.0088), which the ECE noise floor later showed to be the incumbent's *best* of three disjoint seed sets, at a bin count (10) that nothing in this document justified. The incumbent's own ECE ranges 0.0088\u20130.0160 (sd 0.0038), so the gate's 0.0036 gap is smaller than one standard deviation of the metric it tests, and the sign of the gap reverses at 5, 15 and 20 bins. The gate is therefore re-specified to the same form every other bar in this project uses: **a candidate's mean pooled ECE across three disjoint seed sets must not exceed the incumbent's mean across three disjoint seed sets by more than 2\u03c3 of the pooled spread.** This form is stricter in what it demands (three seed sets rather than one) and is applied here: B1 0.01337 \u00b1 0.00100 vs incumbent 0.01163 \u00b1 0.00384, difference +0.0017 against a 2\u03c3 tolerance of \u22480.0056 \u2014 passes. Amending a pre-registered gate after seeing results is a real weakness and is recorded as one; the mitigation is that the amendment is written down, the original is preserved, the replacement is the project's standard form rather than a bespoke threshold, and the log-loss bar it reports to was never touched.\n\n**The call, taken 2026-09-08: B1 ships, with the ECE gate re-specified as above.** Rule 2 was already satisfied by B1 at both seed sets against its own paired incumbent; the amended rule 4 passes; rules 3 and 5 do not apply (B0 does not clear, so there is no choice to make and the nothing-clears branch is not reached). The isotonic remediation remains a post-hoc variant and does not ship in any form. Deployment work is the Task 4 list under \"If it ships, what changes\".\n\n**SUB-NOTE, added 2026-09-09 (pre-merge). Nothing above is edited; this records two things the amendment got wrong.**\n\n1. **The gate \u2014 in both forms \u2014 judged a scorer that does not ship.** Every pooled ECE either version compares comes from a walk-forward report, and every walk-forward report scores the HARNESS form: one temperature refit on each fold's inner-validation year. `mma.inference.BlendedPredictor` has no held-out year and applies a single fixed post-average temperature to every prediction it makes. The two are different scorers, so no version of rule 4 was ever applied to the deployed model.\n\n2. **Where the deployed form stands against this gate's own threshold.** The amended gate's largest passing pooled ECE is 0.011633 + 0.005607 = **0.017241** (incumbent mean plus the 2\u03c3 tolerance). Re-scoring the committed per-row dump under the deployed form \u2014 one fixed temperature, derived by the walk-forward rule in `scripts/derive_blend_temperature.py` \u2014 gives pooled log-loss **0.6432** and ECE **0.0108** (0.0034 / 0.0108 / 0.0108 / 0.0155 at 5 / 10 / 15 / 20 bins), inside that threshold by 0.0064 and better than the harness form's 0.6437 and 0.0124 on both axes. The gate is **not** re-run here: rule 4 was resolved on 2026-09-08 on the harness numbers, and re-applying a gate to a different form after the fact would be a second post-hoc move on top of the one already recorded. This states where the shipped scorer falls, as a correction of the record. It is also one seed set (0\u20134) rather than the three the amended gate's arms use, because `models/walkforward/preds/` holds a dump for B1 alone. The fixed value the model shipped with until 2026-09-09 \u2014 the median of the per-fold fits, 0.80 \u2014 re-scores to ECE **0.0177**, *outside* the threshold; that is the defect this sub-note's derivation fixed, and the deployed value is now 0.85.\n\n3. **\"Stricter in what it demands\" was wrong, and the error runs in the direction that decided the outcome.** The replacement is stricter on one axis \u2014 three seed sets rather than one \u2014 but **looser on the axis the decision turned on**: it introduced a \u00b12\u03c3 tolerance where the original had none. B1 fails the gate as written outright (0.0124 against 0.0088), and it also fails a mean-vs-mean comparison with no tolerance (0.01337 against the incumbent's 0.01163, +0.0017 the wrong way). It passes only because the amendment permits a candidate to be worse by up to 0.0056. Calling the replacement stricter overstated the mitigation; the honest statement is that the amendment traded one-number-vs-one-number for means over three seed sets *and* granted a tolerance the original did not have, and B1 needed the tolerance.",
       "quoted_verbatim_from": "docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md",
       "source": "models/walkforward/noise_floor_ece.json",
       "incumbent_arm": "incumbent_torch_S0",
@@ -1584,6 +1779,7 @@
       "passes": true,
       "weakness": "Amending a pre-registered gate after seeing results is a real weakness. The mitigations, and they are mitigations rather than a defence: the amendment is written down and dated in the plan file, the original wording is preserved above and in `rule_as_written`, the replacement is the same form every other bar in this project uses rather than a threshold chosen to fit, and the log-loss bar the candidate actually cleared was never touched."
     },
+    "evaluated_on": "the HARNESS form -- one temperature fitted per fold on that fold's inner-validation year. Every pooled ECE above comes from a walk-forward report and every walk-forward report scores that form. The deployed scorer applies one FIXED temperature and cannot fit per fold, so no form of this gate was ever applied to the model that ships. See `deployed_form.against_the_amended_ece_gate` for where the shipped scorer falls against this same threshold.",
     "resolved_here": "Rule 4 sent this to a human; the human took it on 2026-09-08 and it is recorded in `decision`. The facts above are what that call rested on."
   },
   "remediation_isotonic": {
@@ -1732,7 +1928,7 @@
       "4": "4. **Calibration is a gate, not a tiebreak.** A shipping candidate must not have a worse pooled ECE than the incumbent `I` (0.0088). If a candidate clears on log-loss but fails on ECE, it does **not** ship as-is; record it and stop for a human call.",
       "5": "5. If nothing clears, revert and record \u2014 the third such outcome in this project, and a further argument that the current data and model family are at their ceiling."
     },
-    "amendment": "**AMENDMENT \u2014 rule 4, amended 2026-09-08 AFTER SEEING THE NUMBERS, and recorded as such.** The five rules above are the pre-registration as written on 2026-09-08 before anything was run, and rule 4's original wording is left in place above, unedited. This block replaces the *gate* rule 4 states; it does not touch rule 4's status as a gate, and it does not touch any other rule.\n\n> The gate as written compared the candidate's pooled ECE against a single incumbent value (0.0088), which the ECE noise floor later showed to be the incumbent's *best* of three disjoint seed sets, at a bin count (10) that nothing in this document justified. The incumbent's own ECE ranges 0.0088\u20130.0160 (sd 0.0038), so the gate's 0.0036 gap is smaller than one standard deviation of the metric it tests, and the sign of the gap reverses at 5, 15 and 20 bins. The gate is therefore re-specified to the same form every other bar in this project uses: **a candidate's mean pooled ECE across three disjoint seed sets must not exceed the incumbent's mean across three disjoint seed sets by more than 2\u03c3 of the pooled spread.** This form is stricter in what it demands (three seed sets rather than one) and is applied here: B1 0.01337 \u00b1 0.00100 vs incumbent 0.01163 \u00b1 0.00384, difference +0.0017 against a 2\u03c3 tolerance of \u22480.0056 \u2014 passes. Amending a pre-registered gate after seeing results is a real weakness and is recorded as one; the mitigation is that the amendment is written down, the original is preserved, the replacement is the project's standard form rather than a bespoke threshold, and the log-loss bar it reports to was never touched.\n\n**The call, taken 2026-09-08: B1 ships, with the ECE gate re-specified as above.** Rule 2 was already satisfied by B1 at both seed sets against its own paired incumbent; the amended rule 4 passes; rules 3 and 5 do not apply (B0 does not clear, so there is no choice to make and the nothing-clears branch is not reached). The isotonic remediation remains a post-hoc variant and does not ship in any form. Deployment work is the Task 4 list under \"If it ships, what changes\".",
+    "amendment": "**AMENDMENT \u2014 rule 4, amended 2026-09-08 AFTER SEEING THE NUMBERS, and recorded as such.** The five rules above are the pre-registration as written on 2026-09-08 before anything was run, and rule 4's original wording is left in place above, unedited. This block replaces the *gate* rule 4 states; it does not touch rule 4's status as a gate, and it does not touch any other rule.\n\n> The gate as written compared the candidate's pooled ECE against a single incumbent value (0.0088), which the ECE noise floor later showed to be the incumbent's *best* of three disjoint seed sets, at a bin count (10) that nothing in this document justified. The incumbent's own ECE ranges 0.0088\u20130.0160 (sd 0.0038), so the gate's 0.0036 gap is smaller than one standard deviation of the metric it tests, and the sign of the gap reverses at 5, 15 and 20 bins. The gate is therefore re-specified to the same form every other bar in this project uses: **a candidate's mean pooled ECE across three disjoint seed sets must not exceed the incumbent's mean across three disjoint seed sets by more than 2\u03c3 of the pooled spread.** This form is stricter in what it demands (three seed sets rather than one) and is applied here: B1 0.01337 \u00b1 0.00100 vs incumbent 0.01163 \u00b1 0.00384, difference +0.0017 against a 2\u03c3 tolerance of \u22480.0056 \u2014 passes. Amending a pre-registered gate after seeing results is a real weakness and is recorded as one; the mitigation is that the amendment is written down, the original is preserved, the replacement is the project's standard form rather than a bespoke threshold, and the log-loss bar it reports to was never touched.\n\n**The call, taken 2026-09-08: B1 ships, with the ECE gate re-specified as above.** Rule 2 was already satisfied by B1 at both seed sets against its own paired incumbent; the amended rule 4 passes; rules 3 and 5 do not apply (B0 does not clear, so there is no choice to make and the nothing-clears branch is not reached). The isotonic remediation remains a post-hoc variant and does not ship in any form. Deployment work is the Task 4 list under \"If it ships, what changes\".\n\n**SUB-NOTE, added 2026-09-09 (pre-merge). Nothing above is edited; this records two things the amendment got wrong.**\n\n1. **The gate \u2014 in both forms \u2014 judged a scorer that does not ship.** Every pooled ECE either version compares comes from a walk-forward report, and every walk-forward report scores the HARNESS form: one temperature refit on each fold's inner-validation year. `mma.inference.BlendedPredictor` has no held-out year and applies a single fixed post-average temperature to every prediction it makes. The two are different scorers, so no version of rule 4 was ever applied to the deployed model.\n\n2. **Where the deployed form stands against this gate's own threshold.** The amended gate's largest passing pooled ECE is 0.011633 + 0.005607 = **0.017241** (incumbent mean plus the 2\u03c3 tolerance). Re-scoring the committed per-row dump under the deployed form \u2014 one fixed temperature, derived by the walk-forward rule in `scripts/derive_blend_temperature.py` \u2014 gives pooled log-loss **0.6432** and ECE **0.0108** (0.0034 / 0.0108 / 0.0108 / 0.0155 at 5 / 10 / 15 / 20 bins), inside that threshold by 0.0064 and better than the harness form's 0.6437 and 0.0124 on both axes. The gate is **not** re-run here: rule 4 was resolved on 2026-09-08 on the harness numbers, and re-applying a gate to a different form after the fact would be a second post-hoc move on top of the one already recorded. This states where the shipped scorer falls, as a correction of the record. It is also one seed set (0\u20134) rather than the three the amended gate's arms use, because `models/walkforward/preds/` holds a dump for B1 alone. The fixed value the model shipped with until 2026-09-09 \u2014 the median of the per-fold fits, 0.80 \u2014 re-scores to ECE **0.0177**, *outside* the threshold; that is the defect this sub-note's derivation fixed, and the deployed value is now 0.85.\n\n3. **\"Stricter in what it demands\" was wrong, and the error runs in the direction that decided the outcome.** The replacement is stricter on one axis \u2014 three seed sets rather than one \u2014 but **looser on the axis the decision turned on**: it introduced a \u00b12\u03c3 tolerance where the original had none. B1 fails the gate as written outright (0.0124 against 0.0088), and it also fails a mean-vs-mean comparison with no tolerance (0.01337 against the incumbent's 0.01163, +0.0017 the wrong way). It passes only because the amendment permits a candidate to be worse by up to 0.0056. Calling the replacement stricter overstated the mitigation; the honest statement is that the amendment traded one-number-vs-one-number for means over three seed sets *and* granted a tolerance the original did not have, and B1 needed the tolerance.",
     "status": {
       "1": {
         "satisfied": true,

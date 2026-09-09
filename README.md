@@ -319,7 +319,9 @@ B0 never clears, so the pre-registered rule for choosing *between* two
 winners never fired.
 
 The blend also beats both of its own members on the same table: XGBoost
-0.6462, the neural ensemble 0.6475, the blend 0.6437. Calibrating after the
+0.6462, the neural ensemble 0.6475, the blend 0.6437 (all three on the harness
+form, so the comparison is like for like; the deployed fixed-temperature blend
+reads 0.6432). Calibrating after the
 average is doing real work on calibration and nothing on log-loss — the
 uncalibrated blend reads 0.6455 with ECE 0.0162 against 0.6453 / 0.0091
 calibrated.
@@ -331,7 +333,10 @@ because leaving it out would make everything else in the file worth less.
 
 Rule 4 of the pre-registration was an ECE gate: *a shipping candidate must
 not have a worse pooled ECE than the incumbent (0.0088).* B1's pooled ECE is
-**0.0124**, so it **failed that gate as written**. The rule reserved that case
+**0.0124** on the harness form, so it **failed that gate as written**. (Every
+ECE in this subsection is the harness form's — see "the gate judged a form
+that does not ship" below, which is a second, separate weakness.) The rule
+reserved that case
 for a human call, and the human's call was to **re-specify the gate** — after
 seeing the numbers. That is exactly the kind of move this project's whole
 protocol exists to prevent, and calling it anything softer than a weakness
@@ -367,6 +372,50 @@ the replacement is the project's standard form rather than a threshold picked
 to fit; and **the log-loss bar B1 actually cleared was never touched**. A
 reader who thinks the ECE gate should have stood has every number needed to
 say so.
+
+And the mitigation list needs one correction of its own. The replacement gate
+is stricter on one axis — three seed sets rather than one — but it is
+**looser on the axis that decided the outcome**: it introduced a ±2σ
+tolerance where the original had none. B1 fails the original gate outright
+(0.0124 against 0.0088) and also fails a mean-vs-mean comparison with no
+tolerance (0.01337 against 0.01163, +0.0017 the wrong way). It passes only
+because the amendment allows a candidate to be worse by up to 0.0056.
+"Stricter in what it demands" was the wrong summary and is corrected here and
+in the plan's amendment block.
+
+#### The gate judged a form that does not ship
+
+Both versions of the ECE gate compared numbers taken from walk-forward
+reports, and every walk-forward report scores the **harness** form — one
+temperature refit on each fold's inner-validation year. The deployed scorer
+applies a single fixed temperature and cannot fit per fold, so no version of
+the gate was ever applied to the model that ships. (One limit on the
+correction: the deployed form can only be re-scored where a per-row prediction
+dump was committed, and that is B1 at seeds 0–4 alone — so its ECE below is a
+single measurement, not the three-seed-set mean the amended gate's arms use.)
+
+Re-scoring the committed per-row dump under the deployed form gives pooled
+**log-loss 0.6432 and ECE 0.0108** (5/10/15/20 bins: 0.0034 / 0.0108 / 0.0108
+/ 0.0155) against the harness form's 0.6437 and 0.0124 — better on both, and
+comfortably inside the amended gate's own threshold of **0.017241** (the
+incumbent mean plus its 2σ tolerance), which it clears by 0.0064. The gate
+was not re-run on this form: rule 4 was resolved on the harness numbers, and
+re-applying a gate to a different form afterwards would be a second post-hoc
+move on top of the one already recorded. What is recorded instead is where
+the shipped scorer falls against the same threshold
+(`deployed_form.against_the_amended_ece_gate` in the decision artifact).
+
+This is not a cosmetic distinction, because the fixed temperature the project
+originally shipped was **the wrong one**. It was 0.80, the median of the eight
+per-fold fits — a rule borrowed from *training-budget* derivation, where a
+median epoch count is a defensible central tendency of a budget. A median
+temperature has no calibration justification and no harness run ever measured
+it. Re-scored, 0.80 gives pooled ECE **0.0177**: worse than the published
+0.0124, and *over* the amended gate's own threshold. The deployed value is now
+the walk-forward one (0.85), the only rule that is both fixed at serving time
+and validated without using the evaluation rows to choose it, and the
+alternatives are all scored side by side in
+`models/walkforward/blend_temperature.json`.
 
 One remediation was tried and failed decisively. If a single scalar cannot
 fix a *shape* mismatch between two differently-calibrated probability
@@ -428,9 +477,13 @@ here.
    made a served weight class silently wrong instead of loud.
 
 Everything measured is committed: `models/walkforward/blend_b*.json`, the two
-noise floors (`noise_floor_blend.json`, `noise_floor_ece.json`) and
-`sp2_2_decision.json`, which quotes the rules and the amendment verbatim from
-the plan file and is regenerable by `scripts/sp2_2_decision.py`.
+noise floors (`noise_floor_blend.json`, `noise_floor_ece.json`),
+`blend_temperature.json` — the deployed temperature's derivation, every
+candidate rule scored side by side, and the round-trip check that the re-score
+reproduces `blend_b1.json`'s own pooled numbers — and `sp2_2_decision.json`,
+which quotes the rules and the amendment verbatim from the plan file, carries
+the deployed form's metrics in `deployed_form`, and is regenerable by
+`scripts/sp2_2_decision.py`.
 
 ### Data sources and licences
 
@@ -477,9 +530,27 @@ rows above it are its own members, measured on the same folds:
 | Elo baseline | 0.553 | 0.683 | 0.245 | 0.030 |
 | XGBoost (5-seed ensemble) | 0.616 | 0.646 | 0.228 | 0.019 |
 | Neural net (5-seed ensemble, calibrated) | 0.622 | 0.648 | 0.228 | 0.011 |
-| **Blend** (0.5/0.5, calibrated after averaging) | **0.622** | **0.644** | **0.226** | 0.012 |
+| **Blend — the deployed form** (0.5/0.5, one fixed post-average T = 0.85) | **0.622** | **0.643** | **0.226** | **0.0108** |
+| Blend — the harness form (a temperature refit on every fold) | 0.622 | 0.644 | 0.226 | 0.0124 |
 
-(`models/walkforward/{xgb_ens5_s1,torch_a1_combined,blend_b1,elo}.json`.)
+(`models/walkforward/{xgb_ens5_s1,torch_a1_combined,blend_b1,elo}.json`; the
+deployed row from `models/walkforward/blend_temperature.json`. The two blend
+rows carry a fourth decimal of ECE because that is where they differ.)
+
+**Why the blend has two rows.** The harness fits one temperature per fold on
+that fold's inner-validation year. The deployed scorer has no held-out year
+and applies a single fixed temperature to every prediction it will ever make,
+so it is a different scorer, and the row a reader of this table cares about is
+the deployed one. The fixed value is derived by re-scoring the harness's own
+committed per-row predictions under a **walk-forward rule** — fold *Y* gets a
+temperature fitted on the pooled out-of-fold predictions of the folds strictly
+*before* Y, which is exactly the information deployment has; at serving time
+every fold is "before", so the served value is fitted on all of them
+(**T = 0.85**, `scripts/derive_blend_temperature.py`). Pooling those folds is
+what makes the deployed row an out-of-sample measurement rather than a
+temperature scored on the rows that chose it. Everything else — the other
+three rows, the candidate table above, the bar B1 cleared — is the harness
+form, which is the right basis for comparing *recipes*.
 
 Pooled method macro-F1: XGBoost 0.331, neural net 0.373, blend 0.339;
 finish-round macro-F1 (finishes only, 2,446 fights): XGBoost 0.187, neural
@@ -541,12 +612,26 @@ wasn't a seed-lucky fluke (`fresh_seed_rescore` in
 **One thing the refit decision does not cover, deliberately.** The blend's
 *own* post-average temperature cannot be derived in fixed-budget mode: the
 harness fits it on each fold's inner-validation year, which protocol B trains
-on, so a refit-mode blend report cannot exist by construction. The deployed
-value is **T = 0.80**, the median of B1's eight per-fold fitted temperatures
-(0.73, 0.76, 0.93, 0.76, 1.00, 0.78, 0.88, 0.82) — the same median rule the
-refit recipe uses for the neural member's own temperature. It is an
-extrapolation the walk-forward never validated as a *fixed* value, and it is
-recorded as a follow-up rather than as a settled result.
+on, so a refit-mode blend report cannot exist by construction. It is derived
+instead by re-scoring the harness's committed per-row predictions — a
+**walk-forward temperature**, fitted for fold *Y* on the pooled out-of-fold
+predictions of the folds before *Y*, and at serving time on all of them:
+**T = 0.85** (`scripts/derive_blend_temperature.py`,
+`models/walkforward/blend_temperature.json`). Because each fold is scored by a
+temperature that never saw it, the pooled result is a genuine out-of-sample
+measurement of the *fixed*-temperature form — 0.6432 log-loss, ECE 0.0108,
+against the per-fold-fitted harness form's 0.6437 and 0.0124.
+
+This replaced **T = 0.80**, the median of B1's eight per-fold fitted
+temperatures (0.73, 0.76, 0.93, 0.76, 1.00, 0.78, 0.88, 0.82), which shipped
+until 2026-09-09. That median is the rule the refit recipe uses for a training
+*budget*; nothing justified it for a temperature and no run had measured it.
+Measured at last, it scores pooled ECE **0.0177** — worse than the number the
+project was publishing, and over the amended ECE gate's own threshold. The
+fitted values still trend upward across folds (0.73 in 2018 to 0.82–1.00 in
+the recent ones), the same temperature drift SP2 recorded as its follow-up 6;
+the walk-forward derivation tracks that drift by construction rather than
+averaging it away.
 
 
 ### Original validation window (2021–2023, for continuity)
@@ -620,8 +705,8 @@ temperature scaling — in the original split protocol the fitted temperatures
 all landed near 1.0, i.e. the raw model was already well calibrated; the
 deployed refit applies the harness-derived temperature 1.15 to every seed.
 Since SP2.2 it is one of two members of the deployed blend rather than the
-scorer on its own, and a second temperature (0.80) is applied to the blend
-*after* the two members are averaged. Uncertainty comes from ensemble spread
+scorer on its own, and a second temperature (0.85, the walk-forward value) is
+applied to the blend *after* the two members are averaged. Uncertainty comes from ensemble spread
 (mean 0.087 on the original validation window) and MC dropout; the app's
 seed band is now the spread of the five per-seed blends, and the MC-dropout
 histogram is the neural member's parameter uncertainty re-centred on the
@@ -717,15 +802,23 @@ stays gradeable even as ratings keep moving). Aggregate stats land in
 2026-08-08): 0.667 accuracy, 0.616 log-loss, 0.213 Brier — against a
 coin-flip baseline of 0.476 accuracy on the same fights. Those 78 predictions
 were made by model `40df77ec43c7`, the SP1 model trained on the 46-column
-table. Three redeployments have happened since: the SP2 feature set and
-re-derived budget (`b617b96dae45`), the SP2.2 blend (`5aa33460ef40`), and a
-pre-merge fix to that blend's own deployment: its mixing weight and
+table. Four redeployments have happened since: the SP2 feature set and
+re-derived budget (`b617b96dae45`), the SP2.2 blend (`5aa33460ef40`), and two
+pre-merge fixes to that blend's own deployment. First, its mixing weight and
 post-average temperature used to be module constants the model hash never
 covered, so editing either one would have silently changed every recorded
 probability under an unchanged hash; both now live in a committed artifact,
 `models/blend.json`, hashed alongside the model weights
-(**`6207d19d615b`** — the number itself, and every prediction, is unchanged,
-since only where the two constants live moved). The next weekly run opens a
+(**`6207d19d615b`** — that number itself, and every prediction, was unchanged,
+since only where the two constants live moved). Second, the temperature in
+that artifact was the *wrong* fixed value: the median of the harness's
+per-fold fits, a training-budget rule with no calibration justification, which
+re-scores to ECE 0.0177. It is now the walk-forward value 0.85
+(**`b863389f1760`**), and unlike the previous redeployment this one **does**
+change every probability the model will make: each moves exactly as
+σ(logit(p)·0.80/0.85), a small shrink toward 0.5 — slightly less confident and
+measurably better calibrated (pooled ECE 0.0177 → 0.0108). Predictions already
+recorded under an older hash are left as they were made. The next weekly run opens a
 new section for the current hash rather than mixing different scorers'
 predictions into one row. 29 further
 predictions are awaiting results, and the rest cover events that haven't

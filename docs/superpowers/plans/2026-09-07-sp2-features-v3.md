@@ -1726,10 +1726,12 @@ fold +0.0006, `ships: true`) ; deployed model hash: **`b617b96dae45`**.
 > * **The deployed scorer is no longer the torch ensemble, and the hash is
 >   no longer `b617b96dae45`.** It is a 0.5/0.5 blend of a 5-seed XGBoost
 >   ensemble and the 5-seed torch ensemble, temperature-scaled after
->   averaging (T = 0.80), hash **`6207d19d615b`** (`5aa33460ef40` when this
+>   averaging (T = 0.85), hash **`b863389f1760`** (`5aa33460ef40` when this
 >   note was written; a pre-merge fix on the same branch moved the 0.5/0.80
 >   above from module constants into a committed, hashed `models/blend.json`
->   -- same numbers, same predictions) -- which now covers the XGBoost
+>   -- same numbers, same predictions, `6207d19d615b` -- and a second one
+>   replaced that 0.80 with the walk-forward temperature 0.85, which does
+>   change every prediction) -- which now covers the XGBoost
 >   artifacts as well. The deployment budgets in this record
 >   (105/61/75 trees, 10 epochs at T 1.07) belong to the `base,external`
 >   table and were re-derived on the new one (6 epochs at T 1.15;
