@@ -1,0 +1,68 @@
+{
+  "metric": "ece",
+  "arms": {
+    "incumbent_torch_S0": {
+      "n_reports": 3,
+      "pooled_ece": [
+        0.0088,
+        0.016,
+        0.0101
+      ],
+      "sigma_seed": 0.0038370995990895693,
+      "mean": 0.011633333333333334,
+      "two_sigma": 0.0076741991981791385,
+      "reports": [
+        "models/walkforward/torch_external_diffsonly_extslice.json",
+        "models/walkforward/torch_external_diffsonly_seeds5.json",
+        "models/walkforward/torch_external_diffsonly_seeds10.json"
+      ],
+      "seed_sets": [
+        "0,1,2,3,4",
+        "5,6,7,8,9",
+        "10,11,12,13,14"
+      ]
+    },
+    "B1_blend_S1": {
+      "n_reports": 3,
+      "pooled_ece": [
+        0.0124,
+        0.0144,
+        0.0133
+      ],
+      "sigma_seed": 0.0010016652800877814,
+      "mean": 0.013366666666666666,
+      "two_sigma": 0.002003330560175563,
+      "reports": [
+        "models/walkforward/blend_b1.json",
+        "models/walkforward/blend_b1_seeds5.json",
+        "models/walkforward/blend_b1_seeds10.json"
+      ],
+      "seed_sets": [
+        "0,1,2,3,4",
+        "5,6,7,8,9",
+        "10,11,12,13,14"
+      ]
+    },
+    "B0_blend_S0": {
+      "n_reports": 3,
+      "pooled_ece": [
+        0.0091,
+        0.006,
+        0.0119
+      ],
+      "sigma_seed": 0.0029512709126747415,
+      "mean": 0.009000000000000001,
+      "two_sigma": 0.005902541825349483,
+      "reports": [
+        "models/walkforward/blend_b0_seeds0.json",
+        "models/walkforward/blend_b0_seeds5.json",
+        "models/walkforward/blend_b0_seeds10.json"
+      ],
+      "seed_sets": [
+        "0,1,2,3,4",
+        "5,6,7,8,9",
+        "10,11,12,13,14"
+      ]
+    }
+  }
+}

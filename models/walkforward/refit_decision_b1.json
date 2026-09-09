@@ -1,0 +1,187 @@
+{
+  "rule": "B ships as the deployment recipe iff torch B pooled winner log-loss <= torch A + sigma_seed (spec v3 \u00a74 SP1)",
+  "feature_table": "the SP2.2 shipped S1 table (base,external,trajectory,notice,context,opponent_adjusted, 11,238 x 87) with external_missing, same_country, notice_unknown, home_country_a and home_country_b held out of both model matrices",
+  "xgb": {
+    "A_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6462,
+      "accuracy": 0.6164,
+      "brier": 0.2276,
+      "ece": 0.0194,
+      "joint_log_loss": 2.1775,
+      "method_macro_f1": 0.3314,
+      "round_macro_f1": 0.1872,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "B_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6455,
+      "accuracy": 0.623,
+      "brier": 0.2272,
+      "ece": 0.015,
+      "joint_log_loss": 2.1716,
+      "method_macro_f1": 0.3342,
+      "round_macro_f1": 0.1828,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "delta_B_minus_A": -0.0007,
+    "sigma_seed": 0.0003464101615137373,
+    "B_not_worse_than_A_by_sigma": true,
+    "per_fold_B_minus_A": {
+      "2018": -0.0043,
+      "2019": 0.0027,
+      "2020": -0.0044,
+      "2021": 0.0037,
+      "2022": -0.0035,
+      "2023": -0.0007,
+      "2024": 0.0019,
+      "2025": -0.0009
+    },
+    "bar_check_B_vs_A": {
+      "bar": 0.003,
+      "sigma_seed": 0.0003464101615137373,
+      "delta": -0.0007,
+      "fold_deltas": {
+        "2018": -0.0043,
+        "2019": 0.0027,
+        "2020": -0.0044,
+        "2021": 0.0037,
+        "2022": -0.0035,
+        "2023": -0.0007,
+        "2024": 0.0019,
+        "2025": -0.0009
+      },
+      "worst_fold_delta": 0.0037,
+      "comparable": true,
+      "missing_folds": [],
+      "clears_delta": false,
+      "no_fold_regression": true,
+      "ships": false
+    },
+    "budget": {
+      "fixed_rounds": {
+        "winner": 109,
+        "method": 73,
+        "round": 71
+      }
+    }
+  },
+  "torch": {
+    "A_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6475,
+      "accuracy": 0.6222,
+      "brier": 0.2281,
+      "ece": 0.0111,
+      "joint_log_loss": 2.3132,
+      "method_macro_f1": 0.3728,
+      "round_macro_f1": 0.3068,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "B_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6473,
+      "accuracy": 0.623,
+      "brier": 0.228,
+      "ece": 0.0165,
+      "joint_log_loss": 2.3179,
+      "method_macro_f1": 0.3683,
+      "round_macro_f1": 0.3051,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "delta_B_minus_A": -0.0002,
+    "sigma_seed": 0.0003464101615137373,
+    "B_not_worse_than_A_by_sigma": true,
+    "per_fold_B_minus_A": {
+      "2018": -0.0033,
+      "2019": -0.0006,
+      "2020": -0.0005,
+      "2021": -0.0008,
+      "2022": -0.0068,
+      "2023": 0.0011,
+      "2024": 0.0026,
+      "2025": 0.0039
+    },
+    "bar_check_B_vs_A": {
+      "bar": 0.003,
+      "sigma_seed": 0.0003464101615137373,
+      "delta": -0.0002,
+      "fold_deltas": {
+        "2018": -0.0033,
+        "2019": -0.0006,
+        "2020": -0.0005,
+        "2021": -0.0008,
+        "2022": -0.0068,
+        "2023": 0.0011,
+        "2024": 0.0026,
+        "2025": 0.0039
+      },
+      "worst_fold_delta": 0.0039,
+      "comparable": true,
+      "missing_folds": [],
+      "clears_delta": false,
+      "no_fold_regression": true,
+      "ships": false
+    },
+    "budget": {
+      "fixed_epochs": 6,
+      "temperature": 1.15
+    }
+  },
+  "deployment_recipe": "refit_through_latest",
+  "fresh_seed_rescore": {
+    "A_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6471,
+      "accuracy": 0.6203,
+      "brier": 0.2279,
+      "ece": 0.0128,
+      "joint_log_loss": 2.3183,
+      "method_macro_f1": 0.3753,
+      "round_macro_f1": 0.3002,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "B_pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6474,
+      "accuracy": 0.6255,
+      "brier": 0.228,
+      "ece": 0.0197,
+      "joint_log_loss": 2.3205,
+      "method_macro_f1": 0.3801,
+      "round_macro_f1": 0.3005,
+      "n_method": 4792,
+      "n_round": 2446
+    },
+    "delta_B_minus_A": 0.0003,
+    "sigma_seed": 0.0003464101615137373,
+    "B_not_worse_than_A_by_sigma": true,
+    "per_fold_B_minus_A": {
+      "2018": -0.0039,
+      "2019": 0.0011,
+      "2020": -0.002,
+      "2021": -0.0002,
+      "2022": -0.0052,
+      "2023": 0.0016,
+      "2024": 0.0044,
+      "2025": 0.0036
+    },
+    "verdict": "confirmed"
+  },
+  "notes": [
+    "sigma_seed is an n=3 estimate; its 95% CI (chi-square, 2 dof) is roughly [0.5\u03c3, 6.3\u03c3] (for \u03c3=0.000346: lower \u2248 \u03c3\u00b7sqrt(2/7.378) = 0.000180, upper \u2248 \u03c3\u00b7sqrt(2/0.0506) = 0.002177)",
+    "the torch rule passed by a margin smaller than the 4-dp storage precision of pooled log-loss (\u0394=-0.0002 vs \u03c3=0.00035)",
+    "bar_check is informational here: ships=False is expected because B is a deployment recipe that must only be not-worse than A, not a challenger that must beat it",
+    "SP2.2 ships a blend on the S1 table, so BOTH members need a deployment budget on that table and the XGB member needs one for its five-seed shape; the SP2 numbers (10 epochs / T 1.07; 105/61/75 trees) were derived from the base,external table and a single XGB fit, and do not carry over (models/walkforward/refit_decision_v3.json). NOTE what this set does NOT decide: the blend's own post-average temperature. The harness fits that on each fold's inner-validation year, which fixed-budget mode trains on, so a refit-mode blend report cannot exist by construction; the deployed value is the median of blend_b1.json's per-fold temperatures, committed to models/blend.json by scripts/build_blend_config.py via this same fixed_budget_from median rule.",
+    "Fresh-seed re-scoring (spec \u00a74 SP1): B and A both re-run with seeds 5\u20139; see fresh_seed_rescore."
+  ],
+  "sigma_ci_95": [
+    0.00018036131426059986,
+    0.0021770959612804892
+  ]
+}

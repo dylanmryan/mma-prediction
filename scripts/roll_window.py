@@ -6,8 +6,15 @@ THRESHOLD, prints the pre-registered promotion protocol. Never touches any
 file. This is what the weekly refresh-data.yml Action runs and only prints.
 
 `--execute`: runs the split-protocol comparison once the threshold is met.
-It gates on the TORCH ENSEMBLE -- the exact model the app serves -- not a
-proxy:
+It gates on the TORCH ENSEMBLE, which since SP2.2 is only HALF of the model
+the app serves -- the deployed scorer is a blend of that ensemble and a 5-seed
+XGBoost ensemble (`mma.inference.BlendedPredictor`). This gate retrains and
+scores the torch member alone, so it can no longer answer "does a fresh fit
+beat the incumbent?" about the served model, and `--execute` refuses to run
+against a blended incumbent (`blended_incumbent` below) rather than reporting
+a number about half a model as if it were about the model. Bringing the gate
+onto the blend, or onto the walk-forward harness, is SP4 work. What it does
+when it does run:
 
   1. Windows: NEW_CUTOFF = latest data date - VAL_WINDOW_YEARS; the held-
      forward validation slice is [NEW_CUTOFF, latest]. Both incumbent and
@@ -20,7 +27,10 @@ proxy:
      winner log-loss.
   4. Promote iff candidate_log_loss < incumbent_log_loss - PROMOTION_MARGIN.
 
-CAVEAT -- the comparison is only valid when the slice is OUT-OF-TIME for the
+CAVEAT 1 -- the candidate is half the model. See above: `--execute` aborts on a
+blended incumbent.
+
+CAVEAT 2 -- the comparison is only valid when the slice is OUT-OF-TIME for the
 incumbent. Under the default deployment recipe (refit_through_latest, see
 models/walkforward/refit_decision_v3.json and the train scripts) the incumbent
 is trained on EVERY fight through the latest data date, so its training
@@ -44,8 +54,9 @@ git writes. After any promotion decision the human re-runs the refit recipe
 `scripts/build_display_priors.py` -- so the deployed model includes the
 newest fights, runs the full test suite, reviews the metrics diff, and
 commits by hand. The `model_version` that starts a fresh track_record.json
-section is the artifact hash from `mma.versioning.model_version` (over the
-torch weights and preprocessing stats), NOT a commit sha; prospective
+section is the artifact hash from `mma.versioning.model_version` (over BOTH
+members: the torch weights and preprocessing stats and the XGBoost seed
+boosters), NOT a commit sha; prospective
 predictions already key every fight by the model_version active when it was
 made. If rejected, models/torch is left untouched and the negative result
 is printed.
@@ -121,23 +132,42 @@ def promotion_protocol_text(n_accumulated: int, cutoff: pd.Timestamp) -> str:
         "already key every fight by the model_version active when it was made.\n\n"
         "Run `python scripts/roll_window.py --execute` to run this end to end. "
         "The promotion gate retrains and scores the full 5-seed TORCH ENSEMBLE "
-        "(the model the app serves) directly. On promotion the candidate ensemble "
-        "is STAGED into models/torch -- this command makes NO git commit; a human "
-        "runs the suite, reviews the diff, and commits by hand.\n\n"
-        "CAVEAT: under the default refit_through_latest recipe the incumbent is "
+        "directly. On promotion the candidate ensemble is STAGED into "
+        "models/torch -- this command makes NO git commit; a human runs the "
+        "suite, reviews the diff, and commits by hand.\n\n"
+        "CAVEAT 1: since SP2.2 the deployed scorer is a BLEND of that torch "
+        "ensemble and a 5-seed XGBoost ensemble, so this gate covers HALF the "
+        "served model and --execute aborts on a blended incumbent rather than "
+        "reporting a number about half a model as if it were about the model.\n"
+        "CAVEAT 2: under the default refit_through_latest recipe the incumbent is "
         "trained through the latest data date, so the newest-2-years slice is "
-        "IN-SAMPLE for it and --execute aborts (steps 2-4 are not a valid gate). "
-        "The walk-forward harness (models/walkforward/, scripts/run_walkforward.py) "
-        "is the primary comparison until SP4 moves this gate onto it. A "
-        "split-protocol candidate never ships as-is: after any promotion decision, "
-        "re-run bare scripts/train_xgb.py, scripts/train_torch.py and "
-        "scripts/build_display_priors.py (the refit recipe) before committing."
+        "IN-SAMPLE for it and --execute aborts for that reason too (steps 2-4 are "
+        "not a valid gate). "
+        "The walk-forward harness (models/walkforward/, scripts/run_walkforward.py, "
+        "including --candidate blend) is the primary comparison until SP4 moves "
+        "this gate onto it. A split-protocol candidate never ships as-is: after "
+        "any promotion decision, re-run bare scripts/train_xgb.py, "
+        "scripts/train_torch.py and scripts/build_display_priors.py (the refit "
+        "recipe) before committing."
     )
 
 
 def decide_promotion(new_log_loss: float, incumbent_log_loss: float,
                       margin: float = PROMOTION_MARGIN) -> bool:
     return new_log_loss < incumbent_log_loss - margin
+
+
+def blended_incumbent(models_dir: Path) -> bool:
+    """True when the deployed scorer is a BLEND, not the torch ensemble alone.
+
+    Detected from the artifacts themselves rather than a flag file: a deployed
+    XGBoost seed ensemble (`xgb_<head>_seed*.json`) next to `models/torch` is
+    what `mma.inference.BlendedPredictor.load` reads, and what
+    `mma.versioning.MODEL_ARTIFACT_GLOBS` hashes. When it is there, this
+    module's split-protocol gate retrains and scores half the served model, so
+    the comparison is not a promotion gate for anything that ships.
+    """
+    return bool(list(Path(models_dir).glob("xgb_winner_seed*.json")))
 
 
 def incumbent_in_sample(metrics: dict, new_val_start) -> bool:
@@ -185,15 +215,18 @@ def _report(features: pd.DataFrame, predictions_dir: Path) -> tuple[pd.Timestamp
 def _ensemble_val_log_loss(
     ensemble_dir: Path, features: pd.DataFrame, val_start: str, val_end: str
 ) -> float:
-    """Winner log-loss of the ensemble in `ensemble_dir` on the val slice.
+    """Winner log-loss of the TORCH ensemble in `ensemble_dir` on the val slice.
 
-    Loads the ensemble exactly as the app and scripts/final_test_eval.py do
-    (per-seed checkpoints + committed temperatures), predicts the mean
-    calibrated winner probability on the date-masked slice of
-    features.parquet, and scores it against y_winner. This is the single
-    evaluation both the incumbent (models/torch) and the freshly retrained
-    candidate (a temp dir) go through, so each is measured as its complete,
-    self-contained artifact on the identical held-forward slice.
+    Loads the ensemble from its per-seed checkpoints and committed
+    temperatures, predicts the mean calibrated winner probability on the
+    date-masked slice of features.parquet, and scores it against y_winner.
+    Both the incumbent (models/torch) and the freshly retrained candidate (a
+    temp dir) go through this identical evaluation.
+
+    Note what it is NOT: since SP2.2 the served model is a blend, and this
+    scores the torch member on its own. `_execute` refuses to run against a
+    blended incumbent for exactly that reason (`blended_incumbent`), so this
+    function is only ever reached for a torch-only deployment.
     """
     from mma.evaluate import log_loss as compute_log_loss
     from mma.inference import Ensemble
@@ -225,8 +258,9 @@ def _retrain_candidate(
 def _rebuild_display_priors() -> None:
     """Regenerate models/torch/display_priors.json from the staged ensemble.
 
-    scripts/build_display_priors.py loads the committed ensemble
-    (Ensemble.load() -> models/torch) and writes models/torch/
+    scripts/build_display_priors.py loads the committed scorer
+    (BlendedPredictor.load() -> models/torch plus models/xgb_*_seed*.json)
+    and writes models/torch/
     display_priors.json, so running it AFTER the candidate is staged into
     models/torch makes the priors match the new ensemble. The display priors
     are base-rate correction factors computed on the deployed ensemble's own
@@ -254,6 +288,18 @@ def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
         print(f"No incumbent ensemble in {torch_dir} -- nothing to compare "
               "against. Aborting.")
         return
+
+    if blended_incumbent(MODELS_DIR):
+        raise SystemExit(
+            "--execute aborted: the deployed scorer is a BLEND (an XGBoost seed "
+            f"ensemble in {MODELS_DIR} alongside the torch ensemble in "
+            f"{torch_dir}), and this gate retrains and scores the torch member "
+            "alone. A number about half the served model is not a promotion "
+            "gate for the served model, so it is not produced. Compare recipes "
+            "with the walk-forward harness instead (scripts/run_walkforward.py "
+            "--candidate blend, reports under models/walkforward/); moving this "
+            "gate onto the blend is SP4 work."
+        )
 
     incumbent_metrics = _load_incumbent_metrics(torch_dir)
     if incumbent_in_sample(incumbent_metrics, new_val_start):

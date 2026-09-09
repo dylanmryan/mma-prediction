@@ -7,10 +7,11 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "models" / "torch"
 # The decision the DEPLOYED budget came from. It is per feature table --
-# refit_decision.json is the SP1 46-column table's, refit_decision_v3.json
-# the SP2 `base,external` table's -- so this tracks whichever set the train
-# scripts default to (their REPORT is that set's B report).
-REFIT_DECISION = ROOT / "models" / "walkforward" / "refit_decision_v3.json"
+# refit_decision.json is the SP1 46-column table's, refit_decision_v3.json the
+# SP2 `base,external` table's, refit_decision_b1.json the SP2.2 S1 table's --
+# so this tracks whichever set the train scripts default to (their REPORT is
+# that set's B report).
+REFIT_DECISION = ROOT / "models" / "walkforward" / "refit_decision_b1.json"
 
 pytestmark = pytest.mark.skipif(
     not (OUT / "metrics_val.json").exists(),

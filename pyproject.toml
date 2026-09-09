@@ -11,7 +11,11 @@ dependencies = [
     "pandas>=2.0",
     "numpy>=1.26",
     "pyarrow>=14.0",
-    "xgboost>=2.0",
+    # 3.0+: the served blend's XGBoost member matches categoricals BY VALUE.
+    # XGBoost 2.x matches by CODE, and a one-row served matchup's category codes
+    # are not the training frame's -- a silently wrong weight_class, not an
+    # error. See mma.models.xgb.align_to_booster.
+    "xgboost>=3.0",
     "scikit-learn>=1.3",
     "torch>=2.2",
     "beautifulsoup4>=4.12",

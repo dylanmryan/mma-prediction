@@ -1,4 +1,4 @@
-"""MMA matchup predictor -- Streamlit app over the committed ensemble."""
+"""MMA matchup predictor -- Streamlit app over the committed blended scorer."""
 from __future__ import annotations
 
 import json
@@ -17,9 +17,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from mma.explain import contributions, humanize, load_booster
+from mma.explain import contributions, humanize, load_boosters
 from mma.inference import (
-    Ensemble,
+    BLEND_REPORT,
+    BlendedPredictor,
     apply_prior_correction,
     build_matchup,
     predict_symmetrized,
@@ -32,6 +33,13 @@ DISPLAY_PRIORS = ROOT / "models" / "torch" / "display_priors.json"
 TORCH_METRICS = ROOT / "models" / "torch" / "metrics_val.json"
 XGB_METRICS = ROOT / "models" / "xgb_metrics_val.json"
 ELO_WALKFORWARD = ROOT / "models" / "walkforward" / "elo.json"
+# The DEPLOYED blend's own pooled metrics. `BLEND_REPORT` scores the HARNESS
+# form, which fits one temperature per fold on that fold's inner-validation
+# year; this scorer applies one fixed temperature and cannot fit per fold, so
+# the card's numbers come from here instead
+# (`scripts/derive_blend_temperature.py`, which re-scores the committed
+# per-row dump under the deployed rule).
+BLEND_TEMPERATURE = ROOT / "models" / "walkforward" / "blend_temperature.json"
 
 
 def _read_json(path: Path) -> dict:
@@ -49,19 +57,38 @@ def _fold_span(fold_years: list) -> str:
     return f"{min(fold_years)}-{max(fold_years)} (+{max(fold_years) + 1})"
 
 
-def model_card_text() -> str:
-    """Model-card caption built from the committed metrics files.
+def model_card_text(weight: float, temperature: float) -> str:
+    """Model-card caption built from the committed metrics files and the
+    deployed blend's own harness report.
 
-    Under the refit_through recipe the metrics files quote the walk-forward
-    harness's pooled numbers (the evidence behind the deployed budget); the
-    text says so and names the training cutoff. Falls back to a numberless
-    card if any file is missing or unreadable.
+    `weight`/`temperature` are the deployed scorer's own committed
+    configuration (`models/blend.json`, via `mma.inference.load_blend_config`
+    -- the caller passes `predictor.weight`/`predictor.temperature` so the
+    card names the numbers actually serving rather than a re-read that could
+    disagree with them). The deployed scorer is a BLEND, so the card's
+    headline numbers are the blend's -- and they are the DEPLOYED form's
+    (`models/walkforward/blend_temperature.json`), not the harness report's.
+    `blend_b1.json` scores a scorer that fits one temperature per fold on that
+    fold's inner-validation year; this one applies a single fixed temperature
+    to every prediction it makes and cannot fit per fold, so its calibration
+    is a different number and this card is about this one. The harness form's
+    ECE is quoted beside it, labelled, so the card cannot be read as
+    contradicting the report. The two members' own pooled numbers are shown
+    beside it, as the comparison that makes the case for blending them. Under the refit_through recipe the metrics files carry no
+    held-out slice of their own; they carry the harness evidence behind each
+    member's budget, and the training cutoff. Falls back to a numberless
+    card if a file is missing or unreadable.
     """
     torch_m = _read_json(TORCH_METRICS)
     xgb_m = _read_json(XGB_METRICS)
     elo_m = _read_json(ELO_WALKFORWARD).get("pooled", {})
-    head = ("Model card: multi-task net (winner/method/finish-round), 5-seed "
-            "ensemble, temperature-calibrated. ")
+    blend = _read_json(BLEND_REPORT)
+    deployed = _read_json(BLEND_TEMPERATURE).get("deployed", {}).get("honest_pooled", {})
+    head = (
+        f"Model card: a blend — {weight:g}/{1 - weight:g} average of a "
+        "5-seed XGBoost ensemble and a 5-seed multi-task net "
+        "(winner/method/finish-round), temperature-calibrated after averaging "
+        f"(T={temperature:g}). ")
     tail = ("The prospective track record (predictions/track_record.json) is the "
             "only true holdout. Method and round probabilities assume independence "
             "from the winner, and predictions are symmetrized across both fighter "
@@ -78,14 +105,28 @@ def model_card_text() -> str:
         except (KeyError, TypeError, ValueError):
             return None
 
+    # The deployed form first. The harness report is a fallback that carries no
+    # calibration claim at all (see the ECE below), rather than one describing a
+    # scorer other than this one.
+    blend_line = _triple(deployed) or _triple(blend.get("pooled", {}))
     torch_line = _triple(torch_m.get("winner_ensemble", {}))
-    if torch_m.get("mode") == "refit_through" and torch_line:
-        n = torch_m["winner_ensemble"].get("n_val")
+    if blend_line and torch_m.get("mode") == "refit_through":
+        n = blend.get("pooled", {}).get("n")
         n_text = f"n={n:,} pooled fights" if isinstance(n, int) else "pooled"
+        ece = deployed.get("ece", {}).get("10")
+        harness_ece = blend.get("pooled", {}).get("ece")
+        ece_text = ""
+        if isinstance(ece, (int, float)):
+            ece_text = f", ECE {ece:.4f}"
+            if isinstance(harness_ece, (int, float)):
+                ece_text += (" (this fixed-temperature form; the harness's "
+                             f"per-fold-fitted form reads {harness_ece:.4f})")
         rivals = []
+        if torch_line:
+            rivals.append(f"net alone {torch_line}")
         xgb_line = _triple(xgb_m.get("winner", {}))
         if xgb_m.get("mode") == "refit_through" and xgb_line:
-            rivals.append(f"XGBoost {xgb_line}")
+            rivals.append(f"XGBoost alone {xgb_line}")
         elo_line = _triple(elo_m)
         if elo_line:
             rivals.append(f"Elo {elo_line}")
@@ -95,24 +136,27 @@ def model_card_text() -> str:
         return (
             head
             + f"Evaluated by expanding-window walk-forward "
-            f"{_fold_span(torch_m.get('harness_fold_years', []))}, {n_text}: "
-            f"{torch_line}{rival_text}. The deployed model is refit on every "
+            f"{_fold_span(blend.get('fold_years', []))}, {n_text}: "
+            f"{blend_line}{ece_text}{rival_text}. Both members are refit on every "
             f"decisive fight through {torch_m.get('train_through', '?')} "
             f"({n_train_text} fights), so no historical year is "
-            "held out from it. " + tail
+            "held out from them. " + tail
         )
     if torch_line:
         n = torch_m["winner_ensemble"].get("n_val")
         n_text = f"{n:,}" if isinstance(n, int) else "?"
-        return (head + f"Held-out validation ({n_text} fights): {torch_line}. " + tail)
+        return (head + f"Held-out validation ({n_text} fights), neural member only: "
+                f"{torch_line}. " + tail)
     return head + "Metrics files not found. " + tail
 
 st.set_page_config(page_title="MMA Fight Predictor", page_icon="🥊", layout="wide")
 
 
 @st.cache_resource
-def load_xgb_booster():
-    return load_booster()
+def load_xgb_boosters():
+    """The winner head's five seed boosters -- half of the deployed blend, and
+    the half TreeSHAP can decompose."""
+    return load_boosters()
 
 
 @st.cache_resource
@@ -122,21 +166,24 @@ def load_everything():
     fighters = pd.read_parquet(PROCESSED / "fighters.parquet")
     ratings = pd.read_parquet(PROCESSED / "ratings.parquet")
     snapshots = build_snapshots(fights, stats, ratings)
-    ensemble = Ensemble.load()
+    # The deployed scorer: both members, plus the deployed weight and
+    # post-average temperature it was loaded with (models/blend.json, via
+    # mma.inference.load_blend_config -- see predictor.weight/.temperature).
+    predictor = BlendedPredictor.load()
     as_of = fights["date"].max()
     weight_classes = sorted(fights["weight_class"].dropna().unique().tolist())
     # Mean-matching correction factors precomputed by
     # scripts/build_display_priors.py: empirical base rates over the rows the
-    # deployed ensemble trained on (every fight through its train_through
-    # under the refit recipe) divided by the ensemble's mean prediction there.
+    # deployed members trained on (every fight through their train_through
+    # under the refit recipe) divided by the BLEND's mean prediction there.
     display_factors = json.loads(DISPLAY_PRIORS.read_text())
     return (
-        fights, fighters.set_index("fighter_id"), ratings, snapshots, ensemble,
+        fights, fighters.set_index("fighter_id"), ratings, snapshots, predictor,
         as_of, weight_classes, display_factors,
     )
 
 
-fights, fighters, ratings, snapshots, ensemble, as_of, weight_classes, display_factors = load_everything()
+fights, fighters, ratings, snapshots, predictor, as_of, weight_classes, display_factors = load_everything()
 
 eligible = snapshots.join(fighters[["name"]], how="inner").sort_values("name")
 names = eligible["name"].tolist()
@@ -144,7 +191,7 @@ by_name = {name: fighter_id for fighter_id, name in eligible["name"].items()}
 
 st.title("🥊 MMA Fight Predictor")
 st.caption(
-    f"Elo → XGBoost → multi-task neural ensemble, honestly evaluated. "
+    f"Elo → XGBoost → neural ensemble → calibrated blend, honestly evaluated. "
     f"Fighter stats as of {as_of:%Y-%m-%d}."
 )
 
@@ -190,7 +237,7 @@ if name_a and name_b and name_a != name_b:
     )
     st.table(tape.set_index(""))
 
-    # Documented deviation from the Phase 5 plan: the ensemble is not exactly
+    # Documented deviation from the Phase 5 plan: the model is not exactly
     # symmetric under fighter order (P(A beats B) + P(B beats A) can miss 1.0
     # by ~15pp -- see docs/superpowers/plans/2026-07-11-phase5-streamlit.md
     # Task 3). We predict both orientations (A-vs-B and B-vs-A) and average
@@ -204,19 +251,27 @@ if name_a and name_b and name_a != name_b:
         snap_b, snap_a, bio_b, bio_a,
         weight_class or "Lightweight", title_fight, scheduled_rounds, as_of,
     )
-    result = predict_symmetrized(ensemble, matchup_ab, matchup_ba)
+    # The BLEND is what gets symmetrized: each orientation is blended and
+    # temperature-scaled first, then the two are corner-averaged.
+    result = predict_symmetrized(predictor, matchup_ab, matchup_ba)
     p_a = result["winner_prob"]
     spread = result["winner_spread"]
 
     st.subheader("Prediction")
     st.progress(p_a, text=f"{name_a}: {p_a:.0%}  ·  {name_b}: {1 - p_a:.0%}")
-    st.caption(f"5-seed ensemble; seeds range ±{spread / 2:.1%} around the mean.")
+    st.caption(
+        f"Ten models (5 XGBoost seeds + 5 net seeds); the per-seed blends range "
+        f"±{spread / 2:.1%} around the mean."
+    )
 
     # MC dropout runs on the (cheap) A-vs-B orientation only, then shifts the
     # samples by the same delta that symmetrization applied to the headline
     # probability, so the displayed distribution is centered on `p_a` above
     # rather than on the single-orientation `orientation_ab_prob`.
-    samples = ensemble.mc_dropout(matchup_ab, passes=100)[:, 0]
+    # MC dropout exists only in the neural member; the samples are re-centred
+    # on the blend's headline probability below, so read the spread as the
+    # net's parameter uncertainty drawn around the blend's mean.
+    samples = predictor.mc_dropout(matchup_ab, passes=100)[:, 0]
     samples = np.clip(samples + result["mc_dropout_shift"], 0.0, 1.0)
     histogram = np.histogram(samples, bins=20, range=(0.0, 1.0))[0]
     st.bar_chart(
@@ -225,15 +280,15 @@ if name_a and name_b and name_a != name_b:
         height=160,
     )
 
-    # Explanations come from the companion XGBoost winner model's native
-    # TreeSHAP contributions (exact per-prediction attribution), not the
-    # torch ensemble that drives the headline probability above -- the
-    # ensemble has no built-in per-prediction attribution. See
-    # mma.explain.contributions for the symmetrization details.
+    # Explanations are native TreeSHAP (exact per-prediction attribution) from
+    # the XGBoost winner seed ensemble -- which since SP2.2 is HALF OF THE
+    # MODEL ABOVE, not a companion that merely agrees with it. Averaged over
+    # the same five seeds the blend averages, and over both orientations. See
+    # mma.explain for what this does and does not attribute.
     with st.expander("Why this prediction?"):
-        booster = load_xgb_booster()
+        boosters = load_xgb_boosters()
         factors = humanize(
-            contributions(matchup_ab, matchup_ba, booster=booster),
+            contributions(matchup_ab, matchup_ba, boosters=boosters),
             name_a, name_b, top_n=6,
         )
         chart = pd.DataFrame(
@@ -242,9 +297,10 @@ if name_a and name_b and name_a != name_b:
         )
         st.bar_chart(chart, horizontal=True, height=260)
         st.caption(
-            "Factor attributions from the companion XGBoost model (TreeSHAP, "
-            "exact); the headline probability comes from the neural ensemble "
-            "— the two agree closely (val log-loss 0.658 vs 0.654)."
+            "Factor attributions from the XGBoost half of the blend (TreeSHAP, "
+            f"exact, averaged over its 5 seeds) — {predictor.weight:.0%} of the "
+            "probability above. The neural half is not decomposed, so read "
+            "these as what the tree half saw rather than the whole story."
         )
 
     # Final review finding: the raw model heads are trained with class-weighted
@@ -407,4 +463,4 @@ if MARKET_BENCHMARK.exists():
     )
 
 st.divider()
-st.caption(model_card_text())
+st.caption(model_card_text(predictor.weight, predictor.temperature))

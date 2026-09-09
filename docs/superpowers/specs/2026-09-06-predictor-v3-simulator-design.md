@@ -4,7 +4,17 @@
 **Status:** Approved 2026-09-06; amended the same day after SP0 (recency, data leads).
 SP0, SP1 and **SP2 done** (SP2 signed off 2026-09-08 — see its section below),
 plus **SP2.1**, a pre-registered re-test of SP2's rejections that shipped
-nothing (see the SP2.1 subsection); SP3 and SP4 outstanding.
+nothing, and **SP2.2**, a pre-registered blend experiment that **did** ship
+and changed what "the deployed model" means (see both subsections); SP3 and
+SP4 outstanding. **The deployed scorer is a blend of a 5-seed XGBoost
+ensemble and the 5-seed torch ensemble, hash `b863389f1760`** (was
+`5aa33460ef40`, then `6207d19d615b` once a pre-merge fix committed the blend's
+own weight and temperature to `models/blend.json` and hashed it too — same
+numbers, same predictions; the current hash is a second pre-merge fix, which
+replaced the temperature in that artifact with the walk-forward value 0.85 and
+does change every prediction, see the blend experiment plan's completion
+addenda) — statements elsewhere in this document that the torch ensemble is
+the deployed model describe the state before 2026-09-08.
 **Scope:** Predictions only. The value-betting / odds-analysis layer is a
 later, separate spec (see "Out of scope").
 
@@ -262,10 +272,13 @@ shows it hurts.
 
 **Status: SP2 DONE (2026-09-08), plan
 `docs/superpowers/plans/2026-09-07-sp2-features-v3.md`.** All eight blocks
-above were built and measured; **one shipped**. The feature table is
+above were built and measured; **one shipped**. The feature table was
 `base,external` (11,238 x 54), the deployed budget was re-derived on it
 (`models/walkforward/refit_decision_v3.json`: XGB 105/61/75 trees, torch 10
 epochs at temperature 1.07) and the models redeployed (hash `b617b96dae45`).
+*(Superseded by SP2.2 on 2026-09-08: the shipped table is now the 87-column
+S1 set and the budgets were re-derived again on it — see that subsection.
+This paragraph is SP2's record and is left as written.)*
 Fresh-seed re-score of the shipped set against a bit-exact paired incumbent:
 pooled 0.6516 -> 0.6473, **delta -0.0043**, worst fold +0.0006, ships.
 
@@ -350,8 +363,10 @@ arm**, without which a gain would have been misattributed to the features.
 
 Neither cleared the 0.003 bar; T − C = +0.0001, inside σ_seed = 0.000346. The
 rule's fourth branch applied: **record and revert.** Nothing shipped, the
-blocks were unregistered again, and the deployed hash is still
-`b617b96dae45`.
+blocks were unregistered again, and the deployed hash was still
+`b617b96dae45`. (SP2.2 later re-registered all four blocks — not because
+they cleared anything, but because the blend that cleared was scored on the
+table containing them; see the SP2.2 subsection.)
 
 **What this changes for SP3.** It removes the alternative explanation, and
 therefore strengthens rather than merely repeats the SP2 conclusion. Before
@@ -388,7 +403,9 @@ rather than one; and switching or widening the deployed scorer touches nine
 places listed in `open_questions[1]` of the decision file, of which
 `versioning.MODEL_ARTIFACT_GLOBS` is the sharp one — it currently hashes only
 the torch artifacts, so a blended deployment would stop hashing half of what
-serves predictions.
+serves predictions. **Resolved by SP2.2 below**: the blend was pre-registered
+as its own experiment, cleared its bar at two seed sets, and shipped; all
+nine places were updated, `MODEL_ARTIFACT_GLOBS` included.
 
 **One methodological result SP3 and SP4 inherit.** XGBoost's own seed noise
 was measured for the first time here (`models/walkforward/noise_floor_xgb.json`):
@@ -399,6 +416,136 @@ No SP2 rejection rests on a single-seed XGB screen alone (the screen never
 dropped a block without a torch run), but any future screen on a single
 boosted fit must use ≥3 model seeds; `--model-seed` and
 `scripts/noise_floor.py --candidate xgb` exist for that.
+
+#### SP2.2 — the blend ships (pre-registered, 2026-09-08)
+
+SP2.1's strongest number was a diagnostic it could not act on. SP2.2 turned
+it into a pre-registered experiment with two candidates, its own noise floor
+and a mechanical decision rule fixed before anything ran
+(`docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md`,
+`models/walkforward/sp2_2_decision.json`). **It shipped.**
+
+**What is deployed.** The equal-weight (0.5/0.5) average of a **5-seed
+XGBoost ensemble** and the **5-seed torch ensemble**, temperature-scaled
+*after* averaging (deployed **T = 0.85**, the walk-forward temperature: fitted
+on the pooled out-of-fold predictions of every fold before the one being
+served, which at serving time is all of them — it replaced the median of the
+harness's eight per-fold fits, 0.80, on 2026-09-09), on the S1 table
+`base,external,trajectory,notice,context,opponent_adjusted` (11,238 x 87)
+with `external_missing`, `same_country`, `notice_unknown`, `home_country_a`
+and `home_country_b` in the table and out of both model matrices. Deployment
+budgets re-derived on S1 (`refit_decision_b1.json`): torch 6 epochs at
+temperature 1.15, XGB 109/73/71 trees per seed. **Hash `b863389f1760`**
+(was `b617b96dae45`, then `5aa33460ef40` once the hash covered the XGBoost
+artifacts too, which it did not before, then `6207d19d615b`). Two pre-merge
+fixes on the same branch produced the last two. The first: the blend's own
+weight and temperature, until then module constants the hash did not cover,
+were committed to `models/blend.json` and hashed alongside the model weights
+-- same 0.5/0.80, same predictions. The second: the temperature in that
+artifact was the median of the per-fold fits, a training-budget rule that
+re-scores to pooled ECE 0.0177, and is now the walk-forward value 0.85
+(pooled 0.6432 / ECE 0.0108, `models/walkforward/blend_temperature.json`) --
+which does change every prediction, each by sigma(logit(p)*0.80/0.85). See
+the blend experiment plan's two completion addenda.
+
+| candidate | table | pooled | Δ vs deployed 0.6476 | fresh seeds 5–9 | ships |
+|---|---|---|---|---|---|
+| B0 | `base,external` | 0.6453 | −0.0023 | −0.0022 | no |
+| **B1** | S1 (87 col) | **0.6437** | **−0.0039** | **−0.0037** | **yes** |
+
+σ_blend = **0.0001** across three disjoint seed sets on both members
+(`noise_floor_blend.json`) — the quietest scorer measured in this repo,
+against 0.000346 for the torch ensemble and 0.00087–0.00125 for a single
+XGBoost fit. The bar stayed 0.003. B1 clears at seeds 0–4 and again at 5–9
+against its own paired incumbent, worst fold +0.0061 / +0.0064 against the
+0.01 tolerance, all four slices improving at seeds 0–4. It beats both of its
+own members on the same table (XGB 0.6462, torch 0.6475).
+
+**The methodological weakness, recorded as one.** The pre-registered ECE gate
+(rule 4) **failed as written** — B1's pooled ECE 0.0124 against the single
+incumbent value 0.0088 the rule named — and was **amended after the numbers
+were seen**. The evidence for amending: the incumbent's own pooled ECE spans
+0.0088–0.0160 (sd 0.0038) across three disjoint seed sets, so the 0.0036 gap
+is inside one sd of the metric doing the testing and 0.0088 was the
+incumbent's *best* of three; the sign of the gap reverses at 5, 15 and 20
+bins (10 is only the ECE helper's default); and the reliability curves show
+a couple of bins each way rather than a slope. The replacement is the
+project's standard form — mean across three disjoint seed sets, 2σ
+tolerance — and B1 passes it (+0.0017 against ≈0.0056). **Amending a
+pre-registered gate post hoc is exactly what this protocol exists to
+prevent.** The mitigations are transparency (the amendment is dated and
+labelled post-hoc inside the pre-registration, the original preserved
+verbatim), the use of a standard form rather than a bespoke threshold, and
+the fact that the log-loss bar B1 actually cleared was never touched. An
+isotonic remediation was tried and failed decisively (0.7049 against 0.6437,
+ECE 0.0289 against 0.0124), which is evidence that temperature scaling was
+never the binding constraint.
+
+**The four blocks, honestly sized.** SP2.1 declared `trajectory`, `notice`,
+`context` and `opponent_adjusted` dead, and that verdict stands *for the
+MLP*: the torch arm reads 0.6475 on S1 against 0.6476 on S0. The XGBoost arm
+reads 0.6462 against 0.6490 — they were never dead to the trees. But B1
+against B0, the same blend on the previous table, is only **−0.0016**, which
+clears no bar of its own. The blend is what cleared; the blocks ride along
+with it. They also carry maintenance: `external`, `notice` and `context`'s
+nationality half all come from the static `ehan03/jds-mma-data` snapshot
+(UFC coverage ends 2024-12-14), where `external_missing` is already 0.534 of
+2026 rows and `notice` is unknown on 100% of 2025–2026 rows.
+
+**Two silent deployment bugs found and fixed**, both worth SP4's attention as
+a class: (1) `scripts/build_features.py` defaulted to `base`-only blocks
+while the weekly Action invokes it bare, so the next refresh would have
+rebuilt the *shipped* table with five blocks missing and retrained on it with
+nothing crashing; the default is now the sidecar beside the committed table.
+(2) A served matchup in an unseen weight class raised `XGBoostError` that
+`prospective.predict_fight` did not catch, which would have killed a whole
+card's predictions; `align_to_booster` now maps unseen categories to missing,
+and the xgboost floor moved to `>=3.0`.
+
+**What this changes for SP3.** SP2.1's conclusion was that the box-score
+feature space and the MLP architecture were *both* at their ceiling, and it
+used that to argue SP3's value must come from the paradigm rather than from
+columns or capacity. SP2.2 does not overturn that, but it adds a term the
+earlier reasoning missed: **a *combination of model families* still had
+headroom that neither family had alone.** −0.0039 was available from two
+models this repo already had, without a single new column and without a
+wider net; the same four blocks that were worthless to the MLP were worth
+−0.0028 to the trees. The ceiling SP2.1 measured was a ceiling *per model
+family*, not a ceiling on the prediction.
+
+Concretely, for SP3:
+
+- **The simulator must be evaluated as a potential blend member, not only as
+  a torch replacement.** Its E1–E4 arms are still judged by the SP1 bar on
+  the harness, but the comparison that decides deployment is now
+  *blend-with-simulator against the deployed blend*, and a simulator that
+  loses to the torch member head-to-head can still earn a place if it
+  decorrelates. `mma.candidates.BlendCandidate` already implements the
+  construction and `mma.blend` holds its arithmetic, so the harness can score
+  such a candidate without new machinery — but the pre-registration for it
+  must fix the member set and the weights **in advance**, exactly as SP2.2
+  did, and must not let a three-model blend become a post-hoc search.
+- **Decorrelation is now a first-class property to look for.** The reason the
+  blend works is that the two members disagree in a useful direction; a
+  simulator that produces a coherent joint distribution over (winner, method,
+  round) is a plausibly *more* different object than XGBoost is from the MLP.
+- **The blend's method and round heads are worse than the torch member's**
+  (macro-F1 0.3385 against 0.3728, 0.2793 against 0.3068) because averaging
+  pulls the class-weighted neural heads toward the trees' majority-class
+  behaviour. SP3 is judged on joint log-loss, and that regression is the most
+  concrete thing a simulator could fix.
+- The blend's fixed T = 0.80 is an extrapolation the walk-forward never
+  validated (the harness fits one per fold; a refit-mode blend report cannot
+  exist because protocol B trains on the inner-validation year), so any
+  SP3 candidate that joins the blend inherits an open calibration question.
+
+**What this changes for SP4.** The promotion gate in `scripts/roll_window.py`
+scores a torch-only candidate against a torch-only incumbent. Since SP2.2 it
+detects a blended incumbent and **aborts** rather than reporting a number
+about half a model — which, with the pre-existing in-sample abort for
+refit-through-latest incumbents, leaves the promotion path fully inert. SP4
+must resolve it, and the spec's existing preference (move the gate onto the
+walk-forward harness) resolves both aborts at once.
 
 ### SP3 — Fight simulator
 
@@ -463,6 +610,10 @@ and the track record grades.
 
 - The deployed model is refit on all data through the latest event with the
   recipe SP1 selected; the weekly Action does the same on every refresh.
+  **Since SP2.2 that means both members of the blend**, each with its own
+  budget from `refit_decision_b1.json`, plus the blend's own fixed
+  post-average temperature — which no refit decision can derive, and which
+  SP4 should therefore validate rather than inherit.
 - `inference.py` exposes the outcome distribution; `display_priors.json`
   logic is retired if the simulator's marginals are already base-rate
   consistent (verified on the harness), otherwise retained for the marginals.
@@ -471,8 +622,11 @@ and the track record grades.
   move to the hazard model's top factors.
 - Prospective records store the full joint distribution; grading scores joint
   log-loss and marginals; `roll_window.py`'s promotion gate switches to the
-  SP1 bar on the walk-forward metric; the weekly Action rebuilds
-  `round_stats` and the derived external table.
+  SP1 bar on the walk-forward metric — **now required rather than preferred**:
+  since SP2.2 the gate aborts on a blended incumbent as well as on an
+  in-sample refit one, so the promotion path is inert until this move
+  happens. The weekly Action rebuilds `round_stats` and the derived external
+  table.
 - README rewritten around the new ladder (v1 heads → simulator), the
   walk-forward results, and the honest "market still wins / market gap"
   section carried forward.

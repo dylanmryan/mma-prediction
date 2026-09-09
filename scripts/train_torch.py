@@ -25,15 +25,24 @@ Why refit is the default: the walk-forward harness (scripts/run_walkforward.py)
 compared early-stopping on a held-out year against a fixed budget on all
 data through the newest year, on the same 2018-2025 eval folds; the fixed
 budget was not worse by more than the seed noise floor, and its pre-
-registered rule then ships it (models/walkforward/refit_decision_v3.json,
-``deployment_recipe: refit_through_latest``). The deployed ensemble thereby
+registered rule then ships it (models/walkforward/refit_decision_b1.json,
+``deployment_recipe: refit_through_latest``: B -0.0002 against A, inside
+sigma_seed, and confirmed on fresh seeds 5-9). The deployed ensemble thereby
 trains on ~5 more years of fights than the pre-2021 split. BUDGET,
 TEMPERATURE, REPORT and REFIT_THROUGH below are that decision's numbers;
-re-derive them via run_walkforward.py --fixed-budget-from rather than
-editing them by hand. The budget belongs to a FEATURE TABLE, not to the
-recipe: these are the SP2 `base,external` table's numbers
-(refit_decision_v3.json), and the SP1 46-column table's -- 14 epochs at
-temperature 1.1 -- are kept in refit_decision.json for the record.
+re-derive them via ``scripts/refit_decision.py --reports b1`` and
+``run_walkforward.py --fixed-budget-from`` rather than editing them by hand.
+The budget belongs to a FEATURE TABLE, not to the recipe: these are the SP2.2
+shipped S1 table's numbers (refit_decision_b1.json); the SP2 `base,external`
+table's -- 10 epochs at temperature 1.07 -- are kept in refit_decision_v3.json
+and the SP1 46-column table's -- 14 epochs at 1.1 -- in refit_decision.json,
+for the record.
+
+This trains the BLEND's neural member. The XGBoost member is
+``scripts/train_xgb.py`` and the two are combined by
+``mma.inference.BlendedPredictor``; retraining one without the other leaves a
+blend whose halves saw different data, which
+``scripts/build_display_priors.py`` warns about.
 
 Checkpoint payloads (state_dict, temperature, n_features, n_weight_classes)
 are identical in both modes; ``mma.inference.Ensemble.load`` reads either.
@@ -66,11 +75,16 @@ SEEDS = (0, 1, 2, 3, 4)
 
 MODE_SPLIT, MODE_REFIT = "split", "refit_through"
 DEFAULT_MODE = MODE_REFIT
-# Refit-mode defaults: models/walkforward/refit_decision_v3.json -> torch.budget.
+# Refit-mode defaults: models/walkforward/refit_decision_b1.json -> torch.budget.
+# NOTE these are the TORCH MEMBER's per-seed temperatures. The blend applies a
+# SECOND, post-average temperature on top of them (committed to
+# models/blend.json by scripts/build_blend_config.py), which this script knows
+# nothing about because it is a property of the two members combined, not of
+# either one.
 REFIT_THROUGH = "latest"
-BUDGET = 10
-TEMPERATURE = 1.07
-REPORT = ROOT / "models" / "walkforward" / "torch_v3_refit.json"
+BUDGET = 6
+TEMPERATURE = 1.15
+REPORT = ROOT / "models" / "walkforward" / "torch_a1_combined_refit.json"
 
 
 def parse_budget(spec) -> int:

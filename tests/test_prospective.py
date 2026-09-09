@@ -569,6 +569,53 @@ pytestmark_integration = pytest.mark.skipif(
 )
 
 
+blended_artifacts = pytest.mark.skipif(
+    not list((ROOT / "models").glob("xgb_winner_seed*.json")),
+    reason="xgb seed ensemble not built (run scripts/train_xgb.py)",
+)
+
+
+@pytestmark_integration
+@blended_artifacts
+def test_predict_fight_integration_with_the_deployed_blend():
+    """The exact path the weekly Action takes: real snapshots, real bios, the
+    deployed BLENDED scorer, through `predict_fight`. Covers both shapes the
+    `external` block produces -- a pair the snapshot maps and a pair where one
+    corner is unmapped (every post-snapshot debutant), which must be NaN
+    differentials plus the held-out flag rather than a crash."""
+    from mma.inference import BlendedPredictor
+    from mma.snapshots import build_snapshots
+
+    fights_df = pd.read_parquet(ROOT / "data" / "processed" / "fights.parquet")
+    stats_df = pd.read_parquet(ROOT / "data" / "processed" / "fight_stats.parquet")
+    fighters_df = pd.read_parquet(ROOT / "data" / "processed" / "fighters.parquet")
+    ratings_df = pd.read_parquet(ROOT / "data" / "processed" / "ratings.parquet")
+    snapshots = build_snapshots(fights_df, stats_df, ratings_df)
+    fighters_indexed = fighters_df.set_index("fighter_id")
+    name_index = build_name_index(fighters_df)
+    predictor = BlendedPredictor.load()
+
+    unique = [
+        (name, ids[0])
+        for name, ids in name_index["exact"].items()
+        if len(ids) == 1 and ids[0] in snapshots.index
+    ]
+    assert len(unique) >= 2
+    names = [fighters_indexed.loc[fid, "name"] for _, fid in unique[:2]]
+    wiki_fight = {
+        "fighter_a_name": names[0], "fighter_b_name": names[1],
+        "weight_class": "Lightweight", "title_fight": False, "main_event": False,
+    }
+    result = predict_fight(
+        wiki_fight, name_index, snapshots, fighters_indexed, predictor,
+        as_of=pd.Timestamp("2026-08-01"),
+    )
+    assert result["skipped"] is False
+    assert 0.0 < result["p_a_wins"] < 1.0
+    assert sum(result["method_probs"].values()) == pytest.approx(1.0, abs=1e-5)
+    assert result["round_probs"]["45"] == 0.0  # a three-round bout
+
+
 @pytestmark_integration
 def test_predict_fight_integration_with_real_artifacts():
     from mma.inference import Ensemble
