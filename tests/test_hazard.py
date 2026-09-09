@@ -12,7 +12,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mma.hazard import HAZARD_CLASSES, build_decision_rows, build_hazard_rows
+from mma.hazard import (
+    HAZARD_CLASSES, build_decision_rows, build_hazard_rows, mirror_corners,
+)
 
 PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
 
@@ -257,3 +259,75 @@ def test_real_na_scheduled_fights_are_kept(real):
 def test_real_decision_rows_are_balanced(real):
     rows = build_decision_rows(*real)
     assert 0.45 < rows["decision_label"].mean() < 0.55
+
+
+# --------------------------------------------------------------------------
+# corner mirroring (SP3 Task 3's symmetrisation)
+# --------------------------------------------------------------------------
+
+def test_mirror_negates_differentials_and_swaps_the_corner_columns():
+    features, _ = _fixture()
+    features = features.assign(
+        age_a=[30.0, 31.0, 32.0, 33.0, 34.0, 35.0],
+        age_b=[20.0, 21.0, 22.0, 23.0, 24.0, 25.0],
+        southpaw_a=[True] * 6,
+        southpaw_b=[False] * 6,
+    )
+    flipped = mirror_corners(features)
+    assert list(flipped["elo_diff"]) == [-v for v in features["elo_diff"]]
+    assert list(flipped["age_a"]) == list(features["age_b"])
+    assert list(flipped["age_b"]) == list(features["age_a"])
+    assert list(flipped["southpaw_a"]) == list(features["southpaw_b"])
+    assert list(flipped["y_winner"]) == [1 - v for v in features["y_winner"]]
+    assert list(flipped["swapped"]) == [not v for v in features["swapped"]]
+    # fight-level facts describe the bout, not a corner
+    assert list(flipped["scheduled_rounds"]) == list(features["scheduled_rounds"])
+    assert list(flipped["y_method"]) == list(features["y_method"])
+    assert list(flipped.columns) == list(features.columns)
+
+
+def test_mirror_leaves_the_caller_s_frame_alone():
+    features, _ = _fixture()
+    before = features["elo_diff"].tolist()
+    mirror_corners(features)
+    assert features["elo_diff"].tolist() == before
+
+
+def test_mirror_rejects_a_corner_column_without_a_twin():
+    features, _ = _fixture()
+    with pytest.raises(ValueError, match="reach_a"):
+        mirror_corners(features.assign(reach_a=[1.0] * 6))
+
+
+@pytest.mark.skipif(not (PROCESSED / "features.parquet").exists(),
+                    reason="processed feature table not built")
+def test_mirror_is_an_involution_on_the_real_table():
+    features = pd.read_parquet(PROCESSED / "features.parquet")
+    twice = mirror_corners(mirror_corners(features))
+    for column in features.columns:
+        left, right = features[column], twice[column]
+        if pd.api.types.is_numeric_dtype(left) and not pd.api.types.is_bool_dtype(left):
+            # -(-0.0) is 0.0 and NaN != NaN, so compare with a null-aware equality
+            assert ((left == right) | (left.isna() & right.isna())).all(), column
+        else:
+            assert left.equals(right), column
+
+
+@pytest.mark.skipif(not (PROCESSED / "features.parquet").exists(),
+                    reason="processed feature table not built")
+def test_mirroring_a_self_symmetric_row_changes_nothing():
+    """The fixed point the symmetrisation test relies on: a matchup with no
+    corner asymmetry must mirror onto itself, so both orientations of the
+    simulator see exactly the same input."""
+    features = pd.read_parquet(PROCESSED / "features.parquet").head(1).copy()
+    for column in features.columns:
+        if column.endswith("_diff"):
+            features[column] = features[column] * 0
+        elif column.endswith("_a"):
+            features[column[:-2] + "_b"] = features[column].to_numpy()
+    flipped = mirror_corners(features)
+    for column in features.columns:
+        if column in ("y_winner", "swapped"):
+            continue
+        left, right = features[column], flipped[column]
+        assert ((left == right) | (left.isna() & right.isna())).all(), column

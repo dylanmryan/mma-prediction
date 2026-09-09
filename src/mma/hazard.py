@@ -139,3 +139,56 @@ def build_decision_rows(features: pd.DataFrame, fights: pd.DataFrame) -> pd.Data
     return rows.assign(
         decision_label=rows["y_winner"].to_numpy().astype(int)
     )
+
+
+#: Fight-level identifier/target columns that mirroring rewrites rather than
+#: leaves alone: the winner label and the corner-order flag both describe
+#: which corner is which.
+_ORIENTATION = ("y_winner", "swapped")
+
+
+def mirror_corners(features: pd.DataFrame) -> pd.DataFrame:
+    """The same fights with the two corners exchanged.
+
+    The simulator is symmetrised the way `mma.inference.predict_symmetrized`
+    symmetrises the served model: predict the matchup from both orientations
+    and average. In the harness the "other orientation" has to be built from
+    the feature table itself, which the table's own construction makes exact
+    rather than approximate (`mma.serving.feature_row`):
+
+    * every `*_diff` column is literally `state_a[key] - state_b[key]`, so
+      the mirrored value is its negation -- exactly, in IEEE arithmetic;
+    * every corner-level column comes in an `*_a` / `*_b` pair, so mirroring
+      swaps the pair;
+    * everything else is fight-level (weight class, scheduled rounds, the
+      referee columns, the coverage flags, the XOR-derived booleans) and
+      describes the bout rather than a corner, so it is unchanged. The
+      derived booleans are `a ^ b`, which is symmetric by construction.
+
+    `y_winner` and `swapped` are the two exceptions among the identifiers:
+    both name a corner, so both flip. `y_method` and `y_finish_round`
+    describe how the fight ended, not who ended it, and stay put.
+
+    An `*_a` column with no `*_b` twin is a contract break rather than
+    something to guess at, so it raises: silently leaving it unmirrored
+    would hand the model an asymmetric row while claiming symmetry.
+    """
+    out = features.copy()
+    for column in features.columns:
+        if column.endswith("_diff"):
+            out[column] = -features[column]
+        elif column.endswith("_a"):
+            twin = column[:-2] + "_b"
+            if twin not in features.columns:
+                raise ValueError(
+                    f"corner column {column!r} has no {twin!r} twin, so the feature "
+                    "table cannot be mirrored; every corner-level column is emitted "
+                    "as an a/b pair by mma.serving.feature_row"
+                )
+            out[column] = features[twin].to_numpy()
+            out[twin] = features[column].to_numpy()
+    if _ORIENTATION[0] in out.columns:
+        out["y_winner"] = 1 - features["y_winner"]
+    if _ORIENTATION[1] in out.columns:
+        out["swapped"] = ~features["swapped"].astype(bool)
+    return out

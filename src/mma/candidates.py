@@ -23,11 +23,15 @@ import torch
 from sklearn.isotonic import IsotonicRegression
 
 from mma.blend import LOGIT_EPS, apply_temperature, blend_heads, logit, mask_round_45
+from mma.hazard import (
+    HAZARD_CLASSES, build_decision_rows, build_hazard_rows, mirror_corners,
+)
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import (
     METHOD_CLASSES, ROUND_CLASSES, encode_targets, fit_temperature, predict, train_one,
 )
 from mma.models.xgb import feature_frame, train_binary, train_multiclass
+from mma.simulator import simulate
 from mma.tensors import Preprocessor
 from mma.walkforward import Fold
 
@@ -369,3 +373,247 @@ class BlendCandidate:
             "torch": torch_info,
         }
         return pred, info
+
+
+# --------------------------------------------------------------------------
+# The round-by-round simulator as a harness candidate (SP3)
+# --------------------------------------------------------------------------
+
+#: Fixed by the SP3 plan before any run: 10,000 simulated fights per member
+#: per orientation, and Laplace alpha = 1 over the cells a fight can reach.
+#: Both are part of what a prediction IS, so both are reported in `info`.
+HAZARD_N_RUNS = 10_000
+HAZARD_ALPHA = 1.0
+#: Rounds simulated for the 45 fights with no recorded `scheduled_rounds`.
+#: `mma.hazard` keeps them (their rounds fought are known from the finish) and
+#: leaves the column NA so the model sees it as missing; the simulator still
+#: needs a bound, and 3 is the harness's standing default for a missing
+#: scheduled-round value (`slice_masks`, `TorchCandidate`, `BlendCandidate`).
+HAZARD_DEFAULT_ROUNDS = 3
+
+
+def _round_frame(features: pd.DataFrame, n_rounds: np.ndarray) -> pd.DataFrame:
+    """`features` repeated once per round, with a 1-based `round_no`.
+
+    The prediction-time twin of `hazard.build_hazard_rows`' expansion, and
+    deliberately column-for-column identical to it once the label is dropped:
+    the two frames are concatenated into one model matrix, so a different
+    column order here would be a silently mis-fed model.
+    """
+    counts = np.asarray(n_rounds, dtype=int)
+    out = features.iloc[np.repeat(np.arange(len(features)), counts)].reset_index(drop=True)
+    starts = np.repeat(np.cumsum(counts) - counts, counts)
+    out["round_no"] = np.arange(len(out), dtype=int) - starts + 1
+    return out
+
+
+def _bucket_rounds(array: np.ndarray, n_classes: int = len(ROUND_CLASSES)) -> np.ndarray:
+    """`(2, 2, R)` over rounds 1..R -> `(2, 2, n_classes)` over the harness's
+    round classes, folding rounds 4 and up into the trailing '45' class."""
+    head = n_classes - 1
+    out = np.zeros(array.shape[:2] + (n_classes,), dtype=array.dtype)
+    out[:, :, :min(array.shape[2], head)] = array[:, :, :head]
+    if array.shape[2] > head:
+        out[:, :, head] = array[:, :, head:].sum(axis=2)
+    return out
+
+
+@dataclass
+class HazardCandidate:
+    """The Monte Carlo fight simulator behind the standard `fit_predict`.
+
+    Two XGBoost members are fitted on the fold's TRAINING fights only -- a
+    5-class model over `mma.hazard.HAZARD_CLASSES` on the per-round hazard
+    rows, and a binary model on the decision rows -- and every evaluation
+    fight is then played out `n_runs` times by `mma.simulator.simulate`. The
+    result is one joint distribution over outcome cells per fight, from which
+    the winner, method and finish-round marginals are read off. They are
+    returned in the existing `pred` shape so every metric the harness already
+    computes keeps working, with the joint carried alongside as
+    `joint_cells` so `walkforward.score_rows` can score the realised cell
+    directly instead of composing three marginals it does not need to.
+
+    **Seed ensembling** follows `XGBCandidate`: the members' `predict_proba`
+    outputs are averaged across seeds and the simulation is run once on the
+    averaged hazard, rather than simulating each seed and averaging outcome
+    distributions. That is the same "average the probabilities" convention
+    every other ensemble in this project uses.
+
+    **Symmetrisation** follows `mma.inference.predict_symmetrized`: each
+    evaluation fight is predicted from both corner orderings (the mirrored
+    orientation via `hazard.mirror_corners`) and the two joint distributions
+    are averaged after the mirrored one is mapped back -- which for a joint
+    means exchanging its A and B blocks, not just flipping a scalar. Both
+    orderings share one RNG stream, so a matchup with no corner asymmetry
+    comes back at exactly 0.5 rather than 0.5 plus Monte Carlo noise
+    (`tests/test_candidates.py` pins that).
+
+    `fights` supplies `finish_round`, which the feature table only carries
+    bucketed as '45'; the exact round is what makes the hazard rows'
+    censoring correct, so it is required rather than approximated.
+    """
+    name: str = "hazard"
+    fights: pd.DataFrame | None = None
+    seeds: tuple = (0, 1, 2, 3, 4)
+    params: dict = field(default_factory=dict)
+    drop_columns: tuple = ()
+    n_runs: int = HAZARD_N_RUNS
+    alpha: float = HAZARD_ALPHA
+    sim_seed: int = 0
+
+    def _seed_params(self, seed: int) -> dict:
+        if "random_state" in self.params:
+            raise ValueError(
+                "HazardCandidate(seeds=...) sets random_state per member, but params "
+                f"already fixes random_state={self.params['random_state']!r}; pass one of them"
+            )
+        return {**self.params, "random_state": int(seed)}
+
+    def fit_predict(self, features: pd.DataFrame, fold: Fold, sample_weight=None):
+        if self.fights is None:
+            raise ValueError(
+                "HazardCandidate needs the fights table (it carries finish_round, which "
+                "the feature table only has bucketed as '45'); pass fights=..."
+            )
+        train_feats = features.loc[fold.train].reset_index(drop=True)
+        val_feats = features.loc[fold.inner_val].reset_index(drop=True)
+        eval_feats = features.loc[fold.eval].reset_index(drop=True)
+        eval_mirror = mirror_corners(eval_feats)
+
+        haz_train = build_hazard_rows(train_feats, self.fights)
+        haz_val = build_hazard_rows(val_feats, self.fights)
+        dec_train = build_decision_rows(train_feats, self.fights)
+        dec_val = build_decision_rows(val_feats, self.fights)
+        _require_all_classes(haz_train["hazard_label"], HAZARD_CLASSES, "hazard", fold)
+
+        n_rounds = (
+            eval_feats["scheduled_rounds"].fillna(HAZARD_DEFAULT_ROUNDS).to_numpy(dtype=int)
+        )
+        n_eval = len(eval_feats)
+
+        # One model matrix per member, built from the training, inner-val and
+        # both evaluation orientations at once so the `weight_class` category
+        # set and the column order are identical across all four.
+        haz_frames = [haz_train.drop(columns=["hazard_label"]),
+                      haz_val.drop(columns=["hazard_label"]),
+                      _round_frame(eval_feats, n_rounds),
+                      _round_frame(eval_mirror, n_rounds)]
+        dec_frames = [dec_train.drop(columns=["decision_label"]),
+                      dec_val.drop(columns=["decision_label"]),
+                      eval_feats, eval_mirror]
+        xh = _split_frames(feature_frame(pd.concat(haz_frames, ignore_index=True),
+                                         self.drop_columns), haz_frames)
+        xd = _split_frames(feature_frame(pd.concat(dec_frames, ignore_index=True),
+                                         self.drop_columns), dec_frames)
+
+        w = None if sample_weight is None else np.asarray(sample_weight, dtype=float)
+        by_fight = None if w is None else dict(zip(features["fight_id"], w))
+
+        def weights(rows):
+            return None if by_fight is None else rows["fight_id"].map(by_fight).to_numpy(dtype=float)
+
+        hazard_probs, mirror_probs, decision_probs, mirror_decision = [], [], [], []
+        iterations = {"hazard": [], "decision": []}
+        for seed in self.seeds:
+            params = self._seed_params(seed)
+            hz = train_multiclass(xh[0], haz_train["hazard_label"], xh[1], haz_val["hazard_label"],
+                                  HAZARD_CLASSES, params=params, sample_weight=weights(haz_train))
+            dc = train_binary(xd[0], dec_train["decision_label"], xd[1], dec_val["decision_label"],
+                              params=params, sample_weight=weights(dec_train))
+            hazard_probs.append(hz.predict_proba(xh[2]))
+            mirror_probs.append(hz.predict_proba(xh[3]))
+            decision_probs.append(dc.predict_proba(xd[2])[:, 1])
+            mirror_decision.append(dc.predict_proba(xd[3])[:, 1])
+            iterations["hazard"].append(int(hz.best_iteration))
+            iterations["decision"].append(int(dc.best_iteration))
+
+        hazard = _normalise_rows(_mean_over_seeds(hazard_probs))
+        mirrored = _normalise_rows(_mean_over_seeds(mirror_probs))
+        decision = _mean_over_seeds(decision_probs)
+        mirror_dec = _mean_over_seeds(mirror_decision)
+
+        n_classes = len(ROUND_CLASSES)
+        finish = np.zeros((n_eval, 2, 2, n_classes))
+        cards = np.zeros((n_eval, 2))
+        finish_zero = np.zeros((n_eval, 2, 2, n_classes), dtype=bool)
+        cards_zero = np.zeros((n_eval, 2), dtype=bool)
+        starts = np.cumsum(n_rounds) - n_rounds
+        errors, empty, valid = [], 0, 0
+        for i in range(n_eval):
+            rounds = int(n_rounds[i])
+            window = slice(int(starts[i]), int(starts[i]) + rounds)
+            runs = []
+            for probs, p_cards in ((hazard[window], decision[i]), (mirrored[window], mirror_dec[i])):
+                # A fresh generator per orientation from the SAME seed: the
+                # mirrored run must consume an identical random stream, or a
+                # self-mirroring matchup would not average to exactly 0.5.
+                runs.append(simulate(probs, float(p_cards), rounds, self.n_runs,
+                                     np.random.default_rng([self.sim_seed, i]), alpha=self.alpha))
+            straight, flipped = runs
+            # `flipped` is in the mirrored frame, where corner A is this
+            # table's corner B, so its winner axis is reversed before it is
+            # averaged in. Getting this backwards would invert half of every
+            # method and round prediction.
+            finish[i] = 0.5 * (_bucket_rounds(straight.finish_probs)
+                               + _bucket_rounds(flipped.finish_probs)[::-1])
+            cards[i] = 0.5 * (straight.decision_probs + flipped.decision_probs[::-1])
+            raw = (_bucket_rounds(straight.finish_counts) == 0) & (
+                _bucket_rounds(flipped.finish_counts)[::-1] == 0)
+            finish_zero[i] = raw
+            cards_zero[i] = (straight.decision_counts == 0) & (flipped.decision_counts[::-1] == 0)
+            reachable = min(rounds, n_classes)
+            empty += int(raw[:, :, :reachable].sum()) + int(cards_zero[i].sum())
+            valid += 4 * reachable + 2
+            errors.extend((straight.p_a_wins_standard_error, flipped.p_a_wins_standard_error))
+
+        cells = np.concatenate([finish.reshape(n_eval, -1), cards], axis=1)
+        p_a = finish[:, 0].sum(axis=(1, 2)) + cards[:, 0]
+        p_b = finish[:, 1].sum(axis=(1, 2)) + cards[:, 1]
+        total = p_a + p_b
+        finish_mass = finish.sum(axis=(1, 2, 3))
+        pred = {
+            "winner": p_a / total,
+            "method": np.stack([finish[:, :, 0, :].sum(axis=(1, 2)),
+                                finish[:, :, 1, :].sum(axis=(1, 2)),
+                                cards.sum(axis=1)], axis=1) / total[:, None],
+            "round": finish.sum(axis=(1, 2)) / np.where(finish_mass > 0, finish_mass, 1.0)[:, None],
+            "joint_cells": cells,
+            "joint_zero_mass": np.concatenate(
+                [finish_zero.reshape(n_eval, -1), cards_zero], axis=1),
+        }
+        info = {
+            "hazard": {"best_iteration": _one_or_all(iterations["hazard"]),
+                       "n_train": int(len(haz_train))},
+            "decision": {"best_iteration": _one_or_all(iterations["decision"]),
+                         "n_train": int(len(dec_train))},
+            "n_train": int(fold.train.sum()),
+            "n_runs": int(self.n_runs),
+            "alpha": float(self.alpha),
+            "mc_standard_error": round(float(np.mean(errors)), 6),
+            "mc_standard_error_max": round(float(np.max(errors)), 6),
+            "zero_mass_cell_fraction": round(empty / valid, 6),
+        }
+        return pred, info
+
+
+def _split_frames(matrix: pd.DataFrame, frames: list) -> list:
+    """Slice one concatenated model matrix back into its parts, in order."""
+    bounds = np.cumsum([0] + [len(f) for f in frames])
+    return [matrix.iloc[bounds[i]:bounds[i + 1]] for i in range(len(frames))]
+
+
+def _mean_over_seeds(members: list) -> np.ndarray:
+    """Row-wise mean across seeds; one member is returned untouched."""
+    return np.asarray(members[0]) if len(members) == 1 else np.mean(members, axis=0)
+
+
+def _normalise_rows(probs: np.ndarray) -> np.ndarray:
+    """Rescale each row to sum to 1 -- averaging softmax rows across seeds
+    leaves them a few ulps off, which `simulate` rejects outright."""
+    return probs / probs.sum(axis=1, keepdims=True)
+
+
+def _one_or_all(values: list):
+    """The scalar for a one-member ensemble, the list otherwise -- the shape
+    convention `XGBCandidate` established for `best_iteration`."""
+    return values[0] if len(values) == 1 else list(values)

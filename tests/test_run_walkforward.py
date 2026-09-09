@@ -375,3 +375,32 @@ def test_prediction_dump_is_json_round_trippable_at_full_precision():
     dump = rwf.prediction_dump("d", frame, [(2018, mask, {"winner": p, "method": None,
                                                           "round": None}, {})])
     assert json.loads(json.dumps(dump))["p_winner"] == [float(v) for v in p]
+
+
+# --- the hazard (simulator) candidate ---------------------------------------
+
+
+def test_the_hazard_candidate_is_seed_ensembled_by_default():
+    assert rwf.resolve_seeds(_ens_args(candidate="hazard")) == (0, 1, 2, 3, 4)
+
+
+def test_build_candidate_hands_the_hazard_candidate_its_fights_table():
+    fights = pd.DataFrame({"fight_id": ["f0"], "finish_round": [1], "scheduled_rounds": [3]})
+    cand = rwf.build_candidate("hazard", "h", (0, 1), {"max_depth": 3}, None,
+                               ("age_diff",), None, fights)
+    assert cand.seeds == (0, 1) and cand.drop_columns == ("age_diff",)
+    assert cand.params == {"max_depth": 3}
+    assert cand.fights is fights
+    # the pre-registered simulation parameters, unchanged by the CLI
+    assert cand.n_runs == 10_000 and cand.alpha == 1.0
+
+
+def test_the_hazard_candidate_without_a_fights_table_is_a_usage_error():
+    with pytest.raises(SystemExit, match="fights table"):
+        rwf.build_candidate("hazard", "h", (0,), {}, None)
+
+
+def test_fixed_budget_mode_does_not_apply_to_the_hazard_candidate():
+    fights = pd.DataFrame({"fight_id": ["f0"]})
+    with pytest.raises(SystemExit, match="hazard"):
+        rwf.build_candidate("hazard", "h", (0,), {}, {"fixed_rounds": 50}, (), None, fights)

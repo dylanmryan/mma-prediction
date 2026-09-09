@@ -14,6 +14,7 @@ Examples:
   python scripts/run_walkforward.py --candidate blend --name blend_b0 --seeds 0,1,2,3,4 --blend-weight 0.5
   python scripts/run_walkforward.py --candidate blend --name blend_b1_isotonic --blend-calibrator isotonic
   python scripts/run_walkforward.py --candidate torch --name torch_v1 --dump-predictions models/walkforward/preds/torch_v1.json
+  python scripts/run_walkforward.py --candidate hazard --name hazard_e2 --drop-columns external_missing,same_country
 
 Reports land in models/walkforward/<name>.json. Nothing here touches the
 deployed artifacts under models/torch or models/xgb_*.json.
@@ -33,7 +34,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mma.candidates import (  # noqa: E402
-    CALIBRATORS, BlendCandidate, EloCandidate, TorchCandidate, XGBCandidate,
+    CALIBRATORS, BlendCandidate, EloCandidate, HazardCandidate, TorchCandidate,
+    XGBCandidate,
 )
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES  # noqa: E402
 from mma.walkforward import build_report, make_folds, pool, recency_weights  # noqa: E402
@@ -43,7 +45,11 @@ OUT_DIR = ROOT / "models" / "walkforward"
 # The ensemble the torch candidate has always run, and the one SP2.2's blend
 # gives both of its members.
 DEFAULT_SEEDS = (0, 1, 2, 3, 4)
-SEEDED = ("torch", "blend")
+# The simulator joins them: its two XGBoost members are seed-ensembled the way
+# the blend's are, and a single fit's seed noise is three times the ensemble's
+# (SP2.1), which is more than the bar it is judged against.
+SEEDED = ("torch", "blend", "hazard")
+CANDIDATES = ("elo", "xgb", "torch", "blend", "hazard")
 
 
 def fixed_budget_from(report: dict) -> dict:
@@ -254,7 +260,8 @@ def resolve_blend(args: argparse.Namespace) -> dict | None:
 
 
 def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | None,
-                    drop_columns: tuple[str, ...] = (), blend: dict | None = None):
+                    drop_columns: tuple[str, ...] = (), blend: dict | None = None,
+                    fights: pd.DataFrame | None = None):
     """``budget`` is None in early-stopping mode; otherwise the dict from
     resolve_budget, which must carry the key this learner consumes
     (fixed_rounds for xgb, fixed_epochs for torch) -- a budget derived from
@@ -263,6 +270,20 @@ def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | No
         if budget is not None:
             raise SystemExit("--fixed-budget-from does not apply to the elo candidate (nothing is fit)")
         return EloCandidate()  # resolve_drop_columns already rejected --drop-columns here
+    if kind == "hazard":
+        if budget is not None:
+            raise SystemExit(
+                "fixed-budget mode does not apply to the hazard candidate: its two "
+                "members early-stop on the fold's inner-validation year, which a fixed "
+                "budget trains on"
+            )
+        if fights is None:
+            raise SystemExit(
+                "the hazard candidate needs the fights table (finish_round is only "
+                "bucketed as '45' in the feature table)"
+            )
+        return HazardCandidate(name=name, fights=fights, seeds=tuple(seeds),
+                               params=config, drop_columns=drop_columns)
     if kind == "blend":
         if budget is not None:
             raise SystemExit(
@@ -324,7 +345,7 @@ def prediction_dump(name: str, features: pd.DataFrame, fold_results: list) -> di
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--candidate", choices=["elo", "xgb", "torch", "blend"], required=True)
+    parser.add_argument("--candidate", choices=list(CANDIDATES), required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--seeds", default=None,
                         help="seed ensemble (default 0,1,2,3,4 for torch and blend; xgb is a "
@@ -372,7 +393,11 @@ def main() -> None:
     check_drop_columns(drop_columns, features)
     seeds = resolve_seeds(args)
     blend = resolve_blend(args)
-    candidate = build_candidate(args.candidate, args.name, seeds, config, budget, drop_columns, blend)
+    # The hazard candidate needs the exact finish round, which only the fights
+    # table carries; no other candidate reads it, so no other run pays for it.
+    fights = pd.read_parquet(PROCESSED / "fights.parquet") if args.candidate == "hazard" else None
+    candidate = build_candidate(args.candidate, args.name, seeds, config, budget, drop_columns,
+                                blend, fights)
     budget = budget or {}  # report shape: always a dict
 
     fold_results = []
