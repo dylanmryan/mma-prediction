@@ -120,31 +120,36 @@ def max_deviation(comparison: dict) -> float:
 def measure(features: pd.DataFrame, hybrid, blend, metrics: dict) -> dict:
     """The whole comparison: the deployed hybrid against the base rates, with
     the retired blend heads' numbers beside it as the contrast that explains
-    why the correction is gone."""
+    why the correction is gone.
+
+    Each scorer predicts the deployed training rows ONCE and the three row
+    sets are then sliced out of that one prediction -- the finishes are a
+    subset of the known-method rows, and a Monte Carlo pass over 11,000 fights
+    is the expensive part of this script.
+    """
     priors = compute_display_priors(features, metrics)
     mask = deployed_training_mask(features, metrics)
-    train = features[mask]
+    train = features[mask].reset_index(drop=True)
+    print(f"  predicting {len(train)} deployed training rows with each scorer")
+    predictions = {"deployed_simulator": hybrid.predict(train),
+                   "retired_blend_heads": blend.predict(train)}
 
-    method_rows = train[train["y_method"].notna()]
-    finishes = train[train["y_finish_round"].notna()]
-    sched = finishes["scheduled_rounds"].fillna(3)
+    sched = train["scheduled_rounds"].fillna(3)
+    finish = train["y_finish_round"].notna().to_numpy()
     subsets = {
-        "method": (method_rows, METHOD_CLASSES, "method_probs"),
-        "round_3": (finishes[sched <= 3], ROUND_CLASSES, "round_probs"),
-        "round_5": (finishes[sched == 5], ROUND_CLASSES, "round_probs"),
+        "method": (train["y_method"].notna().to_numpy(), METHOD_CLASSES, "method_probs"),
+        "round_3": (finish & (sched <= 3).to_numpy(), ROUND_CLASSES, "round_probs"),
+        "round_5": (finish & (sched == 5).to_numpy(), ROUND_CLASSES, "round_probs"),
     }
 
     out = {}
-    for key, (subset, classes, head) in subsets.items():
-        print(f"  {key}: {len(subset)} rows")
-        out[key] = {
-            "n": int(len(subset)),
-            "deployed_simulator": compare(priors[key], hybrid.predict(subset)[head], classes),
-            "retired_blend_heads": compare(priors[key], blend.predict(subset)[head], classes),
-        }
+    for key, (rows, classes, head) in subsets.items():
+        print(f"  {key}: {int(rows.sum())} rows")
+        out[key] = {"n": int(rows.sum())}
+        for scorer, prediction in predictions.items():
+            out[key][scorer] = compare(priors[key], prediction[head][rows], classes)
         out[key]["max_deviation_points"] = {
-            "deployed_simulator": round(max_deviation(out[key]["deployed_simulator"]), 4),
-            "retired_blend_heads": round(max_deviation(out[key]["retired_blend_heads"]), 4),
+            scorer: round(max_deviation(out[key][scorer]), 4) for scorer in predictions
         }
 
     worst = max(block["max_deviation_points"]["deployed_simulator"]

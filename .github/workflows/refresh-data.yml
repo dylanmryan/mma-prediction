@@ -13,7 +13,10 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 until SP3: the simulator adds a fifth and sixth model to retrain and
+    # a Monte Carlo pass over every training row to measure the displayed
+    # splits' calibration, together a few minutes more.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4

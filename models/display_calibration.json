@@ -3,7 +3,7 @@
   "reason": "The displayed method and round splits are marginals of ONE joint distribution (mma.inference.SimulatorPredictor). Mean-matching them separately is unnecessary -- the factors below are near 1 -- and would move each marginal off the joint the app's outcome table is drawn from, reintroducing the contradiction between displayed numbers that SP3 removed. See this script's docstring.",
   "tolerance": 0.05,
   "within_tolerance": true,
-  "max_deviation_points": 0.0434,
+  "max_deviation_points": 0.0433,
   "measured_on": {
     "rows": 11238,
     "of": 11238,
@@ -21,7 +21,7 @@
       "mean_predicted": {
         "ko_tko": 0.3506,
         "submission": 0.2181,
-        "decision": 0.4313
+        "decision": 0.4314
       },
       "factor_needed": {
         "ko_tko": 0.984,
@@ -47,7 +47,7 @@
       }
     },
     "max_deviation_points": {
-      "deployed_simulator": 0.0084,
+      "deployed_simulator": 0.0083,
       "retired_blend_heads": 0.0612
     }
   },
@@ -61,15 +61,15 @@
         "45": 0.0
       },
       "mean_predicted": {
-        "1": 0.5692,
-        "2": 0.2877,
-        "3": 0.1431,
+        "1": 0.5694,
+        "2": 0.2876,
+        "3": 0.143,
         "45": 0.0
       },
       "factor_needed": {
-        "1": 1.036,
+        "1": 1.035,
         "2": 0.976,
-        "3": 0.907,
+        "3": 0.908,
         "45": 0.0
       }
     },
@@ -94,7 +94,7 @@
       }
     },
     "max_deviation_points": {
-      "deployed_simulator": 0.0203,
+      "deployed_simulator": 0.0201,
       "retired_blend_heads": 0.1163
     }
   },
@@ -108,15 +108,15 @@
         "45": 0.1616
       },
       "mean_predicted": {
-        "1": 0.4196,
-        "2": 0.2505,
-        "3": 0.1325,
-        "45": 0.1974
+        "1": 0.4198,
+        "2": 0.2503,
+        "3": 0.1326,
+        "45": 0.1973
       },
       "factor_needed": {
-        "1": 0.933,
-        "2": 1.082,
-        "3": 1.328,
+        "1": 0.932,
+        "2": 1.083,
+        "3": 1.327,
         "45": 0.819
       }
     },
@@ -141,7 +141,7 @@
       }
     },
     "max_deviation_points": {
-      "deployed_simulator": 0.0434,
+      "deployed_simulator": 0.0433,
       "retired_blend_heads": 0.2462
     }
   }

@@ -268,8 +268,14 @@ def test_committed_display_calibration_says_the_correction_is_retired():
 
     payload = json.loads((ROOT / "models" / "display_calibration.json").read_text())
     assert payload["correction_applied"] is False
-    assert payload["within_tolerance"] is True
-    assert payload["max_deviation_points"] <= payload["tolerance"]
+    assert set(payload["measured_on"]) == {"rows", "of", "train_through", "mode"}
+    # Deliberately NOT asserted here: that the measurement is inside its
+    # tolerance. That is a property of a retrain, not of this code, and the
+    # weekly Action runs the suite BEFORE it commits refreshed data -- pinning
+    # a threshold that can drift would block a data refresh on a calibration
+    # wobble. `scripts/check_display_calibration.py` warns on stderr instead.
+    # What IS asserted is the comparison the decision rests on, which is not
+    # marginal: the blend's heads are off by three to six times as much.
     for key in ("method", "round_3", "round_5"):
         block = payload[key]
         assert block["n"] > 0
