@@ -124,7 +124,7 @@ def test_version_changes_when_a_simulator_member_is_retrained(tmp_path):
 def test_version_ignores_non_artifact_files(tmp_path):
     _make_models(tmp_path)
     before = model_version(tmp_path)
-    (tmp_path / "models" / "torch" / "display_priors.json").write_text("{}")
+    (tmp_path / "models" / "display_calibration.json").write_text("{}")
     (tmp_path / "models" / "torch" / "metrics_val.json").write_text('{"acc": 1}')
     (tmp_path / "models" / "xgb_metrics_val.json").write_text("{}")
     (tmp_path / "models" / "hazard_metrics.json").write_text("{}")

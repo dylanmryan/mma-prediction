@@ -30,8 +30,11 @@ serves**, each evaluated honestly by expanding-window walk-forward over
   the way.
 - **Uncertainty done properly**: spread across the five per-seed blends
   (booster *i* paired with net *i*), MC dropout from the neural member, a
-  temperature fitted on held-out data *after* the blend average, display
-  probabilities recalibrated to historical base rates.
+  temperature fitted on held-out data *after* the blend average. The method
+  and round probabilities used to be rescaled to historical base rates before
+  display; since the simulator ships they are marginals of one coherent joint
+  distribution and are shown raw, with the calibration measured weekly
+  (`models/display_calibration.json`) rather than corrected.
 - **Self-updating**: a weekly GitHub Action refreshes the dataset and rebuilds
   every artifact; the entire pipeline reproduces byte-for-byte.
 - **Prospective evaluation**: real upcoming UFC events get predicted and
@@ -846,7 +849,8 @@ work. On promotion
 the candidate ensemble is *staged* into `models/torch` (the incumbent is
 backed up on disk first) and nothing else happens — the script performs no
 git writes. A human then re-runs the refit recipe (bare `scripts/train_xgb.py`,
-`scripts/train_torch.py`, `scripts/build_display_priors.py` — a split-protocol
+`scripts/train_torch.py`, `scripts/train_hazard.py`,
+`scripts/check_display_calibration.py` — a split-protocol
 candidate never ships as-is), runs the suite, reviews the metrics diff, and
 commits by hand; the new model's artifact hash (`mma.versioning.model_version`,
 computed over the torch weights and preprocessing stats) becomes the new
