@@ -1,0 +1,1544 @@
+{
+  "experiment": "SP3 round-by-round fight simulator",
+  "pre_registration": "docs/superpowers/plans/2026-09-09-sp3-fight-simulator.md",
+  "generated_by": "scripts/sp3_decision.py",
+  "decided": true,
+  "decision": {
+    "outcome": "ship the hybrid (D2)",
+    "date": "2026-09-09",
+    "taken_by": "the pre-registered bar, applied mechanically -- no human call was reserved",
+    "what_ships": "The hybrid: P(winner) from the deployed blend B1 (equal-weight, temperature-scaled after averaging) and P(method, round | winner) from the Monte Carlo fight simulator, composed by mma.joint.impose_winner_marginal on the shipped feature blocks with external_missing, same_country, notice_unknown, home_country_a and home_country_b held out of every model matrix.",
+    "why": "The bar has two clauses and the hybrid satisfies both, at seeds 0-4 and again at the mandatory fresh seeds 5-9. Joint: 2.1432 against the fresh-seed incumbent's 2.2028, a gain of 0.0596 against a bar of 0.01 -- 6.0x the required margin. Winner: identical to the incumbent's to the last bit, because the hybrid returns the blend member's own array; verified element-wise over 4804 pooled rows rather than assumed (see winner_clause_by_construction). E2 showed the pure simulator clears the joint clause but fails the winner clause by 0.0042 against a tolerance of 0.000346, and D1 showed calibration recovers only part of that, which is why the spec's pre-registered hybrid fallback is what ships.",
+    "deployment": "NOT performed by this script or in the commit that wrote it. SP3's deployment is plan Task 6 and is a larger change than SP2.2's: the simulator replaces the method and round heads and supplies a joint distribution, so inference, versioning (n_runs and alpha are part of what a prediction IS and must be hashed), the prediction records, the app and the display priors all move together."
+  },
+  "bar": {
+    "quoted_from_the_plan": "- **Simulator ships** iff joint-outcome log-loss beats the composed baseline by **more than 0.01** *and* its winner marginal is not worse than the incumbent's by more than \u03c3_seed (0.000346).",
+    "fresh_seed_rule_quoted_from_the_plan": "- **Fresh-seed confirmation is mandatory** before anything ships (seeds 5\u20139), against a fresh-seed paired incumbent. This has already caught one false positive in SP2.1.",
+    "locked_evaluation_rules": [
+      "- **Incumbent:** the deployed blend. Winner marginal `models/walkforward/blend_b1.json` pooled **0.6437** (harness form; the deployed fixed-temperature form is 0.6432 \u2014 use the harness form for like-for-like comparison since candidates are scored in harness form). Composed joint-outcome log-loss for the same report is the baseline the simulator must beat; read it from the report rather than assuming.",
+      "- **Simulator ships** iff joint-outcome log-loss beats the composed baseline by **more than 0.01** *and* its winner marginal is not worse than the incumbent's by more than \u03c3_seed (0.000346).",
+      "- **Fresh-seed confirmation is mandatory** before anything ships (seeds 5\u20139), against a fresh-seed paired incumbent. This has already caught one false positive in SP2.1.",
+      "- Negative results are deliverables: every experiment gets a row in the Completion notes whether or not it ships, and rejected code is reverted while its reports and reusable modules stay."
+    ],
+    "form": "Two clauses, both required, both applied to pooled metrics: the joint must beat the paired incumbent's by MORE than the joint bar (strict), and the winner marginal must not be WORSE than it by more than sigma_seed (a tolerance on a regression, so equality passes).",
+    "joint_bar": 0.01,
+    "joint_bar_read_from": "the quoted bar's own text (joint_bar_from), not a retyped constant",
+    "sigma_seed_quoted_in_the_plan": 0.000346,
+    "sigma_seed_measured": 0.0003464101615137373,
+    "sigma_seed_source": "models/walkforward/noise_floor.json",
+    "sigma_seed_seed_sets": [
+      "0,1,2,3,4",
+      "5,6,7,8,9",
+      "10,11,12,13,14"
+    ],
+    "sigma_seed_agrees_with_the_measured_floor": true,
+    "applied_at": 0.000346
+  },
+  "incumbent": {
+    "report": "models/walkforward/blend_b1.json",
+    "cell_scored_report": "models/walkforward/blend_b1_cells.json",
+    "fresh_seed_report": "models/walkforward/blend_b1_cells_seeds5.json",
+    "note": "B1, the deployed blend, in harness form (a temperature fitted per fold on that fold's inner-validation year). The plan fixes the harness form as the like-for-like comparison because that is the form every candidate is scored in.",
+    "pooled_winner_log_loss": 0.6437,
+    "pooled_joint_log_loss": 2.2013,
+    "fresh_seed_pooled_winner_log_loss": 0.6434,
+    "fresh_seed_pooled_joint_log_loss": 2.2028
+  },
+  "experiments": {
+    "E1": {
+      "role": "E1 -- the paradigm on v1 (base) features",
+      "note": "Isolates the paradigm from the data: if the simulator only wins with the shipped blocks, the win is the blocks and not the generative process.",
+      "report": "models/walkforward/hazard_e1.json",
+      "candidate": "hazard",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [],
+      "runtime_sec": 98.6,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6511,
+        "accuracy": 0.6145,
+        "brier": 0.2298,
+        "ece": 0.0267,
+        "joint_log_loss": 2.1546,
+        "method_macro_f1": 0.3383,
+        "round_macro_f1": 0.1685,
+        "n_method": 4792,
+        "n_round": 2446,
+        "zero_mass_cell_fraction": 0.0
+      },
+      "folds": {
+        "2018": {
+          "winner_log_loss": 0.6404,
+          "joint_log_loss": 2.1835
+        },
+        "2019": {
+          "winner_log_loss": 0.6754,
+          "joint_log_loss": 2.1249
+        },
+        "2020": {
+          "winner_log_loss": 0.6632,
+          "joint_log_loss": 2.1497
+        },
+        "2021": {
+          "winner_log_loss": 0.6673,
+          "joint_log_loss": 2.1819
+        },
+        "2022": {
+          "winner_log_loss": 0.6528,
+          "joint_log_loss": 2.2235
+        },
+        "2023": {
+          "winner_log_loss": 0.6478,
+          "joint_log_loss": 2.1977
+        },
+        "2024": {
+          "winner_log_loss": 0.6452,
+          "joint_log_loss": 2.0611
+        },
+        "2025": {
+          "winner_log_loss": 0.6317,
+          "joint_log_loss": 2.1324
+        }
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6541,
+          "joint_log_loss": 2.2256,
+          "method_macro_f1": 0.3365,
+          "round_macro_f1": 0.2393
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6554,
+          "joint_log_loss": 1.9359,
+          "method_macro_f1": 0.2927,
+          "round_macro_f1": 0.1529
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6578,
+          "joint_log_loss": 2.3915,
+          "method_macro_f1": 0.3646,
+          "round_macro_f1": 0.1205
+        }
+      },
+      "paired_incumbent": "models/walkforward/blend_b1_cells.json",
+      "bar_check": {
+        "convention": "delta = candidate - incumbent; negative = the candidate is better",
+        "joint_bar": 0.01,
+        "sigma_seed": 0.000346,
+        "candidate_joint_log_loss": 2.1546,
+        "incumbent_joint_log_loss": 2.2013,
+        "joint_delta": -0.0467,
+        "joint_margin_past_the_bar": 0.0367,
+        "clears_joint_bar": true,
+        "candidate_winner_log_loss": 0.6511,
+        "incumbent_winner_log_loss": 0.6437,
+        "winner_delta": 0.0074,
+        "winner_headroom": -0.007054,
+        "winner_clause_satisfied": false,
+        "joint_fold_deltas": {
+          "2018": -0.0569,
+          "2019": -0.0319,
+          "2020": -0.0607,
+          "2021": -0.0517,
+          "2022": -0.0195,
+          "2023": -0.0361,
+          "2024": -0.0631,
+          "2025": -0.0525
+        },
+        "winner_fold_deltas": {
+          "2018": 0.0037,
+          "2019": 0.0094,
+          "2020": 0.0113,
+          "2021": -0.0067,
+          "2022": 0.0073,
+          "2023": 0.0101,
+          "2024": 0.0126,
+          "2025": 0.0099
+        },
+        "worst_joint_fold_delta": -0.0195,
+        "worst_winner_fold_delta": 0.0126,
+        "fold_deltas_are_reported_not_gated": "SP3's bar has no per-fold no-regression clause; that belongs to the v3 spec section 5 winner bar (mma.walkforward.bar_check). These are here to be read, not to gate.",
+        "comparable": true,
+        "missing_folds": [],
+        "ships": false
+      },
+      "monte_carlo": {
+        "mc_standard_error": {
+          "per_fold": [
+            0.004835,
+            0.004865,
+            0.004906,
+            0.004899,
+            0.004891,
+            0.004879,
+            0.004832,
+            0.004783
+          ],
+          "min": 0.004783,
+          "max": 0.004906,
+          "mean": 0.004861
+        },
+        "mc_standard_error_max": {
+          "per_fold": [
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005
+          ],
+          "min": 0.005,
+          "max": 0.005,
+          "mean": 0.005
+        },
+        "zero_mass_cell_fraction": {
+          "per_fold": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0
+        },
+        "n_runs": {
+          "per_fold": [
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0
+          ],
+          "min": 10000.0,
+          "max": 10000.0,
+          "mean": 10000.0
+        },
+        "alpha": {
+          "per_fold": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        }
+      }
+    },
+    "E2": {
+      "role": "E2 -- the paradigm on the shipped features",
+      "note": "The real candidate. It landed exactly on the case the v3 spec's hybrid fallback was written for: the joint clears the bar several times over while the winner marginal regresses by more than sigma_seed.",
+      "report": "models/walkforward/hazard_e2.json",
+      "candidate": "hazard",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "runtime_sec": 170.2,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6479,
+        "accuracy": 0.6209,
+        "brier": 0.2282,
+        "ece": 0.0286,
+        "joint_log_loss": 2.1476,
+        "method_macro_f1": 0.3442,
+        "round_macro_f1": 0.1686,
+        "n_method": 4792,
+        "n_round": 2446,
+        "zero_mass_cell_fraction": 0.0
+      },
+      "folds": {
+        "2018": {
+          "winner_log_loss": 0.6348,
+          "joint_log_loss": 2.179
+        },
+        "2019": {
+          "winner_log_loss": 0.6686,
+          "joint_log_loss": 2.1057
+        },
+        "2020": {
+          "winner_log_loss": 0.6524,
+          "joint_log_loss": 2.1339
+        },
+        "2021": {
+          "winner_log_loss": 0.6715,
+          "joint_log_loss": 2.1826
+        },
+        "2022": {
+          "winner_log_loss": 0.6495,
+          "joint_log_loss": 2.2143
+        },
+        "2023": {
+          "winner_log_loss": 0.6467,
+          "joint_log_loss": 2.191
+        },
+        "2024": {
+          "winner_log_loss": 0.6441,
+          "joint_log_loss": 2.0635
+        },
+        "2025": {
+          "winner_log_loss": 0.629,
+          "joint_log_loss": 2.1264
+        }
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6483,
+          "joint_log_loss": 2.2195,
+          "method_macro_f1": 0.3407,
+          "round_macro_f1": 0.2393
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6569,
+          "joint_log_loss": 1.9389,
+          "method_macro_f1": 0.2938,
+          "round_macro_f1": 0.1529
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6609,
+          "joint_log_loss": 2.3807,
+          "method_macro_f1": 0.3624,
+          "round_macro_f1": 0.1205
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6365,
+          "joint_log_loss": 2.2061,
+          "method_macro_f1": 0.3452,
+          "round_macro_f1": 0.2499
+        }
+      },
+      "paired_incumbent": "models/walkforward/blend_b1_cells.json",
+      "bar_check": {
+        "convention": "delta = candidate - incumbent; negative = the candidate is better",
+        "joint_bar": 0.01,
+        "sigma_seed": 0.000346,
+        "candidate_joint_log_loss": 2.1476,
+        "incumbent_joint_log_loss": 2.2013,
+        "joint_delta": -0.0537,
+        "joint_margin_past_the_bar": 0.0437,
+        "clears_joint_bar": true,
+        "candidate_winner_log_loss": 0.6479,
+        "incumbent_winner_log_loss": 0.6437,
+        "winner_delta": 0.0042,
+        "winner_headroom": -0.003854,
+        "winner_clause_satisfied": false,
+        "joint_fold_deltas": {
+          "2018": -0.0614,
+          "2019": -0.0511,
+          "2020": -0.0765,
+          "2021": -0.051,
+          "2022": -0.0287,
+          "2023": -0.0428,
+          "2024": -0.0607,
+          "2025": -0.0585
+        },
+        "winner_fold_deltas": {
+          "2018": -0.0019,
+          "2019": 0.0026,
+          "2020": 0.0005,
+          "2021": -0.0025,
+          "2022": 0.004,
+          "2023": 0.009,
+          "2024": 0.0115,
+          "2025": 0.0072
+        },
+        "worst_joint_fold_delta": -0.0287,
+        "worst_winner_fold_delta": 0.0115,
+        "fold_deltas_are_reported_not_gated": "SP3's bar has no per-fold no-regression clause; that belongs to the v3 spec section 5 winner bar (mma.walkforward.bar_check). These are here to be read, not to gate.",
+        "comparable": true,
+        "missing_folds": [],
+        "ships": false
+      },
+      "monte_carlo": {
+        "mc_standard_error": {
+          "per_fold": [
+            0.004812,
+            0.004854,
+            0.00485,
+            0.004863,
+            0.004888,
+            0.004856,
+            0.004861,
+            0.004791
+          ],
+          "min": 0.004791,
+          "max": 0.004888,
+          "mean": 0.004847
+        },
+        "mc_standard_error_max": {
+          "per_fold": [
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005
+          ],
+          "min": 0.005,
+          "max": 0.005,
+          "mean": 0.005
+        },
+        "zero_mass_cell_fraction": {
+          "per_fold": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0
+        },
+        "n_runs": {
+          "per_fold": [
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0
+          ],
+          "min": 10000.0,
+          "max": 10000.0,
+          "mean": 10000.0
+        },
+        "alpha": {
+          "per_fold": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        }
+      }
+    },
+    "D1": {
+      "role": "D1 -- E2 with its winner marginal temperature-scaled",
+      "note": "The simulator is the one candidate in this project with no calibration step. Adding the blend's -- a temperature fitted on the fold's inner-validation year, imposed back on the joint -- separates calibration from paradigm. It recovers about half the winner gap, not all of it, so calibration alone does not satisfy the winner clause.",
+      "report": "models/walkforward/hazard_e2_cal.json",
+      "candidate": "hazard",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "runtime_sec": 174.3,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6459,
+        "accuracy": 0.6209,
+        "brier": 0.2275,
+        "ece": 0.0135,
+        "joint_log_loss": 2.1454,
+        "method_macro_f1": 0.3446,
+        "round_macro_f1": 0.1686,
+        "n_method": 4792,
+        "n_round": 2446,
+        "zero_mass_cell_fraction": 0.0
+      },
+      "folds": {
+        "2018": {
+          "winner_log_loss": 0.6298,
+          "joint_log_loss": 2.1741
+        },
+        "2019": {
+          "winner_log_loss": 0.6716,
+          "joint_log_loss": 2.1081
+        },
+        "2020": {
+          "winner_log_loss": 0.6523,
+          "joint_log_loss": 2.1338
+        },
+        "2021": {
+          "winner_log_loss": 0.6757,
+          "joint_log_loss": 2.1869
+        },
+        "2022": {
+          "winner_log_loss": 0.6483,
+          "joint_log_loss": 2.2131
+        },
+        "2023": {
+          "winner_log_loss": 0.6426,
+          "joint_log_loss": 2.1868
+        },
+        "2024": {
+          "winner_log_loss": 0.6381,
+          "joint_log_loss": 2.057
+        },
+        "2025": {
+          "winner_log_loss": 0.6242,
+          "joint_log_loss": 2.1217
+        }
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6447,
+          "joint_log_loss": 2.2159,
+          "method_macro_f1": 0.3411,
+          "round_macro_f1": 0.2393
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6559,
+          "joint_log_loss": 1.9377,
+          "method_macro_f1": 0.2979,
+          "round_macro_f1": 0.1529
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6621,
+          "joint_log_loss": 2.3817,
+          "method_macro_f1": 0.3576,
+          "round_macro_f1": 0.1205
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6296,
+          "joint_log_loss": 2.1992,
+          "method_macro_f1": 0.3445,
+          "round_macro_f1": 0.2499
+        }
+      },
+      "paired_incumbent": "models/walkforward/blend_b1_cells.json",
+      "bar_check": {
+        "convention": "delta = candidate - incumbent; negative = the candidate is better",
+        "joint_bar": 0.01,
+        "sigma_seed": 0.000346,
+        "candidate_joint_log_loss": 2.1454,
+        "incumbent_joint_log_loss": 2.2013,
+        "joint_delta": -0.0559,
+        "joint_margin_past_the_bar": 0.0459,
+        "clears_joint_bar": true,
+        "candidate_winner_log_loss": 0.6459,
+        "incumbent_winner_log_loss": 0.6437,
+        "winner_delta": 0.0022,
+        "winner_headroom": -0.001854,
+        "winner_clause_satisfied": false,
+        "joint_fold_deltas": {
+          "2018": -0.0663,
+          "2019": -0.0487,
+          "2020": -0.0766,
+          "2021": -0.0467,
+          "2022": -0.0299,
+          "2023": -0.047,
+          "2024": -0.0672,
+          "2025": -0.0632
+        },
+        "winner_fold_deltas": {
+          "2018": -0.0069,
+          "2019": 0.0056,
+          "2020": 0.0004,
+          "2021": 0.0017,
+          "2022": 0.0028,
+          "2023": 0.0049,
+          "2024": 0.0055,
+          "2025": 0.0024
+        },
+        "worst_joint_fold_delta": -0.0299,
+        "worst_winner_fold_delta": 0.0056,
+        "fold_deltas_are_reported_not_gated": "SP3's bar has no per-fold no-regression clause; that belongs to the v3 spec section 5 winner bar (mma.walkforward.bar_check). These are here to be read, not to gate.",
+        "comparable": true,
+        "missing_folds": [],
+        "ships": false
+      },
+      "monte_carlo": {
+        "mc_standard_error": {
+          "per_fold": [
+            0.004812,
+            0.004854,
+            0.00485,
+            0.004863,
+            0.004888,
+            0.004856,
+            0.004861,
+            0.004791
+          ],
+          "min": 0.004791,
+          "max": 0.004888,
+          "mean": 0.004847
+        },
+        "mc_standard_error_max": {
+          "per_fold": [
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005
+          ],
+          "min": 0.005,
+          "max": 0.005,
+          "mean": 0.005
+        },
+        "zero_mass_cell_fraction": {
+          "per_fold": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0
+        },
+        "n_runs": {
+          "per_fold": [
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0
+          ],
+          "min": 10000.0,
+          "max": 10000.0,
+          "mean": 10000.0
+        },
+        "alpha": {
+          "per_fold": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        }
+      }
+    },
+    "D2": {
+      "role": "D2 -- the hybrid: the blend's winner, the simulator's conditional shape",
+      "note": "The v3 spec's pre-registered fallback. P(winner) is the blend's own array and P(method, round | winner) is the simulator's, composed by scaling each corner's block of simulated cells by one scalar.",
+      "report": "models/walkforward/hybrid_e2.json",
+      "candidate": "hybrid",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "runtime_sec": 390.3,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6437,
+        "accuracy": 0.6216,
+        "brier": 0.2264,
+        "ece": 0.0124,
+        "joint_log_loss": 2.1432,
+        "method_macro_f1": 0.3398,
+        "round_macro_f1": 0.1686,
+        "n_method": 4792,
+        "n_round": 2446,
+        "zero_mass_cell_fraction": 0.0
+      },
+      "folds": {
+        "2018": {
+          "winner_log_loss": 0.6367,
+          "joint_log_loss": 2.1811
+        },
+        "2019": {
+          "winner_log_loss": 0.666,
+          "joint_log_loss": 2.1034
+        },
+        "2020": {
+          "winner_log_loss": 0.6519,
+          "joint_log_loss": 2.133
+        },
+        "2021": {
+          "winner_log_loss": 0.674,
+          "joint_log_loss": 2.1852
+        },
+        "2022": {
+          "winner_log_loss": 0.6455,
+          "joint_log_loss": 2.2101
+        },
+        "2023": {
+          "winner_log_loss": 0.6377,
+          "joint_log_loss": 2.1815
+        },
+        "2024": {
+          "winner_log_loss": 0.6326,
+          "joint_log_loss": 2.0515
+        },
+        "2025": {
+          "winner_log_loss": 0.6218,
+          "joint_log_loss": 2.1193
+        }
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6398,
+          "joint_log_loss": 2.2109,
+          "method_macro_f1": 0.3394,
+          "round_macro_f1": 0.2393
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6498,
+          "joint_log_loss": 1.9319,
+          "method_macro_f1": 0.2979,
+          "round_macro_f1": 0.1529
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6559,
+          "joint_log_loss": 2.3755,
+          "method_macro_f1": 0.3492,
+          "round_macro_f1": 0.1205
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6297,
+          "joint_log_loss": 2.1993,
+          "method_macro_f1": 0.3429,
+          "round_macro_f1": 0.2499
+        }
+      },
+      "paired_incumbent": "models/walkforward/blend_b1_cells.json",
+      "bar_check": {
+        "convention": "delta = candidate - incumbent; negative = the candidate is better",
+        "joint_bar": 0.01,
+        "sigma_seed": 0.000346,
+        "candidate_joint_log_loss": 2.1432,
+        "incumbent_joint_log_loss": 2.2013,
+        "joint_delta": -0.0581,
+        "joint_margin_past_the_bar": 0.0481,
+        "clears_joint_bar": true,
+        "candidate_winner_log_loss": 0.6437,
+        "incumbent_winner_log_loss": 0.6437,
+        "winner_delta": 0.0,
+        "winner_headroom": 0.000346,
+        "winner_clause_satisfied": true,
+        "joint_fold_deltas": {
+          "2018": -0.0593,
+          "2019": -0.0534,
+          "2020": -0.0774,
+          "2021": -0.0484,
+          "2022": -0.0329,
+          "2023": -0.0523,
+          "2024": -0.0727,
+          "2025": -0.0656
+        },
+        "winner_fold_deltas": {
+          "2018": 0.0,
+          "2019": 0.0,
+          "2020": 0.0,
+          "2021": 0.0,
+          "2022": 0.0,
+          "2023": 0.0,
+          "2024": 0.0,
+          "2025": 0.0
+        },
+        "worst_joint_fold_delta": -0.0329,
+        "worst_winner_fold_delta": 0.0,
+        "fold_deltas_are_reported_not_gated": "SP3's bar has no per-fold no-regression clause; that belongs to the v3 spec section 5 winner bar (mma.walkforward.bar_check). These are here to be read, not to gate.",
+        "comparable": true,
+        "missing_folds": [],
+        "ships": true
+      },
+      "monte_carlo": {
+        "mc_standard_error": {
+          "per_fold": [
+            0.004812,
+            0.004854,
+            0.00485,
+            0.004863,
+            0.004888,
+            0.004856,
+            0.004861,
+            0.004791
+          ],
+          "min": 0.004791,
+          "max": 0.004888,
+          "mean": 0.004847
+        },
+        "mc_standard_error_max": {
+          "per_fold": [
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005
+          ],
+          "min": 0.005,
+          "max": 0.005,
+          "mean": 0.005
+        },
+        "zero_mass_cell_fraction": {
+          "per_fold": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0
+        },
+        "n_runs": {
+          "per_fold": [
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0
+          ],
+          "min": 10000.0,
+          "max": 10000.0,
+          "mean": 10000.0
+        },
+        "alpha": {
+          "per_fold": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        }
+      }
+    },
+    "D3": {
+      "role": "D3 -- control: the incumbent's own heads through the cell scorer",
+      "note": "Not a candidate. It changes nothing about the prediction -- the three heads are the same arrays either way -- and only routes the joint metric through evaluate.joint_cell_log_loss instead of joint_outcome_log_loss. If the cell machinery contributed anything of its own, the two scores would differ.",
+      "report": "models/walkforward/blend_b1_cells.json",
+      "candidate": "blend",
+      "seeds": "0,1,2,3,4",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "runtime_sec": 156.6,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6437,
+        "accuracy": 0.6216,
+        "brier": 0.2264,
+        "ece": 0.0124,
+        "joint_log_loss": 2.2013,
+        "method_macro_f1": 0.3385,
+        "round_macro_f1": 0.2793,
+        "n_method": 4792,
+        "n_round": 2446
+      },
+      "folds": {
+        "2018": {
+          "winner_log_loss": 0.6367,
+          "joint_log_loss": 2.2404
+        },
+        "2019": {
+          "winner_log_loss": 0.666,
+          "joint_log_loss": 2.1568
+        },
+        "2020": {
+          "winner_log_loss": 0.6519,
+          "joint_log_loss": 2.2104
+        },
+        "2021": {
+          "winner_log_loss": 0.674,
+          "joint_log_loss": 2.2336
+        },
+        "2022": {
+          "winner_log_loss": 0.6455,
+          "joint_log_loss": 2.243
+        },
+        "2023": {
+          "winner_log_loss": 0.6377,
+          "joint_log_loss": 2.2338
+        },
+        "2024": {
+          "winner_log_loss": 0.6326,
+          "joint_log_loss": 2.1242
+        },
+        "2025": {
+          "winner_log_loss": 0.6218,
+          "joint_log_loss": 2.1849
+        }
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6398,
+          "joint_log_loss": 2.2669,
+          "method_macro_f1": 0.3425,
+          "round_macro_f1": 0.1767
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6498,
+          "joint_log_loss": 1.9891,
+          "method_macro_f1": 0.2883,
+          "round_macro_f1": 0.2436
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6559,
+          "joint_log_loss": 2.4419,
+          "method_macro_f1": 0.3633,
+          "round_macro_f1": 0.1734
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6297,
+          "joint_log_loss": 2.2577,
+          "method_macro_f1": 0.3532,
+          "round_macro_f1": 0.1866
+        }
+      },
+      "compared_against": "models/walkforward/blend_b1.json",
+      "composed_joint_log_loss": 2.2013,
+      "cell_scored_joint_log_loss": 2.2013,
+      "difference": 0.0,
+      "every_pooled_metric_identical": true
+    },
+    "fresh_seed": {
+      "role": "Fresh-seed confirmation -- D2 at seeds 5-9, mandatory before anything ships",
+      "note": "The same recipe at a disjoint seed set, against a fresh-seed paired incumbent built the same way. This step has already caught one false positive in SP2.1, which is why the plan makes it mandatory rather than advisory.",
+      "report": "models/walkforward/hybrid_e2_seeds5.json",
+      "candidate": "hybrid",
+      "seeds": "5,6,7,8,9",
+      "drop_columns": [
+        "external_missing",
+        "same_country",
+        "notice_unknown",
+        "home_country_a",
+        "home_country_b"
+      ],
+      "runtime_sec": 317.9,
+      "pooled": {
+        "n": 4804,
+        "winner_log_loss": 0.6434,
+        "accuracy": 0.6191,
+        "brier": 0.2263,
+        "ece": 0.0144,
+        "joint_log_loss": 2.1432,
+        "method_macro_f1": 0.3422,
+        "round_macro_f1": 0.1686,
+        "n_method": 4792,
+        "n_round": 2446,
+        "zero_mass_cell_fraction": 0.0
+      },
+      "folds": {
+        "2018": {
+          "winner_log_loss": 0.6375,
+          "joint_log_loss": 2.1811
+        },
+        "2019": {
+          "winner_log_loss": 0.6653,
+          "joint_log_loss": 2.1016
+        },
+        "2020": {
+          "winner_log_loss": 0.6501,
+          "joint_log_loss": 2.1348
+        },
+        "2021": {
+          "winner_log_loss": 0.6744,
+          "joint_log_loss": 2.1865
+        },
+        "2022": {
+          "winner_log_loss": 0.6445,
+          "joint_log_loss": 2.2107
+        },
+        "2023": {
+          "winner_log_loss": 0.6392,
+          "joint_log_loss": 2.1798
+        },
+        "2024": {
+          "winner_log_loss": 0.6321,
+          "joint_log_loss": 2.0517
+        },
+        "2025": {
+          "winner_log_loss": 0.6215,
+          "joint_log_loss": 2.1193
+        }
+      },
+      "slices": {
+        "debut": {
+          "n": 983,
+          "winner_log_loss": 0.6387,
+          "joint_log_loss": 2.2097,
+          "method_macro_f1": 0.3412,
+          "round_macro_f1": 0.2393
+        },
+        "womens": {
+          "n": 779,
+          "winner_log_loss": 0.6513,
+          "joint_log_loss": 1.9357,
+          "method_macro_f1": 0.2936,
+          "round_macro_f1": 0.1533
+        },
+        "five_round": {
+          "n": 420,
+          "winner_log_loss": 0.6561,
+          "joint_log_loss": 2.3767,
+          "method_macro_f1": 0.3631,
+          "round_macro_f1": 0.1209
+        },
+        "external_missing": {
+          "n": 779,
+          "winner_log_loss": 0.6299,
+          "joint_log_loss": 2.2007,
+          "method_macro_f1": 0.3453,
+          "round_macro_f1": 0.2499
+        }
+      },
+      "paired_incumbent": "models/walkforward/blend_b1_cells_seeds5.json",
+      "bar_check": {
+        "convention": "delta = candidate - incumbent; negative = the candidate is better",
+        "joint_bar": 0.01,
+        "sigma_seed": 0.000346,
+        "candidate_joint_log_loss": 2.1432,
+        "incumbent_joint_log_loss": 2.2028,
+        "joint_delta": -0.0596,
+        "joint_margin_past_the_bar": 0.0496,
+        "clears_joint_bar": true,
+        "candidate_winner_log_loss": 0.6434,
+        "incumbent_winner_log_loss": 0.6434,
+        "winner_delta": 0.0,
+        "winner_headroom": 0.000346,
+        "winner_clause_satisfied": true,
+        "joint_fold_deltas": {
+          "2018": -0.0563,
+          "2019": -0.0515,
+          "2020": -0.0762,
+          "2021": -0.0521,
+          "2022": -0.0351,
+          "2023": -0.0561,
+          "2024": -0.075,
+          "2025": -0.0692
+        },
+        "winner_fold_deltas": {
+          "2018": 0.0,
+          "2019": 0.0,
+          "2020": 0.0,
+          "2021": 0.0,
+          "2022": 0.0,
+          "2023": 0.0,
+          "2024": 0.0,
+          "2025": 0.0
+        },
+        "worst_joint_fold_delta": -0.0351,
+        "worst_winner_fold_delta": 0.0,
+        "fold_deltas_are_reported_not_gated": "SP3's bar has no per-fold no-regression clause; that belongs to the v3 spec section 5 winner bar (mma.walkforward.bar_check). These are here to be read, not to gate.",
+        "comparable": true,
+        "missing_folds": [],
+        "ships": true
+      },
+      "monte_carlo": {
+        "mc_standard_error": {
+          "per_fold": [
+            0.004817,
+            0.004866,
+            0.004853,
+            0.004853,
+            0.0049,
+            0.004861,
+            0.004854,
+            0.004767
+          ],
+          "min": 0.004767,
+          "max": 0.0049,
+          "mean": 0.004846
+        },
+        "mc_standard_error_max": {
+          "per_fold": [
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005,
+            0.005
+          ],
+          "min": 0.005,
+          "max": 0.005,
+          "mean": 0.005
+        },
+        "zero_mass_cell_fraction": {
+          "per_fold": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0
+        },
+        "n_runs": {
+          "per_fold": [
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0,
+            10000.0
+          ],
+          "min": 10000.0,
+          "max": 10000.0,
+          "mean": 10000.0
+        },
+        "alpha": {
+          "per_fold": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        }
+      },
+      "also_compared_against_the_composed_incumbent": {
+        "incumbent": "models/walkforward/blend_b1_seeds5.json",
+        "note": "blend_b1_seeds5 is the same blend at seeds 5-9 scored by the composed joint rather than the cell scorer. D3 shows the two scorers agree exactly, so this is a corroborating read of the same bar, not a second bar.",
+        "bar_check": {
+          "convention": "delta = candidate - incumbent; negative = the candidate is better",
+          "joint_bar": 0.01,
+          "sigma_seed": 0.000346,
+          "candidate_joint_log_loss": 2.1432,
+          "incumbent_joint_log_loss": 2.2028,
+          "joint_delta": -0.0596,
+          "joint_margin_past_the_bar": 0.0496,
+          "clears_joint_bar": true,
+          "candidate_winner_log_loss": 0.6434,
+          "incumbent_winner_log_loss": 0.6434,
+          "winner_delta": 0.0,
+          "winner_headroom": 0.000346,
+          "winner_clause_satisfied": true,
+          "joint_fold_deltas": {
+            "2018": -0.0563,
+            "2019": -0.0515,
+            "2020": -0.0762,
+            "2021": -0.0521,
+            "2022": -0.0351,
+            "2023": -0.0561,
+            "2024": -0.075,
+            "2025": -0.0692
+          },
+          "winner_fold_deltas": {
+            "2018": 0.0,
+            "2019": 0.0,
+            "2020": 0.0,
+            "2021": 0.0,
+            "2022": 0.0,
+            "2023": 0.0,
+            "2024": 0.0,
+            "2025": 0.0
+          },
+          "worst_joint_fold_delta": -0.0351,
+          "worst_winner_fold_delta": 0.0,
+          "fold_deltas_are_reported_not_gated": "SP3's bar has no per-fold no-regression clause; that belongs to the v3 spec section 5 winner bar (mma.walkforward.bar_check). These are here to be read, not to gate.",
+          "comparable": true,
+          "missing_folds": [],
+          "ships": true
+        }
+      },
+      "incumbent_config_matches_on_every_field_but_seeds": {
+        "candidate": "models/walkforward/blend_b1_cells_seeds5.json",
+        "reference": "models/walkforward/blend_b1_cells.json",
+        "ignored_fields": [
+          "seeds",
+          "runtime_sec"
+        ],
+        "differing_fields": [],
+        "matches": true,
+        "seeds": {
+          "candidate": "5,6,7,8,9",
+          "reference": "0,1,2,3,4"
+        }
+      }
+    }
+  },
+  "winner_clause_by_construction": {
+    "claim": "HybridCandidate returns pred['winner'] = the blend member's own array, so every winner metric in its report is the incumbent's number exactly and the bar's winner clause holds by construction.",
+    "verification": {
+      "candidate_predictions": "models/walkforward/preds/hybrid_e2_seeds5.json",
+      "incumbent_predictions": "models/walkforward/preds/blend_b1_cells_seeds5.json",
+      "n_rows_compared": 4804,
+      "same_rows": true,
+      "rows_checked_by": "equal fold_year and y_winner sequences in walkforward.pool's order",
+      "comparison": "np.array_equal on p_winner -- exact, not a tolerance",
+      "n_elements_differing": 0,
+      "max_absolute_difference": 0.0,
+      "identical": true
+    },
+    "corroboration": {
+      "note": "The report metrics agree too, which is a weaker check -- they are rounded to 4 dp -- but it is the check a reader of the reports alone can make.",
+      "hybrid_pooled": {
+        "winner_log_loss": 0.6434,
+        "accuracy": 0.6191,
+        "brier": 0.2263,
+        "ece": 0.0144
+      },
+      "incumbent_pooled": {
+        "winner_log_loss": 0.6434,
+        "accuracy": 0.6191,
+        "brier": 0.2263,
+        "ece": 0.0144
+      }
+    }
+  },
+  "monte_carlo": {
+    "n_runs": 10000,
+    "alpha": 1.0,
+    "fixed_when": "before any run, by the plan's 'Scoring the simulator fairly' section",
+    "requirement": "the plan required the Monte Carlo standard error on P(A wins) be verified below 0.005 and the zero-mass cell fraction reported, with more than ~1% meaning N is too small",
+    "standard_error": {
+      "E1": {
+        "per_fold": [
+          0.004835,
+          0.004865,
+          0.004906,
+          0.004899,
+          0.004891,
+          0.004879,
+          0.004832,
+          0.004783
+        ],
+        "min": 0.004783,
+        "max": 0.004906,
+        "mean": 0.004861
+      },
+      "E2": {
+        "per_fold": [
+          0.004812,
+          0.004854,
+          0.00485,
+          0.004863,
+          0.004888,
+          0.004856,
+          0.004861,
+          0.004791
+        ],
+        "min": 0.004791,
+        "max": 0.004888,
+        "mean": 0.004847
+      },
+      "D1": {
+        "per_fold": [
+          0.004812,
+          0.004854,
+          0.00485,
+          0.004863,
+          0.004888,
+          0.004856,
+          0.004861,
+          0.004791
+        ],
+        "min": 0.004791,
+        "max": 0.004888,
+        "mean": 0.004847
+      },
+      "D2": {
+        "per_fold": [
+          0.004812,
+          0.004854,
+          0.00485,
+          0.004863,
+          0.004888,
+          0.004856,
+          0.004861,
+          0.004791
+        ],
+        "min": 0.004791,
+        "max": 0.004888,
+        "mean": 0.004847
+      },
+      "fresh_seed": {
+        "per_fold": [
+          0.004817,
+          0.004866,
+          0.004853,
+          0.004853,
+          0.0049,
+          0.004861,
+          0.004854,
+          0.004767
+        ],
+        "min": 0.004767,
+        "max": 0.0049,
+        "mean": 0.004846
+      }
+    },
+    "standard_error_max": {
+      "E2": {
+        "per_fold": [
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005
+        ],
+        "min": 0.005,
+        "max": 0.005,
+        "mean": 0.005
+      },
+      "D2": {
+        "per_fold": [
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005
+        ],
+        "min": 0.005,
+        "max": 0.005,
+        "mean": 0.005
+      },
+      "fresh_seed": {
+        "per_fold": [
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005,
+          0.005
+        ],
+        "min": 0.005,
+        "max": 0.005,
+        "mean": 0.005
+      }
+    },
+    "standard_error_note": "mc_standard_error_max is 0.005 in every fold, which is not a coincidence and not a failure: 0.5/sqrt(10000) is exactly the analytic worst case, attained at p=0.5, and the plan predicted it ('it should be ~0.005 at p=0.5, N=10,000 for a single member'). The MEAN across fights is below it in every fold of every run, and averaging the two corner orientations and five seed members reduces the error further still.",
+    "zero_mass_cell_fraction": {
+      "E1": {
+        "per_fold": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "E2": {
+        "per_fold": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "D1": {
+        "per_fold": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "D2": {
+        "per_fold": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "fresh_seed": {
+        "per_fold": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      }
+    },
+    "zero_mass_note": "Zero in every fold of every run: no realised cell had zero raw simulated mass, so the Laplace alpha=1 smoothing never had to rescue a -log 0, and N=10,000 is comfortably large enough. The smoothing stays on regardless, applied identically to every candidate, because it was pre-registered."
+  },
+  "findings": {
+    "1_macro_f1_was_the_wrong_yardstick": {
+      "finding": "Macro-F1 was the wrong yardstick for the old method and round heads, and it is why those heads looked like the weakest part of the system. The simulator's round marginal is much BETTER than the incumbent's on log-loss and much WORSE on macro-F1. Both are true and only the first one measures the distribution. Argmaxing round 1 is the correct call -- round 1 is 57.2% of finishes -- so a well-calibrated round head puts its argmax there on nearly every fight and collects macro-F1 credit for exactly one class. The old head spread its argmax across the rare classes and was rewarded by macro-F1 for predicting them, while predicting them badly.",
+      "why_it_matters": "The SP3 plan's own motivation cites the method head's 0.39 macro-F1 and the round head's 0.31 as the weakest parts of the system. That framing was measured with the wrong instrument. The paradigm change was still worth making -- the joint log-loss says so -- but a future sub-project should not select a head on macro-F1.",
+      "evidence": {
+        "simulator_round_macro_f1": 0.1686,
+        "incumbent_round_macro_f1": 0.2793,
+        "macro_f1_delta": -0.1107,
+        "simulator_joint_log_loss": 2.1476,
+        "incumbent_joint_log_loss": 2.2013,
+        "joint_log_loss_delta": -0.0537,
+        "finish_round_distribution": {
+          "n_finishes_with_a_round": 6278,
+          "counts": {
+            "1": 3590,
+            "2": 1756,
+            "3": 840,
+            "4": 55,
+            "5": 35,
+            "6": 2
+          },
+          "shares": {
+            "1": 0.5718,
+            "2": 0.2797,
+            "3": 0.1338,
+            "4": 0.0088,
+            "5": 0.0056,
+            "6": 0.0003
+          },
+          "modal_round": "1",
+          "modal_share": 0.5718
+        },
+        "source": "data/processed/fights.parquet"
+      }
+    },
+    "2_the_hybrid_beat_the_pure_simulator": {
+      "finding": "The hybrid BEAT the pure simulator on the joint (2.1432 against 2.1476), rather than trading joint quality away to buy the winner clause as the spec assumed it would. Imposing a better-calibrated winner marginal on the simulator's conditional structure improves the joint outright.",
+      "why_it_matters": "The v3 spec wrote the hybrid as a FALLBACK -- a concession that gives up some of the simulator's joint quality in exchange for a winner marginal that clears its clause. The measurement says it is not a concession at all. The two factors of the joint are separable and are best supplied by different models: the blend knows who wins, the simulator knows how. That is a positive result about composition, not a compromise, and it is the shape a future candidate should start from.",
+      "evidence": {
+        "hybrid_joint_log_loss": 2.1432,
+        "pure_simulator_joint_log_loss": 2.1476,
+        "delta_hybrid_minus_pure": -0.0044,
+        "calibrated_simulator_joint_log_loss": 2.1454,
+        "pure_simulator_winner_delta_vs_incumbent": 0.0042,
+        "calibrated_simulator_winner_delta_vs_incumbent": 0.0022,
+        "hybrid_winner_delta_vs_incumbent": 0.0
+      }
+    },
+    "3_the_d3_control_rules_out_the_arithmetic": {
+      "finding": "The D3 control shows the blend's own three heads, pushed through the identical cell scorer, give exactly 2.2013 -- the same number its composed joint gives. So the hybrid's gain is not the cell layout, not the re-weighting arithmetic and not a scorer that happens to flatter distributions shaped like the simulator's. It is the simulator's conditional structure.",
+      "why_it_matters": "Without this control the hybrid's joint improvement would be unattributable: it composes a new scorer, a new layout and a new model at once, and the first two are shared with the incumbent only if someone checks. The control is the check, and it costs one walk-forward run.",
+      "evidence": {
+        "composed_joint_log_loss": 2.2013,
+        "cell_scored_joint_log_loss": 2.2013,
+        "difference": 0.0,
+        "every_pooled_metric_identical": true,
+        "control_report": "models/walkforward/blend_b1_cells.json"
+      }
+    }
+  }
+}
