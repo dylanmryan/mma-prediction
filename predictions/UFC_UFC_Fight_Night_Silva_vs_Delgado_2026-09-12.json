@@ -238,6 +238,24 @@
       "reason": "no fighter in fighters.parquet matches name 'Regina Tarin' (exact or accent-folded)",
       "predicted_at_utc": "2026-08-31T19:03:41Z",
       "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Drakkar Klose",
+      "fighter_b_name": "Thomas Gantt",
+      "weight_class": "Lightweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Thomas Gantt' (exact or accent-folded)",
+      "predicted_at_utc": "2026-09-07T17:39:53Z",
+      "model_version": "40df77ec43c7"
+    },
+    {
+      "fighter_a_name": "Sean King",
+      "fighter_b_name": "Jessie Rosas",
+      "weight_class": "Featherweight",
+      "skipped": true,
+      "reason": "no fighter in fighters.parquet matches name 'Sean King' (exact or accent-folded); no fighter in fighters.parquet matches name 'Jessie Rosas' (exact or accent-folded)",
+      "predicted_at_utc": "2026-09-07T17:39:53Z",
+      "model_version": "40df77ec43c7"
     }
   ]
 }
