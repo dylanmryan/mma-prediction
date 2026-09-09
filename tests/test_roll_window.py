@@ -63,7 +63,7 @@ def test_promotion_protocol_text_mentions_threshold_and_margin():
     assert "mma.versioning.model_version" in text
     assert "git sha" not in text
     assert "IN-SAMPLE" in text and "models/walkforward/" in text
-    assert "scripts/build_display_priors.py" in text
+    assert "scripts/check_display_calibration.py" in text
 
 
 def test_incumbent_in_sample_refit_reaching_into_slice():
@@ -114,6 +114,8 @@ INCUMBENT_FILES = {
     "net_seed0.pt": b"INCUMBENT_NET_0",
     "net_seed1.pt": b"INCUMBENT_NET_1",
     "preprocess.json": b"INCUMBENT_PREP",
+    # any third file in models/torch: this fixture is about backup/restore
+    # covering the whole directory, not about this file's contents
     "display_priors.json": b"INCUMBENT_PRIORS",
     "metrics_val.json": b'{"winner_ensemble": {"log_loss": 0.65}}',
 }
@@ -151,7 +153,7 @@ def _drive_execute(
     """Run _execute with the retrain, both ensemble evals, and the display-
     priors rebuild all mocked. The priors rebuild is ALWAYS patched (default
     no-op) so a promote path never shells out to the real
-    build_display_priors.py and touches the real models/torch."""
+    check_display_calibration.py and touches the real models/torch."""
     candidate_torch_dir = models_dir / roll_window.CANDIDATE_DIR_NAME / "torch"
 
     def fake_retrain(out_dir, train_end, val_start, val_end):
@@ -167,7 +169,7 @@ def _drive_execute(
     monkeypatch.setattr(roll_window, "_retrain_candidate", fake_retrain)
     monkeypatch.setattr(roll_window, "_ensemble_val_log_loss", fake_eval)
     monkeypatch.setattr(
-        roll_window, "_rebuild_display_priors", rebuild_priors or (lambda: None)
+        roll_window, "_remeasure_display_calibration", rebuild_priors or (lambda: None)
     )
 
     features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
@@ -197,7 +199,7 @@ def test_execute_promotes_when_candidate_beats_margin(staged, monkeypatch, capsy
     assert backup_dir.exists()
     assert _read_dir(backup_dir) == INCUMBENT_FILES
 
-    # display priors regenerated for the newly staged ensemble
+    # display calibration re-measured against the newly staged ensemble
     assert calls["priors"] == 1
 
     # temp candidate dir cleaned up
@@ -206,12 +208,15 @@ def test_execute_promotes_when_candidate_beats_margin(staged, monkeypatch, capsy
     out = capsys.readouterr().out
     assert "PROMOTED" in out
     assert "STAGED" in out or "staged" in out
-    assert "regenerated" in out
+    assert "re-measured" in out
 
 
 def test_execute_promotion_survives_priors_rebuild_failure(staged, monkeypatch, capsys):
-    """A display-priors rebuild failure must NOT abort the promotion: the
-    ensemble stays staged and a clear warning is printed instead of raising."""
+    """A display-calibration re-measurement failure must NOT abort the
+    promotion: the ensemble stays staged and a clear warning is printed
+    instead of raising. Since SP3 that file is a measurement rather than an
+    input to serving, so a stale one misleads a reader rather than changing a
+    prediction."""
     models_dir, torch_dir = staged
 
     def boom():

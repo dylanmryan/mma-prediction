@@ -42,7 +42,9 @@ This trains the BLEND's neural member. The XGBoost member is
 ``scripts/train_xgb.py`` and the two are combined by
 ``mma.inference.BlendedPredictor``; retraining one without the other leaves a
 blend whose halves saw different data, which
-``scripts/build_display_priors.py`` warns about.
+``scripts/check_display_calibration.py`` warns about. Since SP3 the blend is
+in turn half of the deployed hybrid -- ``scripts/train_hazard.py`` fits the
+simulator's two members and belongs in the same retrain.
 
 Checkpoint payloads (state_dict, temperature, n_features, n_weight_classes)
 are identical in both modes; ``mma.inference.Ensemble.load`` reads either.

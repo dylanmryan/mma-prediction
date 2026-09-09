@@ -225,25 +225,6 @@ def test_blend_survives_a_weight_class_the_models_never_saw(blended, matchup):
     assert 0.0 < float(result["winner_prob"][0]) < 1.0
 
 
-def test_apply_prior_correction_matches_hand_computed_example():
-    from mma.inference import apply_prior_correction
-
-    probs = {"a": 0.7, "b": 0.3}
-    priors = {"a": 0.1, "b": 0.9}
-    corrected = apply_prior_correction(probs, priors)
-    assert corrected["a"] == pytest.approx(0.2059, abs=1e-4)
-    assert corrected["b"] == pytest.approx(0.7941, abs=1e-4)
-    assert sum(corrected.values()) == pytest.approx(1.0, abs=1e-9)
-
-
-def test_apply_prior_correction_guards_zero_sum():
-    from mma.inference import apply_prior_correction
-
-    probs = {"a": 0.7, "b": 0.3}
-    priors = {"a": 0.0, "b": 0.0}
-    assert apply_prior_correction(probs, priors) == probs
-
-
 def test_compute_correction_factors_hand_computed():
     from mma.inference import compute_correction_factors
 
@@ -255,16 +236,18 @@ def test_compute_correction_factors_hand_computed():
 
 
 def test_compute_correction_factors_mean_matches_aggregate():
-    # The defining property: applying the factors to the model's mean
-    # predicted distribution recovers the empirical prior exactly.
-    from mma.inference import apply_prior_correction, compute_correction_factors
+    # The defining property, and the reason a factor near 1 means "already
+    # calibrated in aggregate": scaling the model's mean predicted
+    # distribution by the factors and renormalising recovers the base rates.
+    from mma.inference import compute_correction_factors
 
     empirical = {"1": 0.4, "2": 0.25, "3": 0.17, "45": 0.18}
     mean_predicted = {"1": 0.07, "2": 0.08, "3": 0.09, "45": 0.76}
     factors = compute_correction_factors(empirical, mean_predicted)
-    recovered = apply_prior_correction(mean_predicted, factors)
+    scaled = {cls: mean_predicted[cls] * factors[cls] for cls in empirical}
+    total = sum(scaled.values())
     for cls, value in empirical.items():
-        assert recovered[cls] == pytest.approx(value, abs=1e-9)
+        assert scaled[cls] / total == pytest.approx(value, abs=1e-9)
 
 
 def test_compute_correction_factors_guards_tiny_mean_predicted():
@@ -277,18 +260,27 @@ def test_compute_correction_factors_guards_tiny_mean_predicted():
     assert factors["c"] == 0.0
 
 
-def test_committed_display_priors_json_structure():
+def test_committed_display_calibration_says_the_correction_is_retired():
+    """SP3 measured the deployed simulator against the base rates and dropped
+    the mean-matching correction on the evidence. The committed artifact is
+    that evidence, so it has to carry the verdict and the numbers behind it."""
     import json
 
-    payload = json.loads(
-        (ROOT / "models" / "torch" / "display_priors.json").read_text()
-    )
-    assert set(payload) == {"method", "round_3", "round_5"}
-    assert set(payload["method"]) == {"ko_tko", "submission", "decision"}
-    for key in ("round_3", "round_5"):
-        assert set(payload[key]) == {"1", "2", "3", "45"}
-    assert payload["round_3"]["45"] == 0.0
-    assert all(v >= 0.0 for group in payload.values() for v in group.values())
+    payload = json.loads((ROOT / "models" / "display_calibration.json").read_text())
+    assert payload["correction_applied"] is False
+    assert payload["within_tolerance"] is True
+    assert payload["max_deviation_points"] <= payload["tolerance"]
+    for key in ("method", "round_3", "round_5"):
+        block = payload[key]
+        assert block["n"] > 0
+        simulator = block["max_deviation_points"]["deployed_simulator"]
+        blend = block["max_deviation_points"]["retired_blend_heads"]
+        # the whole argument in one assertion: the simulator's marginals sit
+        # closer to the base rates than the heads the correction was built for
+        assert simulator < blend, key
+        assert set(block["deployed_simulator"]) == {
+            "empirical", "mean_predicted", "factor_needed"}
+    assert payload["round_3"]["deployed_simulator"]["mean_predicted"]["45"] == 0.0
 
 
 def _synthetic_features():

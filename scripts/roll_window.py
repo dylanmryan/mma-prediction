@@ -56,7 +56,7 @@ candidate ensemble artifacts are STAGED into models/torch (the incumbent is
 backed up on disk first) but NOTHING is committed: this command performs NO
 git writes. After any promotion decision the human re-runs the refit recipe
 -- bare `scripts/train_xgb.py`, `scripts/train_torch.py`,
-`scripts/train_hazard.py`, then `scripts/build_display_priors.py` -- so the
+`scripts/train_hazard.py`, then `scripts/check_display_calibration.py` -- so the
 deployed model includes the
 newest fights, runs the full test suite, reviews the metrics diff, and
 commits by hand. The `model_version` that starts a fresh track_record.json
@@ -161,7 +161,7 @@ def promotion_protocol_text(n_accumulated: int, cutoff: pd.Timestamp,
         "this gate onto it. A split-protocol candidate never ships as-is: after "
         "any promotion decision, re-run bare scripts/train_xgb.py, "
         "scripts/train_torch.py, scripts/train_hazard.py and "
-        "scripts/build_display_priors.py (the refit recipe) before committing."
+        "scripts/check_display_calibration.py (the refit recipe) before committing."
     )
 
 
@@ -307,22 +307,21 @@ def _retrain_candidate(
     )
 
 
-def _rebuild_display_priors() -> None:
-    """Regenerate models/torch/display_priors.json from the staged ensemble.
+def _remeasure_display_calibration() -> None:
+    """Re-measure models/display_calibration.json against the staged ensemble.
 
-    scripts/build_display_priors.py loads the committed scorer
-    (BlendedPredictor.load() -> models/torch plus models/xgb_*_seed*.json)
-    and writes models/torch/
-    display_priors.json, so running it AFTER the candidate is staged into
-    models/torch makes the priors match the new ensemble. The display priors
-    are base-rate correction factors computed on the deployed ensemble's own
-    training rows (mma.inference.deployed_training_mask, read from the
-    staged metrics_val.json) against that ensemble's predictions there -- a
-    new ensemble and a new training window both change them, so a promotion
-    leaves them stale unless rebuilt.
+    scripts/check_display_calibration.py loads the committed scorer and
+    measures its aggregate method/round marginals against the base rates on
+    its own training rows (mma.inference.deployed_training_mask, read from the
+    staged metrics_val.json). A new ensemble and a new training window both
+    change that measurement, so a promotion leaves it stale unless it is run
+    again. Since SP3 it is a measurement rather than a correction the app
+    applies, so a stale file misleads a reader rather than changing a
+    prediction -- which is why a failure here warns and never unstages the
+    model.
     """
     subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "build_display_priors.py")],
+        [sys.executable, str(ROOT / "scripts" / "check_display_calibration.py")],
         cwd=ROOT, check=True,
     )
 
@@ -392,22 +391,21 @@ def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
                     shutil.copy2(src, torch_dir / src.name)
 
             # Keep the staged artifact set internally consistent: the display
-            # priors are base-rate corrections for the OLD ensemble on its own
-            # training rows, now stale. Regenerate them from the just-staged
-            # ensemble. A
-            # rebuild failure must NOT unstage the model -- warn and continue.
+            # the display calibration measured the OLD ensemble on its own
+            # training rows, and is now stale. Re-measure it against the
+            # just-staged ensemble. A failure must NOT unstage the model --
+            # warn and continue.
             try:
-                _rebuild_display_priors()
+                _remeasure_display_calibration()
                 priors_line = (
-                    "  1. display_priors.json has been regenerated for the new "
+                    "  1. display_calibration.json has been re-measured for the new "
                     "ensemble (consistent with the staged artifacts)."
                 )
             except Exception as exc:  # noqa: BLE001 -- graceful, never abort promotion
                 priors_line = (
-                    f"  1. WARNING: display_priors.json rebuild FAILED ({exc}). "
-                    "The ensemble is still staged -- regenerate the priors "
-                    "manually with `python scripts/build_display_priors.py` "
-                    "before committing."
+                    f"  1. WARNING: display_calibration.json rebuild FAILED ({exc}). "
+                    "The ensemble is still staged -- re-measure manually with "
+                    "`python scripts/check_display_calibration.py` before committing."
                 )
 
             print(
@@ -420,7 +418,8 @@ def _execute(features: pd.DataFrame, cutoff: pd.Timestamp) -> None:
                 f"{priors_line}\n"
                 "  2. Do NOT ship this split-protocol candidate as-is: re-run the "
                 "refit recipe (bare scripts/train_xgb.py, scripts/train_torch.py, "
-                "scripts/build_display_priors.py) so the deployed model includes "
+                "scripts/train_hazard.py, scripts/check_display_calibration.py) so "
+                "the deployed model includes "
                 "the newest fights.\n"
                 "  3. Run the full test suite, review the metrics diff "
                 "(models/torch/metrics_val.json), then commit -- the artifact hash "

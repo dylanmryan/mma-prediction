@@ -158,9 +158,10 @@ def compute_display_priors(features: pd.DataFrame, metrics: dict | None = None) 
     vs an empirical rate of 0.182 (~3.8x overstated), and 3-round fights'
     P(round 3) is roughly doubled.
 
-    These empirical priors are the numerators of the mean-matching
-    correction factors built by scripts/build_display_priors.py (see
-    `compute_correction_factors`). The row set is `deployed_training_mask`
+    These empirical priors are one side of the comparison
+    scripts/check_display_calibration.py makes (see
+    `compute_correction_factors` for the other). The row set is
+    `deployed_training_mask`
     -- the rows the committed ensemble actually trained on, read from
     models/torch/metrics_val.json (pass `metrics` to override): all rows
     through `train_through` for a refit_through model, date < TRAIN_END
@@ -205,6 +206,16 @@ def compute_display_priors(features: pd.DataFrame, metrics: dict | None = None) 
 def compute_correction_factors(empirical: dict, mean_predicted: dict) -> dict:
     """Mean-matching factors: factor(c) = empirical_prior(c) / mean_model_predicted(c).
 
+    **No longer applied to anything.** Until SP3 these multiplied every
+    displayed method and round probability, because the class-weighted heads
+    below were miscalibrated in aggregate. The deployed scorer's method and
+    round splits are now marginals of the simulator's joint distribution, and
+    `scripts/check_display_calibration.py` measured them as landing within a
+    few points of the base rates unaided -- so the correction is retired, and
+    this function survives as the measurement's own arithmetic: a factor near
+    1 IS the statement that no correction is needed. Applying it now would move
+    each marginal off the joint the app's outcome table is read from.
+
     A plain multiply-by-prior (Saerens) correction was too weak here because
     the class-weighted heads' likelihood *ratios* are themselves miscalibrated
     (e.g. mean predicted P(rounds 4-5) on train 5-round finishes is ~0.7 vs an
@@ -214,9 +225,9 @@ def compute_correction_factors(empirical: dict, mean_predicted: dict) -> dict:
     empirical base rates exactly (before per-row renormalization) while
     preserving each fight's relative signal.
 
-    `mean_predicted` is the ensemble's mean predicted distribution over the
-    matching deployed-training rows (`deployed_training_mask`; built by
-    scripts/build_display_priors.py).
+    `mean_predicted` is the scorer's mean predicted distribution over the
+    matching deployed-training rows (`deployed_training_mask`; computed by
+    scripts/check_display_calibration.py).
     Guard: if mean_predicted(c) < 1e-6 (e.g. the "45" class for 3-round
     fights, which the model masks to ~0), the factor is set to 0.0 rather
     than exploding.
@@ -229,23 +240,6 @@ def compute_correction_factors(empirical: dict, mean_predicted: dict) -> dict:
         )
         for cls in empirical
     }
-
-
-def apply_prior_correction(probs: dict, factors: dict) -> dict:
-    """Elementwise correction: p_display(c) ∝ p_model(c) * factor(c).
-
-    `probs` and `factors` are both {class_label: value} dicts over the same
-    class set. `factors` are the mean-matching correction factors from
-    `compute_correction_factors` (models/torch/display_priors.json).
-    Renormalizes so the output sums to 1. If the weighted sum is zero
-    (e.g. all overlapping factors are zero), returns `probs` unchanged
-    rather than dividing by zero.
-    """
-    corrected = {cls: p * factors.get(cls, 0.0) for cls, p in probs.items()}
-    total = sum(corrected.values())
-    if total <= 0:
-        return dict(probs)
-    return {cls: v / total for cls, v in corrected.items()}
 
 
 class Ensemble:

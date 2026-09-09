@@ -4,7 +4,7 @@ Downloads the latest snapshot of the Kaggle UFC dataset (the same maintained
 mirror `download_data.py` bootstraps from), then compares it against the
 already-processed fights table to decide whether the fuller rebuild chain
 (make_dataset -> build_ratings -> build_features -> train_xgb -> train_torch
--> build_display_priors) is warranted. Exits 0 whenever the snapshot is
+-> train_hazard -> check_display_calibration) is warranted. Exits 0 whenever the snapshot is
 readable, printing a machine-readable `REFRESH_NEEDED=true|false` line for
 CI to parse; raises (non-zero exit) if the downloaded snapshot is missing a
 file the pipeline requires, so the weekly Action goes red instead of
