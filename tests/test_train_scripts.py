@@ -241,10 +241,16 @@ def test_hazard_budget_from_report_applies_median_over_seeds_then_folds():
 
 
 def test_hazard_head_path_is_one_artifact_per_member_per_seed():
+    from mma.versioning import MODEL_ARTIFACT_GLOBS
+
+    import fnmatch
     for head in train_hazard.HEADS:
         for seed in train_hazard.SEEDS:
             path = train_hazard.head_path(Path("models"), head, seed)
             assert path.name == f"xgb_{head}_seed{seed}.json"
+            # every artifact the trainer writes must be one the model hash covers
+            assert any(fnmatch.fnmatch(f"models/{path.name}", glob)
+                       for glob in MODEL_ARTIFACT_GLOBS), path
 
 
 def test_hazard_seeds_match_the_rest_of_the_deployment():

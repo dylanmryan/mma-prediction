@@ -7,18 +7,22 @@ from mma.versioning import MODEL_ARTIFACT_GLOBS, model_version
 from scripts.migrate_model_versions import rekey_record
 
 
+SIMULATOR = {"n_runs": 10000, "alpha": 1.0, "sim_seed": 0, "default_rounds": 3}
+
+
 def _make_models(root, seed_bytes=b"seed0"):
-    """Both halves of the deployed scorer -- the torch ensemble and the
-    XGBoost seed ensemble -- plus the committed weight/temperature the blend
-    combines them with."""
+    """Everything the deployed hybrid loads: the blend's two members and their
+    committed weight/temperature, and the simulator's two members and its
+    committed simulation parameters."""
     models = root / "models"
     torch_dir = models / "torch"
     torch_dir.mkdir(parents=True)
     (torch_dir / "net_seed0.pt").write_bytes(seed_bytes)
     (torch_dir / "preprocess.json").write_text(json.dumps({"medians": {}}))
-    for head in ("winner", "method", "round"):
+    for head in ("winner", "method", "round", "hazard", "decision"):
         (models / f"xgb_{head}_seed0.json").write_text(json.dumps({"head": head}))
     (models / "blend.json").write_text(json.dumps({"weight": 0.5, "temperature": 0.8}))
+    (models / "simulator.json").write_text(json.dumps(SIMULATOR))
 
 
 def test_version_is_12_hex_and_stable(tmp_path):
@@ -53,9 +57,10 @@ def test_version_changes_when_an_xgboost_seed_is_added(tmp_path):
 
 
 def test_version_covers_every_head_of_the_xgb_member(tmp_path):
-    """The method and round boosters feed the app's displayed method/round
-    splits through the blend, so they are part of the scorer too."""
-    for head in ("winner", "method", "round"):
+    """The method and round boosters still feed the blend, and the hazard and
+    decision models are what the simulator plays a fight out with -- every one
+    of the five is part of the scorer."""
+    for head in ("winner", "method", "round", "hazard", "decision"):
         _make_models(tmp_path / head)
         before = model_version(tmp_path / head)
         (tmp_path / head / "models" / f"xgb_{head}_seed0.json").write_text('{"x": 1}')
@@ -85,12 +90,44 @@ def test_version_changes_when_the_blend_temperature_changes(tmp_path):
     assert model_version(tmp_path) != before
 
 
+@pytest.mark.parametrize(
+    "parameter,value",
+    [("n_runs", 5000), ("alpha", 0.5), ("sim_seed", 1), ("default_rounds", 5)],
+)
+def test_version_changes_when_a_simulation_parameter_changes(tmp_path, parameter, value):
+    """SP2.2's lesson, applied to SP3's four numbers.
+
+    None of them is learned by anything, and every one of them changes what a
+    simulated fight comes out at -- so each must move the hash exactly as a
+    retrained booster does, or a prediction's recorded model_version stops
+    identifying the scorer that made it.
+    """
+    _make_models(tmp_path)
+    before = model_version(tmp_path)
+    (tmp_path / "models" / "simulator.json").write_text(
+        json.dumps({**SIMULATOR, parameter: value})
+    )
+    assert model_version(tmp_path) != before
+
+
+def test_version_changes_when_a_simulator_member_is_retrained(tmp_path):
+    """The simulator supplies P(method, round | winner); a retrain of either
+    member changes every joint cell."""
+    for member in ("hazard", "decision"):
+        root = tmp_path / member
+        _make_models(root)
+        before = model_version(root)
+        (root / "models" / f"xgb_{member}_seed0.json").write_text('{"head": "retrained"}')
+        assert model_version(root) != before, member
+
+
 def test_version_ignores_non_artifact_files(tmp_path):
     _make_models(tmp_path)
     before = model_version(tmp_path)
     (tmp_path / "models" / "torch" / "display_priors.json").write_text("{}")
     (tmp_path / "models" / "torch" / "metrics_val.json").write_text('{"acc": 1}')
     (tmp_path / "models" / "xgb_metrics_val.json").write_text("{}")
+    (tmp_path / "models" / "hazard_metrics.json").write_text("{}")
     (tmp_path / "models" / "market_benchmark.json").write_text("{}")
     (tmp_path / "models" / "final_test_metrics.json").write_text("{}")
     assert model_version(tmp_path) == before
@@ -111,12 +148,14 @@ def test_version_changes_when_preprocess_changes(tmp_path):
 
 
 def test_globs_match_what_the_deployed_predictor_loads():
-    # mma.inference.BlendedPredictor.load reads exactly these: the torch
+    # mma.inference.SimulatorPredictor.load reads exactly these: the torch
     # ensemble's per-seed checkpoints and preprocessor, the XGBoost member's
-    # per-seed boosters for all three heads, and models/blend.json -- the
-    # committed mixing weight and post-average temperature the two members
-    # are combined with. Nothing else feeds the recorded probabilities, so
-    # the glob set must match them exactly.
+    # per-seed boosters for all three heads, models/blend.json (the committed
+    # mixing weight and post-average temperature the two are combined with),
+    # the simulator's per-seed hazard and decision models, and
+    # models/simulator.json (the committed simulation parameters). Nothing
+    # else feeds the recorded probabilities, so the glob set must match them
+    # exactly.
     assert MODEL_ARTIFACT_GLOBS == (
         "models/torch/net_seed*.pt",
         "models/torch/preprocess.json",
@@ -124,7 +163,26 @@ def test_globs_match_what_the_deployed_predictor_loads():
         "models/xgb_method_seed*.json",
         "models/xgb_round_seed*.json",
         "models/blend.json",
+        "models/xgb_hazard_seed*.json",
+        "models/xgb_decision_seed*.json",
+        "models/simulator.json",
     )
+
+
+def test_every_simulation_parameter_the_predictor_reads_is_in_the_hashed_artifact():
+    """The hash covers the FILE; this covers the claim that the file is where
+    the parameters live. A parameter the predictor read from anywhere else --
+    a module constant, an environment variable -- would be outside the hash
+    however carefully the file is hashed."""
+    import fnmatch
+
+    from mma.inference import SIMULATOR_CONFIG, SIMULATOR_PARAMETERS, load_simulator_config
+
+    assert any(fnmatch.fnmatch("models/simulator.json", glob)
+               for glob in MODEL_ARTIFACT_GLOBS)
+    config = load_simulator_config(SIMULATOR_CONFIG)
+    assert set(SIMULATOR_PARAMETERS) == {"n_runs", "alpha", "sim_seed", "default_rounds"}
+    assert set(SIMULATOR_PARAMETERS) <= set(config)
 
 
 def test_rekey_replaces_git_shas_and_leaves_hashes():
