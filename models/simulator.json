@@ -1,0 +1,9 @@
+{
+  "n_runs": 10000,
+  "alpha": 1.0,
+  "sim_seed": 0,
+  "default_rounds": 3,
+  "derivation": "The four simulation parameters the SP3 plan fixed in writing before any run and the harness then measured the hybrid with (mma.simulator.DEFAULT_N_RUNS / DEFAULT_ALPHA / DEFAULT_SIM_SEED / DEFAULT_ROUNDS). n_runs is the Monte Carlo sample size per member per orientation, chosen so the standard error on P(A wins) is below 0.005 (measured 0.0048 pooled). alpha is the Laplace pseudo-count spread over the cells a fight can reach, pre-registered at 1 so a cell no simulated fight landed in scores finitely. sim_seed fixes the per-fight RNG stream, which is what makes a prediction reproducible at all. default_rounds is the round bound for a fight with no recorded scheduled_rounds -- the project's standing default of 3. Every one of them moves a probability, so they live in a hashed artifact rather than as module constants, exactly as models/blend.json carries the blend's weight and temperature; see mma.versioning.",
+  "source_report": "models/walkforward/hybrid_e2.json",
+  "decision": "models/walkforward/sp3_decision.json"
+}

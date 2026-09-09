@@ -466,6 +466,9 @@ class HazardCandidate:
     # back on the joint. Off by default, so `hazard_e1`/`hazard_e2` and every
     # other committed simulator report reproduce unchanged.
     calibrate: bool = False
+    #: The fitted members of the most recent `fit_predict`, keyed "hazard" /
+    #: "decision" -- see the loop that fills it.
+    fitted_members: dict = field(default_factory=dict)
 
     def _seed_params(self, seed: int) -> dict:
         if "random_state" in self.params:
@@ -536,12 +539,19 @@ class HazardCandidate:
 
         hazard_probs, mirror_probs, decision_probs, mirror_decision = [], [], [], []
         iterations = {"hazard": [], "decision": []}
+        # The fitted members are kept so the served predictor can be handed the
+        # very models a fold measured (`tests/test_serving_parity.py`): a
+        # parity test that refitted its own lookalikes would be comparing two
+        # fits, not two code paths.
+        self.fitted_members = {"hazard": [], "decision": []}
         for seed in self.seeds:
             params = self._seed_params(seed)
             hz = train_multiclass(xh[0], haz_train["hazard_label"], xh[1], haz_val["hazard_label"],
                                   HAZARD_CLASSES, params=params, sample_weight=weights(haz_train))
             dc = train_binary(xd[0], dec_train["decision_label"], xd[1], dec_val["decision_label"],
                               params=params, sample_weight=weights(dec_train))
+            self.fitted_members["hazard"].append(hz)
+            self.fitted_members["decision"].append(dc)
             hazard_probs.append(hz.predict_proba(xh[2]))
             mirror_probs.append(hz.predict_proba(xh[3]))
             decision_probs.append(dc.predict_proba(xd[2])[:, 1])
