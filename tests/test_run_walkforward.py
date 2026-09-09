@@ -225,7 +225,8 @@ def test_random_state_reaches_the_fitted_estimator():
 def _ens_args(**overrides) -> argparse.Namespace:
     base = {"candidate": "torch", "seeds": None, "model_seed": None,
             "blend_weight": None, "no_blend_calibration": False,
-            "blend_calibrator": "temperature", "hazard_calibrate": False}
+            "blend_calibrator": "temperature", "hazard_calibrate": False,
+            "blend_joint_cells": False}
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -422,3 +423,45 @@ def test_hazard_calibration_flag_on_another_candidate_is_a_usage_error():
     assert rwf.resolve_hazard(_ens_args(candidate="blend", hazard_calibrate=False)) is None
     with pytest.raises(SystemExit, match="hazard candidate only"):
         rwf.resolve_hazard(_ens_args(candidate="blend", hazard_calibrate=True))
+
+
+# --- the hybrid (blend winner x simulator conditional) candidate -------------
+
+
+def test_the_hybrid_candidate_is_seed_ensembled_by_default():
+    assert rwf.resolve_seeds(_ens_args(candidate="hybrid")) == (0, 1, 2, 3, 4)
+
+
+def test_build_candidate_wires_the_hybrid_s_two_members():
+    fights = pd.DataFrame({"fight_id": ["f0"], "finish_round": [1], "scheduled_rounds": [3]})
+    cand = rwf.build_candidate("hybrid", "h", (0, 1), {}, None, ("age_diff",), None, fights)
+    blend, hazard = cand.members()
+    assert cand.fights is fights and cand.drop_columns == ("age_diff",)
+    # the incumbent blend's pre-registered form, and the simulator's
+    # pre-registered simulation parameters, unchanged by the CLI
+    assert blend.weight == 0.5 and blend.calibrate is True
+    assert hazard.n_runs == 10_000 and hazard.alpha == 1.0 and hazard.calibrate is False
+
+
+def test_the_hybrid_candidate_without_a_fights_table_is_a_usage_error():
+    with pytest.raises(SystemExit, match="fights table"):
+        rwf.build_candidate("hybrid", "h", (0,), {}, None)
+
+
+def test_the_hybrid_candidate_rejects_an_ambiguous_config_and_a_fixed_budget():
+    fights = pd.DataFrame({"fight_id": ["f0"]})
+    with pytest.raises(SystemExit, match="hybrid"):
+        rwf.build_candidate("hybrid", "h", (0,), {"max_depth": 3}, None, (), None, fights)
+    with pytest.raises(SystemExit, match="hybrid"):
+        rwf.build_candidate("hybrid", "h", (0,), {}, {"fixed_rounds": 50}, (), None, fights)
+
+
+def test_the_blend_joint_cell_control_is_off_by_default_and_blend_only():
+    off = rwf.resolve_blend(_ens_args(candidate="blend"))
+    assert "blend_joint_cells" not in off  # committed blend reports keep their config shape
+    on = rwf.resolve_blend(_ens_args(candidate="blend", blend_joint_cells=True))
+    assert on["blend_joint_cells"] is True
+    assert rwf.build_candidate("blend", "b", (0,), {}, None, (), on).emit_joint_cells is True
+    assert rwf.build_candidate("blend", "b", (0,), {}, None, (), off).emit_joint_cells is False
+    with pytest.raises(SystemExit, match="blend candidate only"):
+        rwf.resolve_blend(_ens_args(candidate="torch", blend_joint_cells=True))
