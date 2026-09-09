@@ -1,7 +1,7 @@
 """Arithmetic on the joint outcome-cell distribution, shared by SP3's candidates.
 
 `mma.evaluate` defines the cell layout and scores a realised cell against
-it. This module is the other half: the three operations that BUILD a joint
+it. This module is the other half: the four operations that BUILD a joint
 in that layout, factored out here because SP3's fallback branch needs each
 of them in more than one place.
 
@@ -16,6 +16,10 @@ of them in more than one place.
   written as arithmetic, and it is used twice: by the calibrated simulator
   (D1), where the imposed marginal is the simulator's own temperature-scaled
   winner, and by the hybrid (D2), where it is the incumbent blend's.
+* `swap_corners` — exchange a joint's two winner blocks, the cell-layout
+  form of "predict the mirrored corner ordering and map it back", which
+  `mma.inference.predict_symmetrized` needs to corner-average a served
+  matchup's joint.
 * `marginals_from_cells` — read the winner/method/round heads back off a
   joint, so a candidate that models cells still reports the three marginals
   every existing harness metric consumes, and reports them from the SAME
@@ -52,6 +56,29 @@ def corner_cells(method_classes, round_classes) -> tuple[list[int], list[int]]:
     a = list(range(block)) + [total - 2]
     b = list(range(block, 2 * block)) + [total - 1]
     return a, b
+
+
+def swap_corners(cells, method_classes, round_classes) -> np.ndarray:
+    """The same joint with corner A's cells and corner B's exchanged.
+
+    Mapping a joint back from the mirrored corner ordering: winner is the one
+    axis of the cell layout that names a corner, so mirroring exchanges the
+    two winner blocks and leaves method and round where they are. The two
+    index lists `corner_cells` returns are in the same (method, round) order,
+    so exchanging them elementwise is exactly that swap.
+
+    `mma.simulator.simulate_fights` does the same thing to an
+    `OutcomeDistribution` with `[::-1]` on its leading winner axis; this is
+    the flat-cell form, for `mma.inference.predict_symmetrized`, which
+    averages a served matchup's two orientations after the model has already
+    been run on each.
+    """
+    a_idx, b_idx = corner_cells(method_classes, round_classes)
+    cells = np.asarray(cells, dtype=float)
+    out = np.array(cells, dtype=float, copy=True)
+    out[:, a_idx] = cells[:, b_idx]
+    out[:, b_idx] = cells[:, a_idx]
+    return out
 
 
 def compose_joint_cells(winner, method, round_probs, method_classes, round_classes) -> np.ndarray:

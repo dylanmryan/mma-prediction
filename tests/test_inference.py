@@ -29,10 +29,25 @@ def ensemble():
     return Ensemble.load()
 
 
+# The simulator's two members, written by scripts/train_hazard.py.
+simulator_artifacts = pytest.mark.skipif(
+    not list((ROOT / "models").glob("xgb_hazard_seed*.json"))
+    or not (ROOT / "models" / "simulator.json").exists(),
+    reason="simulator artifacts not built (run scripts/train_hazard.py)",
+)
+
+
 @pytest.fixture(scope="module")
 def blended():
     from mma.inference import BlendedPredictor
     return BlendedPredictor.load()
+
+
+@pytest.fixture(scope="module")
+def simulator(blended):
+    """The DEPLOYED scorer since SP3: the blend's winner, the simulator's shape."""
+    from mma.inference import SimulatorPredictor
+    return SimulatorPredictor.load(blend=blended)
 
 
 @pytest.fixture(scope="module")
@@ -378,3 +393,165 @@ def test_mc_dropout_preserves_batchnorm(ensemble, matchup):
     for name, buffer in net.named_buffers():
         assert torch.equal(before[name], buffer), f"buffer {name} mutated"
     assert not net.training
+
+
+# --- the deployed hybrid (SP3) ---------------------------------------------
+
+@simulator_artifacts
+def test_simulator_config_is_the_one_the_harness_measured():
+    """The deployed simulation parameters must be the harness's.
+
+    `models/simulator.json` exists so the four numbers that move a simulated
+    probability are inside the model hash. That only means anything if they
+    are also the numbers the hybrid was scored with -- a deployment serving
+    n_runs=100 would be hashed, reproducible, and describe no report.
+    """
+    from mma import simulator as sim_module
+    from mma.inference import SIMULATOR_PARAMETERS, load_simulator_config
+
+    config = load_simulator_config()
+    assert set(SIMULATOR_PARAMETERS) <= set(config)
+    assert config["n_runs"] == sim_module.DEFAULT_N_RUNS
+    assert config["alpha"] == sim_module.DEFAULT_ALPHA
+    assert config["sim_seed"] == sim_module.DEFAULT_SIM_SEED
+    assert config["default_rounds"] == sim_module.DEFAULT_ROUNDS
+
+
+def test_load_simulator_config_refuses_to_guess(tmp_path):
+    from mma.inference import load_simulator_config
+
+    with pytest.raises(FileNotFoundError, match="no in-code fallback"):
+        load_simulator_config(tmp_path / "simulator.json")
+    partial = tmp_path / "partial.json"
+    partial.write_text('{"n_runs": 10000, "alpha": 1.0}')
+    with pytest.raises(ValueError, match="missing simulation parameter"):
+        load_simulator_config(partial)
+
+
+@simulator_artifacts
+def test_simulator_winner_probability_is_the_blend_untouched(simulator, blended, matchup):
+    """The clause the whole fallback design exists for.
+
+    SP3 ships a joint distribution whose winner marginal IS the incumbent's,
+    element for element -- `models/walkforward/sp3_decision.json` verified that
+    over 4,804 pooled rows and it has to hold at serving time too, or the
+    deployment moved a number it promised not to move.
+    """
+    from mma.inference import predict_symmetrized
+
+    frame, reversed_frame = matchup
+    hybrid = simulator.predict(frame)
+    blend = blended.predict(frame)
+    np.testing.assert_array_equal(hybrid["winner_prob"], blend["winner_prob"])
+    np.testing.assert_array_equal(hybrid["winner_spread"], blend["winner_spread"])
+
+    sym_hybrid = predict_symmetrized(simulator, frame, reversed_frame)
+    sym_blend = predict_symmetrized(blended, frame, reversed_frame)
+    assert sym_hybrid["winner_prob"] == sym_blend["winner_prob"]
+    assert sym_hybrid["orientation_ab_prob"] == sym_blend["orientation_ab_prob"]
+    assert sym_hybrid["mc_dropout_shift"] == sym_blend["mc_dropout_shift"]
+
+
+@simulator_artifacts
+def test_simulator_joint_is_a_distribution_its_marginals_are_read_off(simulator, matchup):
+    from mma.joint import marginals_from_cells
+    from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
+
+    frame, _ = matchup
+    result = simulator.predict(frame)
+    cells = result["joint_cells"]
+    assert cells.shape == (1, 18)
+    np.testing.assert_allclose(cells.sum(axis=1), 1.0)
+    assert (cells >= 0).all()
+
+    marginals = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)
+    np.testing.assert_allclose(result["method_probs"], marginals["method"])
+    np.testing.assert_allclose(result["round_probs"], marginals["round"])
+    np.testing.assert_allclose(result["winner_prob"], marginals["winner"], atol=1e-12)
+    # p_distance is the decision cells' mass, which is the method head's
+    # decision class -- one distribution, not two that could disagree
+    np.testing.assert_allclose(result["p_distance"], cells[:, -2:].sum(axis=1))
+    np.testing.assert_allclose(result["p_distance"], result["method_probs"][:, -1])
+
+
+@simulator_artifacts
+def test_simulator_three_round_fight_gets_no_round_45_mass(simulator, matchup):
+    frame, _ = matchup
+    assert int(frame["scheduled_rounds"].iloc[0]) == 3
+    result = simulator.predict(frame)
+    assert result["round_probs"][0, -1] == 0.0
+    # ...and no joint cell for rounds 4-5 either, in EITHER corner
+    cells = result["joint_cells"][0]
+    assert cells[3] == 0.0 and cells[7] == 0.0 and cells[11] == 0.0 and cells[15] == 0.0
+
+
+@simulator_artifacts
+def test_simulator_predict_symmetrized_reports_one_coherent_distribution(simulator, matchup):
+    """Everything the symmetrized result reports must come from the joint it
+    reports -- including the winner, which is the blend's."""
+    from mma.inference import predict_symmetrized
+    from mma.joint import marginals_from_cells
+
+    frame, reversed_frame = matchup
+    result = predict_symmetrized(simulator, frame, reversed_frame)
+    cells = np.asarray(result["joint_cells"])[None, :]
+    np.testing.assert_allclose(cells.sum(), 1.0)
+    marginals = marginals_from_cells(cells, list(result["method_classes"]),
+                                     list(result["round_classes"]))
+    assert marginals["winner"][0] == pytest.approx(result["winner_prob"], abs=1e-12)
+    np.testing.assert_allclose(result["method_probs"], marginals["method"][0])
+    np.testing.assert_allclose(result["round_probs"], marginals["round"][0])
+    assert result["p_distance"] == pytest.approx(cells[0, -2:].sum())
+    assert result["winner_prob"] + (1.0 - result["winner_prob"]) == 1.0
+
+
+@simulator_artifacts
+def test_simulator_predict_is_a_superset_of_the_blend_contract(simulator, blended, matchup):
+    """Callers written against `Ensemble.predict` keep working: the hybrid adds
+    keys, it never drops one."""
+    frame, _ = matchup
+    hybrid = simulator.predict(frame)
+    blend = blended.predict(frame)
+    assert set(blend) <= set(hybrid)
+    assert set(hybrid) - set(blend) == {"joint_cells", "joint_zero_mass", "p_distance"}
+    assert hybrid["method_classes"] == blend["method_classes"]
+    assert hybrid["round_classes"] == blend["round_classes"]
+    assert hybrid["method_probs"].shape == blend["method_probs"].shape
+    assert hybrid["round_probs"].shape == blend["round_probs"].shape
+
+
+@simulator_artifacts
+def test_simulator_is_deterministic(simulator, matchup):
+    """A Monte Carlo scorer that moved between runs would make the track
+    record's model_version a lie."""
+    frame, _ = matchup
+    first = simulator.predict(frame)
+    second = simulator.predict(frame)
+    np.testing.assert_array_equal(first["joint_cells"], second["joint_cells"])
+
+
+@simulator_artifacts
+def test_simulator_survives_a_weight_class_the_models_never_saw(simulator, matchup):
+    frame, _ = matchup
+    unseen = frame.copy()
+    unseen["weight_class"] = pd.array(["Catchweight 165"], dtype="string")
+    result = simulator.predict(unseen)
+    np.testing.assert_allclose(result["joint_cells"].sum(axis=1), 1.0)
+
+
+@simulator_artifacts
+def test_simulator_load_demands_both_members(blended, tmp_path):
+    """A missing member is a loud error, never a silent fall back to the
+    blend's own method and round heads -- that would be a scorer no report
+    describes."""
+    from mma.inference import SimulatorPredictor, load_simulator_config
+
+    (tmp_path / "models").mkdir()
+    config = load_simulator_config()
+    with pytest.raises(FileNotFoundError, match="no XGBoost hazard models"):
+        SimulatorPredictor.load(root=tmp_path, blend=blended, config=config)
+    for seed in range(5):
+        (tmp_path / "models" / f"xgb_hazard_seed{seed}.json").write_bytes(
+            (ROOT / "models" / f"xgb_hazard_seed{seed}.json").read_bytes())
+    with pytest.raises(FileNotFoundError, match="no XGBoost decision models"):
+        SimulatorPredictor.load(root=tmp_path, blend=blended, config=config)
