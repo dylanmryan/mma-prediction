@@ -117,17 +117,32 @@ def test_the_deployed_weight_is_the_one_the_shipped_report_was_scored_with():
     assert report["config"]["blend_calibrated"] is True
 
 
-def test_the_deployed_temperature_is_the_median_of_the_reports_per_fold_fits():
+def test_the_deployed_temperature_is_the_walkforward_one_the_harness_validated():
     """Deployment has no held-out year to fit a temperature on, so it applies a
-    fixed value derived from the harness's per-fold fits -- by exactly the rule
-    `run_walkforward.fixed_budget_from` uses for the torch member's own
-    temperature under the refit recipe. This recomputes it from the committed
-    report rather than trusting the committed `models/blend.json`."""
+    fixed value -- and the value is the walk-forward one
+    (`scripts/derive_blend_temperature.py`): fitted on the pooled out-of-fold
+    predictions of every fold before the one being served, which at serving
+    time is all of them. This recomputes it from the committed report and dump
+    rather than trusting the committed `models/blend.json`.
+
+    Until 2026-09-09 the deployed value was the MEDIAN of the per-fold fits,
+    `run_walkforward.fixed_budget_from`'s rule for a training BUDGET. That rule
+    is asserted to give a different number here so the regression cannot come
+    back silently: it has no calibration justification, and the form it
+    produced scored pooled ECE 0.0177 against the walk-forward form's 0.0108.
+    """
+    from scripts.derive_blend_temperature import (
+        deployed_temperature, invert_per_fold, load_inputs,
+    )
     from scripts.run_walkforward import fixed_budget_from
     from mma.inference import BLEND_REPORT, load_blend_config
 
     report = json.loads(BLEND_REPORT.read_text())
-    assert fixed_budget_from(report)["temperature"] == load_blend_config()["temperature"]
+    config = load_blend_config()
+    inputs = load_inputs(BLEND_REPORT, ROOT / config["source_predictions"])
+    pre = invert_per_fold(inputs["p_scored"], inputs["years"], inputs["fold_temperatures"])
+    assert config["temperature"] == deployed_temperature(pre, inputs["y"]) == 0.85
+    assert fixed_budget_from(report)["temperature"] == 0.8 != config["temperature"]
 
 
 def test_the_deployed_blend_names_the_report_the_decision_shipped():
