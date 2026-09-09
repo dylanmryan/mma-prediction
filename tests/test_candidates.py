@@ -4,11 +4,14 @@ import pytest
 
 from mma.blend import apply_temperature
 from mma.candidates import (
-    BlendCandidate, EloCandidate, HazardCandidate, TorchCandidate, XGBCandidate,
+    BlendCandidate, EloCandidate, HazardCandidate, HybridCandidate, TorchCandidate,
+    XGBCandidate,
 )
-from mma.joint import corner_cells, impose_winner_marginal, marginals_from_cells
+from mma.joint import (
+    compose_joint_cells, corner_cells, impose_winner_marginal, marginals_from_cells,
+)
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
-from mma.walkforward import Fold, make_folds
+from mma.walkforward import Fold, make_folds, score_rows
 
 
 def _table(n=600, seed=0):
@@ -600,3 +603,108 @@ def test_hazard_calibration_refuses_an_inner_val_that_overlaps_eval(hazard_pair)
     fold = Fold(year=2019, train=~mask, inner_val=mask, eval=mask)
     with pytest.raises(ValueError, match="overlap"):
         _hazard_candidate(fights, calibrate=True).fit_predict(features, fold, None)
+
+
+# --------------------------------------------------------------------------
+# D2: the hybrid -- blend winner x simulator conditional (SP3 fallback branch)
+# --------------------------------------------------------------------------
+
+HYBRID_KWARGS = dict(seeds=(0,), params={"max_depth": 2}, config={"hidden": (16, 8)},
+                     max_epochs=3, n_runs=400)
+
+
+def _hybrid(fights, **overrides):
+    return HybridCandidate(fights=fights, **{**HYBRID_KWARGS, **overrides})
+
+
+@pytest.fixture(scope="module")
+def hybrid_parts(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    cand = _hybrid(fights)
+    blend, hazard = cand.members()
+    return (cand.fit_predict(features, hazard_fold, None),
+            blend.fit_predict(features, hazard_fold, None),
+            hazard.fit_predict(features, hazard_fold, None))
+
+
+def test_hybrid_winner_marginal_is_exactly_the_blend_s(hybrid_parts):
+    """The winner clause is satisfied by construction rather than measured:
+    the hybrid's winner marginal IS the incumbent's, bit for bit."""
+    (pred, info), (blend_pred, _), _ = hybrid_parts
+    assert np.array_equal(pred["winner"], blend_pred["winner"])
+    read = marginals_from_cells(pred["joint_cells"], METHOD_CLASSES, ROUND_CLASSES)
+    assert read["winner"] == pytest.approx(blend_pred["winner"])
+    assert set(info) >= {"blend", "hazard", "n_train"}
+
+
+def test_hybrid_conditional_method_and_round_are_exactly_the_simulator_s(hybrid_parts):
+    """And the other half of the composition: P(method, round | winner) comes
+    from the simulated runs untouched, which is what re-weighting means."""
+    (pred, _), _, (haz_pred, _) = hybrid_parts
+    for block in corner_cells(METHOD_CLASSES, ROUND_CLASSES):
+        hybrid = pred["joint_cells"][:, block]
+        simulated = haz_pred["joint_cells"][:, block]
+        assert (hybrid / hybrid.sum(axis=1, keepdims=True)) == pytest.approx(
+            simulated / simulated.sum(axis=1, keepdims=True))
+
+
+def test_hybrid_joint_is_a_coherent_distribution(hybrid_parts):
+    (pred, _), _, _ = hybrid_parts
+    cells = pred["joint_cells"]
+    assert (cells >= 0).all()
+    assert cells.sum(axis=1) == pytest.approx(np.ones(len(cells)))
+    read = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)
+    assert read["method"] == pytest.approx(pred["method"])
+    assert read["round"] == pytest.approx(pred["round"])
+    assert pred["method"].sum(axis=1) == pytest.approx(np.ones(len(cells)))
+
+
+def test_hybrid_three_round_fights_keep_an_empty_round_45(hazard_pair, hybrid_parts):
+    features, _ = hazard_pair
+    (pred, _), _, _ = hybrid_parts
+    fold = make_folds(features["date"], fold_years=(2019,))[0]
+    three = (features.loc[fold.eval, "scheduled_rounds"] <= 3).to_numpy()
+    assert pred["joint_cells"][three][:, [3, 7, 11, 15]].sum() == 0.0
+    assert pred["round"][three, 3].sum() == 0.0
+
+
+def test_hybrid_needs_the_fights_table(hazard_pair, hazard_fold):
+    features, _ = hazard_pair
+    with pytest.raises(ValueError, match="fights"):
+        HybridCandidate(**HYBRID_KWARGS).fit_predict(features, hazard_fold, None)
+
+
+def test_hybrid_members_carry_the_shared_configuration(hazard_pair):
+    _, fights = hazard_pair
+    blend, hazard = _hybrid(fights, drop_columns=("age_diff",), weight=0.3).members()
+    assert isinstance(blend, BlendCandidate) and isinstance(hazard, HazardCandidate)
+    assert blend.weight == 0.3 and blend.seeds == (0,) and blend.drop_columns == ("age_diff",)
+    assert hazard.seeds == (0,) and hazard.drop_columns == ("age_diff",)
+    assert hazard.fights is fights and hazard.calibrate is False
+
+
+# --------------------------------------------------------------------------
+# D3 control: the blend's own prediction, scored through the cell layout
+# --------------------------------------------------------------------------
+
+def test_blend_joint_cells_change_no_head_and_compose_the_marginals(table, fold):
+    """The control has to be the SAME prediction, differing only in which
+    scorer reads it -- otherwise it is not a control."""
+    plain, _ = BlendCandidate(**BLEND_KWARGS).fit_predict(table, fold, None)
+    cells, info = BlendCandidate(emit_joint_cells=True, **BLEND_KWARGS).fit_predict(
+        table, fold, None)
+    for head in ("winner", "method", "round"):
+        assert np.array_equal(plain[head], cells[head])
+    assert plain.get("joint_cells") is None
+    assert cells["joint_cells"] == pytest.approx(compose_joint_cells(
+        plain["winner"], plain["method"], plain["round"], METHOD_CLASSES, ROUND_CLASSES))
+    assert cells["joint_cells"].sum(axis=1) == pytest.approx(np.ones(len(plain["winner"])))
+
+
+def test_blend_joint_cells_score_what_the_composed_path_scores(table, fold):
+    pred, _ = BlendCandidate(emit_joint_cells=True, **BLEND_KWARGS).fit_predict(table, fold, None)
+    rows = table.loc[fold.eval]
+    composed = score_rows(rows, {k: v for k, v in pred.items() if k != "joint_cells"},
+                          METHOD_CLASSES, ROUND_CLASSES)
+    through_cells = score_rows(rows, pred, METHOD_CLASSES, ROUND_CLASSES)
+    assert through_cells["joint_log_loss"] == composed["joint_log_loss"]

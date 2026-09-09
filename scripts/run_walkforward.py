@@ -16,6 +16,8 @@ Examples:
   python scripts/run_walkforward.py --candidate torch --name torch_v1 --dump-predictions models/walkforward/preds/torch_v1.json
   python scripts/run_walkforward.py --candidate hazard --name hazard_e2 --drop-columns external_missing,same_country
   python scripts/run_walkforward.py --candidate hazard --name hazard_e2_cal --hazard-calibrate
+  python scripts/run_walkforward.py --candidate hybrid --name hybrid_e2 --drop-columns external_missing,same_country
+  python scripts/run_walkforward.py --candidate blend --name blend_b1_cells --blend-joint-cells
 
 Reports land in models/walkforward/<name>.json. Nothing here touches the
 deployed artifacts under models/torch or models/xgb_*.json.
@@ -35,8 +37,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mma.candidates import (  # noqa: E402
-    CALIBRATORS, BlendCandidate, EloCandidate, HazardCandidate, TorchCandidate,
-    XGBCandidate,
+    CALIBRATORS, BlendCandidate, EloCandidate, HazardCandidate, HybridCandidate,
+    TorchCandidate, XGBCandidate,
 )
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES  # noqa: E402
 from mma.walkforward import build_report, make_folds, pool, recency_weights  # noqa: E402
@@ -49,8 +51,11 @@ DEFAULT_SEEDS = (0, 1, 2, 3, 4)
 # The simulator joins them: its two XGBoost members are seed-ensembled the way
 # the blend's are, and a single fit's seed noise is three times the ensemble's
 # (SP2.1), which is more than the bar it is judged against.
-SEEDED = ("torch", "blend", "hazard")
-CANDIDATES = ("elo", "xgb", "torch", "blend", "hazard")
+SEEDED = ("torch", "blend", "hazard", "hybrid")
+CANDIDATES = ("elo", "xgb", "torch", "blend", "hazard", "hybrid")
+#: Candidates that read the exact finish round, which only the fights table
+#: carries (the feature table buckets rounds 4 and 5 together as '45').
+NEEDS_FIGHTS = ("hazard", "hybrid")
 
 
 def fixed_budget_from(report: dict) -> dict:
@@ -233,6 +238,10 @@ def resolve_blend(args: argparse.Namespace) -> dict | None:
     can be shipped.
     """
     if args.candidate != "blend":
+        if args.blend_joint_cells:
+            raise SystemExit(
+                f"--blend-joint-cells applies to the blend candidate only (got {args.candidate!r})"
+            )
         if args.blend_weight is not None:
             raise SystemExit(
                 f"--blend-weight applies to the blend candidate only (got {args.candidate!r})"
@@ -257,6 +266,8 @@ def resolve_blend(args: argparse.Namespace) -> dict | None:
     out = {"blend_weight": weight, "blend_calibrated": not args.no_blend_calibration}
     if args.blend_calibrator != "temperature":  # keep the committed reports' config shape
         out["blend_calibrator"] = args.blend_calibrator
+    if args.blend_joint_cells:  # ditto: default runs keep their config shape
+        out["blend_joint_cells"] = True
     return out
 
 
@@ -290,6 +301,25 @@ def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | No
         if budget is not None:
             raise SystemExit("--fixed-budget-from does not apply to the elo candidate (nothing is fit)")
         return EloCandidate()  # resolve_drop_columns already rejected --drop-columns here
+    if kind == "hybrid":
+        if budget is not None:
+            raise SystemExit(
+                "fixed-budget mode does not apply to the hybrid candidate: both of its "
+                "members early-stop on the fold's inner-validation year, which a fixed "
+                "budget trains on"
+            )
+        if config:
+            raise SystemExit(
+                "--config-json does not apply to the hybrid candidate: it has three fitted "
+                "members and the flag cannot say which one it configures"
+            )
+        if fights is None:
+            raise SystemExit(
+                "the hybrid candidate needs the fights table (finish_round is only "
+                "bucketed as '45' in the feature table)"
+            )
+        return HybridCandidate(name=name, fights=fights, seeds=tuple(seeds),
+                               drop_columns=drop_columns)
     if kind == "hazard":
         if budget is not None:
             raise SystemExit(
@@ -319,7 +349,8 @@ def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | No
             )
         return BlendCandidate(name=name, seeds=tuple(seeds), weight=blend["blend_weight"],
                               calibrate=blend["blend_calibrated"], drop_columns=drop_columns,
-                              calibrator=blend.get("blend_calibrator", "temperature"))
+                              calibrator=blend.get("blend_calibrator", "temperature"),
+                              emit_joint_cells=bool(blend.get("blend_joint_cells")))
     needed = "fixed_rounds" if kind == "xgb" else "fixed_epochs"
     if budget is not None and needed not in budget:
         raise SystemExit(
@@ -391,6 +422,11 @@ def main() -> None:
                              "inner-validation year. 'temperature' is the pre-registered "
                              "step; 'isotonic' is SP2.2 Task 3's post-hoc remediation "
                              "diagnostic and is not a shipping form")
+    parser.add_argument("--blend-joint-cells", action="store_true",
+                        help="blend candidate: also emit its prediction as a joint over "
+                             "outcome cells, so the joint metric is read through the same "
+                             "scorer the simulator uses. The prediction is unchanged; this "
+                             "is SP3's D3 control")
     parser.add_argument("--hazard-calibrate", action="store_true",
                         help="hazard candidate: temperature-scale the simulated winner "
                              "marginal on the fold's inner-validation year and impose it "
@@ -419,9 +455,11 @@ def main() -> None:
     seeds = resolve_seeds(args)
     blend = resolve_blend(args)
     hazard = resolve_hazard(args)
-    # The hazard candidate needs the exact finish round, which only the fights
-    # table carries; no other candidate reads it, so no other run pays for it.
-    fights = pd.read_parquet(PROCESSED / "fights.parquet") if args.candidate == "hazard" else None
+    # The simulator-backed candidates need the exact finish round, which only
+    # the fights table carries; no other candidate reads it, so no other run
+    # pays for the read.
+    fights = (pd.read_parquet(PROCESSED / "fights.parquet")
+              if args.candidate in NEEDS_FIGHTS else None)
     candidate = build_candidate(args.candidate, args.name, seeds, config, budget, drop_columns,
                                 blend, fights, hazard)
     budget = budget or {}  # report shape: always a dict
