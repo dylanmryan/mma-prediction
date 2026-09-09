@@ -2,9 +2,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mma.blend import apply_temperature
 from mma.candidates import (
     BlendCandidate, EloCandidate, HazardCandidate, TorchCandidate, XGBCandidate,
 )
+from mma.joint import corner_cells, impose_winner_marginal, marginals_from_cells
+from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
 from mma.walkforward import Fold, make_folds
 
 
@@ -535,3 +538,65 @@ def test_hazard_seed_ensemble_averages_the_member_probabilities(hazard_pair, haz
     assert isinstance(info_one["hazard"]["best_iteration"], int)
     assert len(info_two["hazard"]["best_iteration"]) == 2
     assert not np.array_equal(one["joint_cells"], two["joint_cells"])
+
+
+# --------------------------------------------------------------------------
+# D1: the calibrated simulator (SP3 fallback branch)
+# --------------------------------------------------------------------------
+
+def test_hazard_calibration_rescales_only_the_winner_marginal(hazard_pair, hazard_fold):
+    """The fitted temperature is the whole of the difference: the evaluation
+    rows' simulation is bit-for-bit the uncalibrated run's, and the joint is
+    the uncalibrated joint with the recalibrated winner imposed on it."""
+    features, fights = hazard_pair
+    raw, raw_info = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    cal, info = _hazard_candidate(fights, calibrate=True).fit_predict(features, hazard_fold, None)
+    assert "temperature" not in raw_info and raw_info.get("calibrated") is None
+    assert info["calibrated"] is True and info["temperature"] > 0
+    assert cal["winner"] == pytest.approx(apply_temperature(raw["winner"], info["temperature"]))
+    assert cal["joint_cells"] == pytest.approx(
+        impose_winner_marginal(raw["joint_cells"], cal["winner"], METHOD_CLASSES, ROUND_CLASSES))
+    assert np.array_equal(cal["joint_zero_mass"], raw["joint_zero_mass"])
+
+
+def test_hazard_calibrated_joint_stays_coherent_with_its_marginals(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    cal, _ = _hazard_candidate(fights, calibrate=True).fit_predict(features, hazard_fold, None)
+    cells = cal["joint_cells"]
+    assert cells.sum(axis=1) == pytest.approx(np.ones(len(cells)))
+    read = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)
+    assert read["winner"] == pytest.approx(cal["winner"])
+    assert read["method"] == pytest.approx(cal["method"])
+    assert read["round"] == pytest.approx(cal["round"])
+
+
+def test_hazard_calibration_preserves_each_corner_s_method_and_round_shape(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    raw, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    cal, _ = _hazard_candidate(fights, calibrate=True).fit_predict(features, hazard_fold, None)
+    for block in corner_cells(METHOD_CLASSES, ROUND_CLASSES):
+        before = raw["joint_cells"][:, block]
+        after = cal["joint_cells"][:, block]
+        assert (after / after.sum(axis=1, keepdims=True)) == pytest.approx(
+            before / before.sum(axis=1, keepdims=True))
+
+
+def test_hazard_calibration_never_sees_an_evaluation_label(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    base, base_info = _hazard_candidate(fights, calibrate=True).fit_predict(features, hazard_fold, None)
+    scrambled = features.copy()
+    scrambled.loc[hazard_fold.eval, "y_winner"] = 1 - scrambled.loc[hazard_fold.eval, "y_winner"]
+    scrambled.loc[hazard_fold.eval, "y_method"] = "decision"
+    scrambled.loc[hazard_fold.eval, "y_finish_round"] = None
+    other, other_info = _hazard_candidate(fights, calibrate=True).fit_predict(
+        scrambled, hazard_fold, None)
+    assert other_info["temperature"] == base_info["temperature"]
+    assert np.array_equal(base["joint_cells"], other["joint_cells"])
+
+
+def test_hazard_calibration_refuses_an_inner_val_that_overlaps_eval(hazard_pair):
+    features, fights = hazard_pair
+    mask = np.ones(len(features), dtype=bool)
+    fold = Fold(year=2019, train=~mask, inner_val=mask, eval=mask)
+    with pytest.raises(ValueError, match="overlap"):
+        _hazard_candidate(fights, calibrate=True).fit_predict(features, fold, None)

@@ -15,6 +15,7 @@ Examples:
   python scripts/run_walkforward.py --candidate blend --name blend_b1_isotonic --blend-calibrator isotonic
   python scripts/run_walkforward.py --candidate torch --name torch_v1 --dump-predictions models/walkforward/preds/torch_v1.json
   python scripts/run_walkforward.py --candidate hazard --name hazard_e2 --drop-columns external_missing,same_country
+  python scripts/run_walkforward.py --candidate hazard --name hazard_e2_cal --hazard-calibrate
 
 Reports land in models/walkforward/<name>.json. Nothing here touches the
 deployed artifacts under models/torch or models/xgb_*.json.
@@ -259,9 +260,28 @@ def resolve_blend(args: argparse.Namespace) -> dict | None:
     return out
 
 
+def resolve_hazard(args: argparse.Namespace) -> dict | None:
+    """The simulator's post-simulation calibration switch, or None elsewhere.
+
+    SP3's fallback branch (D1): the simulator is the one candidate in this
+    project with no calibration step, and the flag adds the blend's -- a
+    temperature fitted on the fold's inner-validation year. It is a
+    diagnostic that separates calibration from paradigm, so it is off by
+    default and every committed simulator report keeps its meaning.
+    """
+    if args.candidate != "hazard":
+        if args.hazard_calibrate:
+            raise SystemExit(
+                f"--hazard-calibrate applies to the hazard candidate only (got {args.candidate!r}); "
+                "the blend calibrates by default"
+            )
+        return None
+    return {"hazard_calibrated": bool(args.hazard_calibrate)}
+
+
 def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | None,
                     drop_columns: tuple[str, ...] = (), blend: dict | None = None,
-                    fights: pd.DataFrame | None = None):
+                    fights: pd.DataFrame | None = None, hazard: dict | None = None):
     """``budget`` is None in early-stopping mode; otherwise the dict from
     resolve_budget, which must carry the key this learner consumes
     (fixed_rounds for xgb, fixed_epochs for torch) -- a budget derived from
@@ -283,7 +303,8 @@ def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | No
                 "bucketed as '45' in the feature table)"
             )
         return HazardCandidate(name=name, fights=fights, seeds=tuple(seeds),
-                               params=config, drop_columns=drop_columns)
+                               params=config, drop_columns=drop_columns,
+                               calibrate=bool((hazard or {}).get("hazard_calibrated")))
     if kind == "blend":
         if budget is not None:
             raise SystemExit(
@@ -370,6 +391,10 @@ def main() -> None:
                              "inner-validation year. 'temperature' is the pre-registered "
                              "step; 'isotonic' is SP2.2 Task 3's post-hoc remediation "
                              "diagnostic and is not a shipping form")
+    parser.add_argument("--hazard-calibrate", action="store_true",
+                        help="hazard candidate: temperature-scale the simulated winner "
+                             "marginal on the fold's inner-validation year and impose it "
+                             "back on the joint (SP3's fallback branch, a diagnostic)")
     parser.add_argument("--no-blend-calibration", action="store_true",
                         help="blend candidate: skip the post-average temperature (diagnostic)")
     parser.add_argument("--drop-columns", default=None,
@@ -393,11 +418,12 @@ def main() -> None:
     check_drop_columns(drop_columns, features)
     seeds = resolve_seeds(args)
     blend = resolve_blend(args)
+    hazard = resolve_hazard(args)
     # The hazard candidate needs the exact finish round, which only the fights
     # table carries; no other candidate reads it, so no other run pays for it.
     fights = pd.read_parquet(PROCESSED / "fights.parquet") if args.candidate == "hazard" else None
     candidate = build_candidate(args.candidate, args.name, seeds, config, budget, drop_columns,
-                                blend, fights)
+                                blend, fights, hazard)
     budget = budget or {}  # report shape: always a dict
 
     fold_results = []
@@ -421,6 +447,8 @@ def main() -> None:
     }
     if blend is not None:  # only the blend carries these, so other reports keep their shape
         run_config.update(blend)
+    if hazard is not None and hazard["hazard_calibrated"]:  # ditto: default runs keep theirs
+        run_config.update(hazard)
     report = build_report(args.name, run_config, features, fold_results, METHOD_CLASSES, ROUND_CLASSES)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     out = args.out_dir / f"{args.name}.json"

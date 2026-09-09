@@ -225,7 +225,7 @@ def test_random_state_reaches_the_fitted_estimator():
 def _ens_args(**overrides) -> argparse.Namespace:
     base = {"candidate": "torch", "seeds": None, "model_seed": None,
             "blend_weight": None, "no_blend_calibration": False,
-            "blend_calibrator": "temperature"}
+            "blend_calibrator": "temperature", "hazard_calibrate": False}
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -404,3 +404,21 @@ def test_fixed_budget_mode_does_not_apply_to_the_hazard_candidate():
     fights = pd.DataFrame({"fight_id": ["f0"]})
     with pytest.raises(SystemExit, match="hazard"):
         rwf.build_candidate("hazard", "h", (0,), {}, {"fixed_rounds": 50}, (), None, fights)
+
+
+def test_hazard_calibration_is_off_unless_the_flag_asks_for_it():
+    fights = pd.DataFrame({"fight_id": ["f0"], "finish_round": [1], "scheduled_rounds": [3]})
+    plain = rwf.build_candidate("hazard", "h", (0,), {}, None, (), None, fights,
+                                rwf.resolve_hazard(_ens_args(candidate="hazard",
+                                                             hazard_calibrate=False)))
+    assert plain.calibrate is False
+    calibrated = rwf.build_candidate("hazard", "h", (0,), {}, None, (), None, fights,
+                                     rwf.resolve_hazard(_ens_args(candidate="hazard",
+                                                                  hazard_calibrate=True)))
+    assert calibrated.calibrate is True
+
+
+def test_hazard_calibration_flag_on_another_candidate_is_a_usage_error():
+    assert rwf.resolve_hazard(_ens_args(candidate="blend", hazard_calibrate=False)) is None
+    with pytest.raises(SystemExit, match="hazard candidate only"):
+        rwf.resolve_hazard(_ens_args(candidate="blend", hazard_calibrate=True))
