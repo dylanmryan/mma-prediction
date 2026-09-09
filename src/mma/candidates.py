@@ -26,6 +26,7 @@ from mma.blend import LOGIT_EPS, apply_temperature, blend_heads, logit, mask_rou
 from mma.hazard import (
     HAZARD_CLASSES, build_decision_rows, build_hazard_rows, mirror_corners,
 )
+from mma.joint import impose_winner_marginal, marginals_from_cells
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import (
     METHOD_CLASSES, ROUND_CLASSES, encode_targets, fit_temperature, predict, train_one,
@@ -448,6 +449,16 @@ class HazardCandidate:
     comes back at exactly 0.5 rather than 0.5 plus Monte Carlo noise
     (`tests/test_candidates.py` pins that).
 
+    **Calibration (`calibrate=True`, SP3's fallback branch).** E2 measured the
+    simulator's winner marginal at ECE 0.0286 against the blend's 0.0124 --
+    the simulator has no calibration step at all, where every other candidate
+    in this project has one. Turning `calibrate` on adds the one the blend
+    uses: a temperature fitted on the fold's inner-validation year (never on
+    an evaluation row) and applied to the winner marginal, then imposed back
+    on the joint by `mma.joint.impose_winner_marginal` so the cells stay
+    coherent with it. It is a DIAGNOSTIC that separates calibration from
+    paradigm, and it is off by default.
+
     `fights` supplies `finish_round`, which the feature table only carries
     bucketed as '45'; the exact round is what makes the hazard rows'
     censoring correct, so it is required rather than approximated.
@@ -460,6 +471,12 @@ class HazardCandidate:
     n_runs: int = HAZARD_N_RUNS
     alpha: float = HAZARD_ALPHA
     sim_seed: int = 0
+    # D1 (SP3 fallback branch): temperature-scale the simulator's WINNER
+    # marginal on the fold's inner-validation year, exactly as
+    # `BlendCandidate` scales its post-average winner, and impose the result
+    # back on the joint. Off by default, so `hazard_e1`/`hazard_e2` and every
+    # other committed simulator report reproduce unchanged.
+    calibrate: bool = False
 
     def _seed_params(self, seed: int) -> dict:
         if "random_state" in self.params:
@@ -475,10 +492,26 @@ class HazardCandidate:
                 "HazardCandidate needs the fights table (it carries finish_round, which "
                 "the feature table only has bucketed as '45'); pass fights=..."
             )
+        if self.calibrate and (fold.inner_val & fold.eval).any():
+            raise ValueError(
+                f"fold {fold.year}: inner_val and eval overlap, so the post-simulation "
+                "temperature would be fitted on evaluation rows"
+            )
         train_feats = features.loc[fold.train].reset_index(drop=True)
         val_feats = features.loc[fold.inner_val].reset_index(drop=True)
         eval_feats = features.loc[fold.eval].reset_index(drop=True)
-        eval_mirror = mirror_corners(eval_feats)
+        n_eval = len(eval_feats)
+        # Calibrating needs the simulator's winner marginal on the
+        # inner-validation year too, so those rows are simulated as well --
+        # appended AFTER the evaluation rows, never before, so that every
+        # evaluation fight keeps the per-row RNG stream (`sim_seed`, row
+        # position) it had in the uncalibrated run. The temperature is then
+        # the ONLY difference between this candidate and the plain simulator.
+        sim_feats = (
+            pd.concat([eval_feats, val_feats], ignore_index=True)
+            if self.calibrate else eval_feats
+        )
+        sim_mirror = mirror_corners(sim_feats)
 
         haz_train = build_hazard_rows(train_feats, self.fights)
         haz_val = build_hazard_rows(val_feats, self.fights)
@@ -487,20 +520,20 @@ class HazardCandidate:
         _require_all_classes(haz_train["hazard_label"], HAZARD_CLASSES, "hazard", fold)
 
         n_rounds = (
-            eval_feats["scheduled_rounds"].fillna(HAZARD_DEFAULT_ROUNDS).to_numpy(dtype=int)
+            sim_feats["scheduled_rounds"].fillna(HAZARD_DEFAULT_ROUNDS).to_numpy(dtype=int)
         )
-        n_eval = len(eval_feats)
+        n_sim = len(sim_feats)
 
         # One model matrix per member, built from the training, inner-val and
         # both evaluation orientations at once so the `weight_class` category
         # set and the column order are identical across all four.
         haz_frames = [haz_train.drop(columns=["hazard_label"]),
                       haz_val.drop(columns=["hazard_label"]),
-                      _round_frame(eval_feats, n_rounds),
-                      _round_frame(eval_mirror, n_rounds)]
+                      _round_frame(sim_feats, n_rounds),
+                      _round_frame(sim_mirror, n_rounds)]
         dec_frames = [dec_train.drop(columns=["decision_label"]),
                       dec_val.drop(columns=["decision_label"]),
-                      eval_feats, eval_mirror]
+                      sim_feats, sim_mirror]
         xh = _split_frames(feature_frame(pd.concat(haz_frames, ignore_index=True),
                                          self.drop_columns), haz_frames)
         xd = _split_frames(feature_frame(pd.concat(dec_frames, ignore_index=True),
@@ -533,13 +566,13 @@ class HazardCandidate:
         mirror_dec = _mean_over_seeds(mirror_decision)
 
         n_classes = len(ROUND_CLASSES)
-        finish = np.zeros((n_eval, 2, 2, n_classes))
-        cards = np.zeros((n_eval, 2))
-        finish_zero = np.zeros((n_eval, 2, 2, n_classes), dtype=bool)
-        cards_zero = np.zeros((n_eval, 2), dtype=bool)
+        finish = np.zeros((n_sim, 2, 2, n_classes))
+        cards = np.zeros((n_sim, 2))
+        finish_zero = np.zeros((n_sim, 2, 2, n_classes), dtype=bool)
+        cards_zero = np.zeros((n_sim, 2), dtype=bool)
         starts = np.cumsum(n_rounds) - n_rounds
         errors, empty, valid = [], 0, 0
-        for i in range(n_eval):
+        for i in range(n_sim):
             rounds = int(n_rounds[i])
             window = slice(int(starts[i]), int(starts[i]) + rounds)
             runs = []
@@ -561,25 +594,40 @@ class HazardCandidate:
                 _bucket_rounds(flipped.finish_counts)[::-1] == 0)
             finish_zero[i] = raw
             cards_zero[i] = (straight.decision_counts == 0) & (flipped.decision_counts[::-1] == 0)
-            reachable = min(rounds, n_classes)
-            empty += int(raw[:, :, :reachable].sum()) + int(cards_zero[i].sum())
-            valid += 4 * reachable + 2
-            errors.extend((straight.p_a_wins_standard_error, flipped.p_a_wins_standard_error))
+            if i < n_eval:  # the diagnostics describe the SCORED rows only
+                reachable = min(rounds, n_classes)
+                empty += int(raw[:, :, :reachable].sum()) + int(cards_zero[i].sum())
+                valid += 4 * reachable + 2
+                errors.extend(
+                    (straight.p_a_wins_standard_error, flipped.p_a_wins_standard_error))
 
-        cells = np.concatenate([finish.reshape(n_eval, -1), cards], axis=1)
-        p_a = finish[:, 0].sum(axis=(1, 2)) + cards[:, 0]
-        p_b = finish[:, 1].sum(axis=(1, 2)) + cards[:, 1]
-        total = p_a + p_b
-        finish_mass = finish.sum(axis=(1, 2, 3))
+        cells = np.concatenate([finish.reshape(n_sim, -1), cards], axis=1)
+        zero_mass = np.concatenate([finish_zero.reshape(n_sim, -1), cards_zero], axis=1)
+
+        temperature = None
+        if self.calibrate:
+            # `BlendCandidate`'s calibration step, moved downstream of the
+            # simulation: fit on the inner-validation year's winner marginal,
+            # then impose the scaled probability back on the joint. Imposing
+            # rather than merely reporting it is what keeps the cells coherent
+            # -- each corner's block is scaled by one scalar, so
+            # P(method, round | winner) is exactly the simulator's.
+            simulated = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)["winner"]
+            y_val = features.loc[fold.inner_val, "y_winner"].to_numpy(dtype=float)
+            temperature = float(fit_temperature(logit(simulated[n_eval:]), y_val))
+            cells, zero_mass = cells[:n_eval], zero_mass[:n_eval]
+            cells = impose_winner_marginal(
+                cells, apply_temperature(simulated[:n_eval], temperature),
+                METHOD_CLASSES, ROUND_CLASSES,
+            )
+
+        marginals = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)
         pred = {
-            "winner": p_a / total,
-            "method": np.stack([finish[:, :, 0, :].sum(axis=(1, 2)),
-                                finish[:, :, 1, :].sum(axis=(1, 2)),
-                                cards.sum(axis=1)], axis=1) / total[:, None],
-            "round": finish.sum(axis=(1, 2)) / np.where(finish_mass > 0, finish_mass, 1.0)[:, None],
+            "winner": marginals["winner"],
+            "method": marginals["method"],
+            "round": marginals["round"],
             "joint_cells": cells,
-            "joint_zero_mass": np.concatenate(
-                [finish_zero.reshape(n_eval, -1), cards_zero], axis=1),
+            "joint_zero_mass": zero_mass,
         }
         info = {
             "hazard": {"best_iteration": _one_or_all(iterations["hazard"]),
@@ -592,6 +640,11 @@ class HazardCandidate:
             "mc_standard_error": round(float(np.mean(errors)), 6),
             "mc_standard_error_max": round(float(np.max(errors)), 6),
             "zero_mass_cell_fraction": round(empty / valid, 6),
+            # Recorded only when the fallback branch's calibration is on, so a
+            # report from the default path keeps the fit_info shape the
+            # committed simulator reports already have.
+            **({} if temperature is None
+               else {"temperature": round(temperature, 4), "calibrated": True}),
         }
         return pred, info
 
