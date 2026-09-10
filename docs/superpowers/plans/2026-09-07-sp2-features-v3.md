@@ -1607,7 +1607,21 @@ an append-on-top source, never a replacement.
 **Writes are off by default and report-only in CI** (`--enable` required;
 `.github/workflows/refresh-data.yml` runs `--dry-run` with
 `continue-on-error: true` after the Kaggle refresh and before `make_dataset.py`).
-**To enable writes (SP4)** needs four things. (a) An adaptation of
+
+> **Superseded 2026-09-09.** All four prerequisites below are resolved and the
+> source is now a standing stage of every `make_dataset.py` rebuild rather than
+> a write to enable; `refresh_secondary.py` no longer writes at all. The one
+> that mattered was (b): the collision was *dissolved* rather than patched, by
+> merging on every rebuild so that no rebuild can drop what a previous one
+> added. Resolving it that way settled the other three — see the SP4 section of
+> `docs/superpowers/specs/2026-09-06-predictor-v3-simulator-design.md`. Two
+> notes for the record: (a) closed for all 9 debutants, so **52 fights merged
+> rather than 44**; and (d) turned out not to be optional after all, because 44
+> fights without a per-round record would have taken `make_dataset.py`'s
+> modern round-coverage check from 100% to 99.36%, below its 99.5% bar. The
+> survey (d) asked for is confirmed: nothing shipped reads `round_stats`.
+
+**To enable writes (SP4)** needed four things. (a) An adaptation of
 `ufc_fighter_tott.csv` into `fighters.parquet` so debutants stop being
 rejected -- otherwise the freshest card is exactly the one that merges worst.
 (b) A resolution of the collision with `make_dataset.py`: it rebuilds
