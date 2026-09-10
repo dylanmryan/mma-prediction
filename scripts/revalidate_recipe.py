@@ -79,6 +79,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
 
 from mma.feature_blocks import table_blocks  # noqa: E402
+from mma.staleness import revalidation_cover  # noqa: E402
 from mma.versioning import model_version  # noqa: E402
 from mma.walkforward import paired_delta  # noqa: E402
 from scripts.sp3_decision import simulator_bar_check  # noqa: E402
@@ -540,32 +541,6 @@ def exit_code(verdict_block: dict) -> int:
 
 
 # --- staleness: the cheap weekly read ---------------------------------------
-
-
-def revalidation_cover(artifact: dict | None) -> dict | None:
-    """What the committed re-validation covers, and whether it passed.
-
-    `recipe_revalidation.json` is this script's own output, which is what lets
-    the cheap read answer its own question properly rather than by proxy. The
-    question is whether the recipe's justification has been re-measured on the
-    data the models train on, and a passing re-validation on a table that
-    reaches the training cutoff IS that measurement -- even though each
-    member's own harness report is still older. Which is exactly why nothing
-    here rewrites `harness_features_max_date`: that field records the table a
-    specific committed report ran on, and it did run on that table.
-    """
-    if not artifact:
-        return None
-    table = artifact.get("table") or {}
-    verdict_block = artifact.get("verdict") or {}
-    return {
-        "date": artifact.get("date"),
-        "features_max_date": table.get("features_max_date"),
-        "n_feature_rows": table.get("n_feature_rows"),
-        "still_justified": bool(verdict_block.get("still_justified")),
-        "bars_no_longer_met": list(verdict_block.get("bars_no_longer_met") or []),
-        "read_from": _rel(OUT),
-    }
 
 
 def _drift(cover: dict | None, table_max_date: str, n_table_rows: int) -> dict | None:

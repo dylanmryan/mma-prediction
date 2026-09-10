@@ -52,6 +52,11 @@ import pandas as pd
 
 from mma.hazard import HAZARD_CLASSES, build_decision_rows, build_hazard_rows
 from mma.models.xgb import feature_frame, train_binary, train_multiclass
+from mma.staleness import (
+    load_revalidation,
+    revalidation_cover,
+    stale_harness_warning,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
@@ -126,16 +131,6 @@ def head_path(models_dir: Path, head: str, seed: int) -> Path:
     return Path(models_dir) / f"xgb_{head}_seed{int(seed)}.json"
 
 
-def stale_harness_warning(train_through: str, harness_features_max_date: str) -> str | None:
-    """Warning text when the refit trains on fights newer than the harness
-    report ever saw, else None."""
-    if pd.Timestamp(train_through) <= pd.Timestamp(harness_features_max_date):
-        return None
-    return (f"WARNING: harness evidence predates this training data (harness "
-            f"features_max_date {harness_features_max_date} < train_through {train_through}); "
-            "re-run scripts/run_walkforward.py to refresh")
-
-
 def refit_cutoff(features: pd.DataFrame, spec: str) -> pd.Timestamp:
     """'latest' -> newest fight date; otherwise the ISO date given."""
     return pd.Timestamp(features["date"].max()) if spec == "latest" else pd.Timestamp(spec)
@@ -201,7 +196,10 @@ def run_refit(features: pd.DataFrame, fights: pd.DataFrame, args,
     print(f"refit through {cutoff.date()}: n_fights={int(train.sum())} "
           f"hazard_rows={len(hazard_rows)} decision_rows={len(decision_rows)} "
           f"budget={budget} seeds={list(SEEDS)}")
-    warning = stale_harness_warning(str(cutoff.date()), harness_max_date)
+    warning = stale_harness_warning(
+        str(cutoff.date()), harness_max_date,
+        revalidation_cover(load_revalidation(ROOT)),
+    )
     if warning:
         print(warning, file=sys.stderr)
 
