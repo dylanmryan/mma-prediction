@@ -453,24 +453,30 @@ if TRACK_RECORD.exists():
             )
 
 # Model vs. the betting market: the honest "does it beat Vegas?" answer, from
-# scripts/build_odds_benchmark.py comparing the ensemble against devigged
-# sportsbook closing lines on out-of-sample (2021+) fights. Betting odds are
-# an evaluation comparator only, never a model feature. Skipped silently if
-# the benchmark artifact isn't present.
-MARKET_BENCHMARK = ROOT / "models" / "market_benchmark.json"
+# scripts/build_odds_benchmark.py comparing the deployed model against
+# devigged sportsbook closing lines. The deployed model is refit through the
+# latest event, so it has trained on every fight in the odds dataset; the
+# probabilities shown here are therefore its WALK-FORWARD OUT-OF-FOLD ones,
+# where each fold's model never saw the fights it scores. Betting odds are an
+# evaluation comparator only, never a model feature. Skipped silently if the
+# benchmark artifact isn't present.
+MARKET_BENCHMARK = ROOT / "models" / "market_benchmark_oof.json"
 if MARKET_BENCHMARK.exists():
     benchmark = json.loads(MARKET_BENCHMARK.read_text())
-    head = benchmark["headline_2021_plus"]
+    head = benchmark["headline_out_of_fold"]
+    fold_years = benchmark["provenance"]["fold_years"]
     st.divider()
     st.subheader("Model vs. the betting market")
     st.caption(
-        f"On {head['n_fights']:,} fights from 2021 onward, the model's win "
-        "probabilities vs. devigged sportsbook closing lines — computed once "
-        f"({benchmark.get('computed_once_on', 'July 2026')}) against the "
-        "pre-refit model, for which those years were out of sample; the "
-        "currently deployed model trains through the latest event, so this "
-        "comparison is not recomputed. Betting odds are an evaluation "
-        "yardstick here, never a model input."
+        f"On {head['n_fights']:,} fights from {fold_years[0]}–{fold_years[-1]}, "
+        "the model's win probabilities vs. devigged sportsbook closing lines. "
+        "The deployed model is refit through the latest event, so it has "
+        "trained on all of these fights — the probabilities compared here are "
+        "its walk-forward out-of-fold ones, where each fold's model never saw "
+        "the fights it scores. Scoring the same fights with the deployed "
+        "model's own predictions would make it look like it beats the market; "
+        "that number is in the artifact, labelled, and is not a result. "
+        "Betting odds are an evaluation yardstick here, never a model input."
     )
     compare = pd.DataFrame(
         {
@@ -488,11 +494,21 @@ if MARKET_BENCHMARK.exists():
         index=["Accuracy", "Log-loss", "Brier"],
     )
     st.table(compare)
+    july = benchmark.get("comparison_with_frozen_july_artifact")
     st.caption(
         "The market is sharper — closing lines are near the sharpest public "
         "signal in MMA, and the model lands close but doesn't beat them "
         f"(log-loss {head['model']['log_loss']:.3f} vs "
         f"{head['market']['log_loss']:.3f}). That's the honest, expected result."
+        + (
+            " Against the frozen July 2026 benchmark, on the same "
+            f"{july['out_of_fold_2021_plus']['n_fights']:,} fights from 2021 "
+            "on, the market's log-loss edge "
+            f"{july['direction']} from "
+            f"{july['july_2026_artifact']['gap_market_favour']:+.4f} to "
+            f"{july['out_of_fold_2021_plus']['gap_market_favour']:+.4f}."
+            if july and july.get("same_fight_set") else ""
+        )
     )
 
     def _bin_rates(rows):
@@ -516,12 +532,13 @@ if MARKET_BENCHMARK.exists():
     )
     st.line_chart(calibration, height=240)
     st.caption(
-        "Flat-stake backtest: betting the model's disagreements with the market "
-        "loses money at every edge threshold "
-        f"({head['roi']['0.00']['favorite_edge_on_a']['roi_pct']:.1f}% to "
-        f"{head['roi']['0.10']['favorite_edge_on_a']['roi_pct']:.1f}% ROI on "
-        "favorite edges) — the vig plus a sharp market leave no exploitable gap. "
-        "[Details](https://github.com/dylanmryan/mma-prediction/blob/main/models/market_benchmark.json)."
+        "Flat-stake backtest: betting the model's out-of-fold disagreements "
+        "with the market loses money at every edge threshold "
+        f"({head['roi']['0.00']['favorite_edge_on_a']['roi_pct']:.1f}% ROI on "
+        "favorite edges at a 0% threshold, "
+        f"{head['roi']['0.10']['favorite_edge_on_a']['roi_pct']:.1f}% at 10%) "
+        "— the vig plus a sharp market leave no exploitable gap. "
+        "[Details](https://github.com/dylanmryan/mma-prediction/blob/main/models/market_benchmark_oof.json)."
     )
 
 st.divider()
