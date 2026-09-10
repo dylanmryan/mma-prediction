@@ -1,0 +1,432 @@
+{
+  "name": "hazard_e2",
+  "config": {
+    "candidate": "hazard",
+    "seeds": "0,1,2,3,4",
+    "model_seed": null,
+    "config": {},
+    "train_start": null,
+    "half_life": null,
+    "fixed_budget_from": null,
+    "budget": {},
+    "drop_columns": [
+      "external_missing",
+      "same_country",
+      "notice_unknown",
+      "home_country_a",
+      "home_country_b"
+    ],
+    "n_feature_rows": 11238,
+    "features_max_date": "2026-08-08",
+    "runtime_sec": 170.2
+  },
+  "fold_years": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "folds": {
+    "2018": {
+      "n": 522,
+      "winner_log_loss": 0.6348,
+      "accuracy": 0.6303,
+      "brier": 0.2226,
+      "ece": 0.0282,
+      "joint_log_loss": 2.179,
+      "method_macro_f1": 0.3521,
+      "round_macro_f1": 0.1643,
+      "n_method": 521,
+      "n_round": 280,
+      "zero_mass_cell_fraction": 0.0
+    },
+    "2019": {
+      "n": 553,
+      "winner_log_loss": 0.6686,
+      "accuracy": 0.5696,
+      "brier": 0.2381,
+      "ece": 0.0481,
+      "joint_log_loss": 2.1057,
+      "method_macro_f1": 0.3852,
+      "round_macro_f1": 0.1671,
+      "n_method": 552,
+      "n_round": 257,
+      "zero_mass_cell_fraction": 0.0
+    },
+    "2020": {
+      "n": 492,
+      "winner_log_loss": 0.6524,
+      "accuracy": 0.6646,
+      "brier": 0.2298,
+      "ece": 0.0838,
+      "joint_log_loss": 2.1339,
+      "method_macro_f1": 0.3589,
+      "round_macro_f1": 0.175,
+      "n_method": 490,
+      "n_round": 247,
+      "zero_mass_cell_fraction": 0.0
+    },
+    "2021": {
+      "n": 546,
+      "winner_log_loss": 0.6715,
+      "accuracy": 0.5824,
+      "brier": 0.2395,
+      "ece": 0.0272,
+      "joint_log_loss": 2.1826,
+      "method_macro_f1": 0.3274,
+      "round_macro_f1": 0.1556,
+      "n_method": 544,
+      "n_round": 270,
+      "zero_mass_cell_fraction": 0.0
+    },
+    "2022": {
+      "n": 582,
+      "winner_log_loss": 0.6495,
+      "accuracy": 0.6134,
+      "brier": 0.2289,
+      "ece": 0.037,
+      "joint_log_loss": 2.2143,
+      "method_macro_f1": 0.3001,
+      "round_macro_f1": 0.1715,
+      "n_method": 581,
+      "n_round": 318,
+      "zero_mass_cell_fraction": 0.0
+    },
+    "2023": {
+      "n": 581,
+      "winner_log_loss": 0.6467,
+      "accuracy": 0.6265,
+      "brier": 0.2275,
+      "ece": 0.0401,
+      "joint_log_loss": 2.191,
+      "method_macro_f1": 0.3173,
+      "round_macro_f1": 0.1678,
+      "n_method": 578,
+      "n_round": 303,
+      "zero_mass_cell_fraction": 0.0
+    },
+    "2024": {
+      "n": 593,
+      "winner_log_loss": 0.6441,
+      "accuracy": 0.6239,
+      "brier": 0.2262,
+      "ece": 0.0516,
+      "joint_log_loss": 2.0635,
+      "method_macro_f1": 0.3417,
+      "round_macro_f1": 0.1582,
+      "n_method": 591,
+      "n_round": 270,
+      "zero_mass_cell_fraction": 0.0
+    },
+    "2025": {
+      "n": 935,
+      "winner_log_loss": 0.629,
+      "accuracy": 0.6449,
+      "brier": 0.2194,
+      "ece": 0.0362,
+      "joint_log_loss": 2.1264,
+      "method_macro_f1": 0.3536,
+      "round_macro_f1": 0.1788,
+      "n_method": 935,
+      "n_round": 501,
+      "zero_mass_cell_fraction": 0.0
+    }
+  },
+  "pooled": {
+    "n": 4804,
+    "winner_log_loss": 0.6479,
+    "accuracy": 0.6209,
+    "brier": 0.2282,
+    "ece": 0.0286,
+    "joint_log_loss": 2.1476,
+    "method_macro_f1": 0.3442,
+    "round_macro_f1": 0.1686,
+    "n_method": 4792,
+    "n_round": 2446,
+    "zero_mass_cell_fraction": 0.0
+  },
+  "slices": {
+    "debut": {
+      "n": 983,
+      "winner_log_loss": 0.6483,
+      "accuracy": 0.6094,
+      "brier": 0.2286,
+      "ece": 0.0402,
+      "joint_log_loss": 2.2195,
+      "method_macro_f1": 0.3407,
+      "round_macro_f1": 0.2393,
+      "n_method": 980,
+      "n_round": 559,
+      "zero_mass_cell_fraction": 0.0
+    },
+    "womens": {
+      "n": 779,
+      "winner_log_loss": 0.6569,
+      "accuracy": 0.5944,
+      "brier": 0.2326,
+      "ece": 0.0511,
+      "joint_log_loss": 1.9389,
+      "method_macro_f1": 0.2938,
+      "round_macro_f1": 0.1529,
+      "n_method": 777,
+      "n_round": 277,
+      "zero_mass_cell_fraction": 0.0
+    },
+    "five_round": {
+      "n": 420,
+      "winner_log_loss": 0.6609,
+      "accuracy": 0.6238,
+      "brier": 0.2343,
+      "ece": 0.0402,
+      "joint_log_loss": 2.3807,
+      "method_macro_f1": 0.3624,
+      "round_macro_f1": 0.1205,
+      "n_method": 419,
+      "n_round": 233,
+      "zero_mass_cell_fraction": 0.0
+    },
+    "external_missing": {
+      "n": 779,
+      "winner_log_loss": 0.6365,
+      "accuracy": 0.62,
+      "brier": 0.2232,
+      "ece": 0.0357,
+      "joint_log_loss": 2.2061,
+      "method_macro_f1": 0.3452,
+      "round_macro_f1": 0.2499,
+      "n_method": 777,
+      "n_round": 462,
+      "zero_mass_cell_fraction": 0.0
+    }
+  },
+  "fit_info": {
+    "hazard": [
+      {
+        "best_iteration": [
+          77,
+          75,
+          101,
+          86,
+          99
+        ],
+        "n_train": 12576
+      },
+      {
+        "best_iteration": [
+          180,
+          130,
+          193,
+          108,
+          193
+        ],
+        "n_train": 13745
+      },
+      {
+        "best_iteration": [
+          162,
+          152,
+          165,
+          174,
+          169
+        ],
+        "n_train": 14986
+      },
+      {
+        "best_iteration": [
+          78,
+          132,
+          127,
+          94,
+          147
+        ],
+        "n_train": 16349
+      },
+      {
+        "best_iteration": [
+          159,
+          91,
+          97,
+          118,
+          70
+        ],
+        "n_train": 17542
+      },
+      {
+        "best_iteration": [
+          148,
+          142,
+          149,
+          126,
+          187
+        ],
+        "n_train": 18900
+      },
+      {
+        "best_iteration": [
+          137,
+          146,
+          110,
+          114,
+          107
+        ],
+        "n_train": 20276
+      },
+      {
+        "best_iteration": [
+          207,
+          233,
+          291,
+          225,
+          222
+        ],
+        "n_train": 21655
+      }
+    ],
+    "decision": [
+      {
+        "best_iteration": [
+          167,
+          140,
+          110,
+          79,
+          189
+        ],
+        "n_train": 2346
+      },
+      {
+        "best_iteration": [
+          112,
+          208,
+          117,
+          101,
+          117
+        ],
+        "n_train": 2579
+      },
+      {
+        "best_iteration": [
+          203,
+          95,
+          126,
+          60,
+          109
+        ],
+        "n_train": 2820
+      },
+      {
+        "best_iteration": [
+          122,
+          124,
+          89,
+          82,
+          146
+        ],
+        "n_train": 3115
+      },
+      {
+        "best_iteration": [
+          60,
+          55,
+          51,
+          50,
+          80
+        ],
+        "n_train": 3358
+      },
+      {
+        "best_iteration": [
+          181,
+          49,
+          79,
+          71,
+          81
+        ],
+        "n_train": 3632
+      },
+      {
+        "best_iteration": [
+          104,
+          69,
+          111,
+          79,
+          78
+        ],
+        "n_train": 3895
+      },
+      {
+        "best_iteration": [
+          122,
+          174,
+          155,
+          96,
+          133
+        ],
+        "n_train": 4170
+      }
+    ],
+    "n_train": [
+      5949,
+      6434,
+      6956,
+      7509,
+      8001,
+      8547,
+      9129,
+      9710
+    ],
+    "n_runs": [
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000
+    ],
+    "alpha": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mc_standard_error": [
+      0.004812,
+      0.004854,
+      0.00485,
+      0.004863,
+      0.004888,
+      0.004856,
+      0.004861,
+      0.004791
+    ],
+    "mc_standard_error_max": [
+      0.005,
+      0.005,
+      0.005,
+      0.005,
+      0.005,
+      0.005,
+      0.005,
+      0.005
+    ],
+    "zero_mass_cell_fraction": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  }
+}

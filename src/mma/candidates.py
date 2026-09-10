@@ -23,11 +23,22 @@ import torch
 from sklearn.isotonic import IsotonicRegression
 
 from mma.blend import LOGIT_EPS, apply_temperature, blend_heads, logit, mask_round_45
+from mma.hazard import (
+    HAZARD_CLASSES, build_decision_rows, build_hazard_rows, mirror_corners,
+    round_frame,
+)
+from mma.joint import (
+    compose_joint_cells, impose_winner_marginal, marginals_from_cells,
+)
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import (
     METHOD_CLASSES, ROUND_CLASSES, encode_targets, fit_temperature, predict, train_one,
 )
 from mma.models.xgb import feature_frame, train_binary, train_multiclass
+from mma.simulator import (
+    DEFAULT_ALPHA, DEFAULT_N_RUNS, DEFAULT_ROUNDS, DEFAULT_SIM_SEED,
+    mean_over_seeds, normalise_rows, simulate_fights,
+)
 from mma.tensors import Preprocessor
 from mma.walkforward import Fold
 
@@ -305,6 +316,16 @@ class BlendCandidate:
     # As XGBCandidate.drop_columns: both members hold these out of their
     # matrices and the columns stay in the table, so slices still report.
     drop_columns: tuple = ()
+    # D3 control (SP3 fallback branch): also emit this blend's own prediction
+    # as a joint over outcome cells, composed as P(w) x P(m) x P(r | finish).
+    # It changes NOTHING about the prediction -- the three heads are the same
+    # arrays either way -- and only routes the joint metric through
+    # `evaluate.joint_cell_log_loss` instead of `joint_outcome_log_loss`. That
+    # is the point: it shows the cell machinery and the re-weighting layout
+    # contribute nothing of their own, so the hybrid's joint gain has to come
+    # from the simulator's conditional structure. Off by default, so every
+    # committed blend report keeps its shape.
+    emit_joint_cells: bool = False
 
     def members(self):
         """The two members, each with the blend's seed list and drop-columns."""
@@ -356,6 +377,9 @@ class BlendCandidate:
             "method": blended["method"][is_eval],
             "round": blended["round"][is_eval],
         }
+        if self.emit_joint_cells:
+            pred["joint_cells"] = compose_joint_cells(
+                pred["winner"], pred["method"], pred["round"], METHOD_CLASSES, ROUND_CLASSES)
         info = {
             "blend_weight": w,
             "temperature": float(temperature),  # 1.0 when the calibrator is not a temperature
@@ -367,5 +391,340 @@ class BlendCandidate:
             **({} if self.calibrator == "temperature" else {"calibrator": str(self.calibrator)}),
             "xgb": xgb_info,
             "torch": torch_info,
+        }
+        return pred, info
+
+
+# --------------------------------------------------------------------------
+# The round-by-round simulator as a harness candidate (SP3)
+# --------------------------------------------------------------------------
+
+#: The simulation parameters the SP3 plan fixed before any run, re-exported
+#: from `mma.simulator` where the served path reads them too. They are the
+#: HARNESS defaults; the deployed values live in `models/simulator.json` and
+#: are hashed, because both are part of what a prediction is.
+HAZARD_N_RUNS = DEFAULT_N_RUNS
+HAZARD_ALPHA = DEFAULT_ALPHA
+HAZARD_DEFAULT_ROUNDS = DEFAULT_ROUNDS
+
+
+@dataclass
+class HazardCandidate:
+    """The Monte Carlo fight simulator behind the standard `fit_predict`.
+
+    Two XGBoost members are fitted on the fold's TRAINING fights only -- a
+    5-class model over `mma.hazard.HAZARD_CLASSES` on the per-round hazard
+    rows, and a binary model on the decision rows -- and every evaluation
+    fight is then played out `n_runs` times by `mma.simulator.simulate`. The
+    result is one joint distribution over outcome cells per fight, from which
+    the winner, method and finish-round marginals are read off. They are
+    returned in the existing `pred` shape so every metric the harness already
+    computes keeps working, with the joint carried alongside as
+    `joint_cells` so `walkforward.score_rows` can score the realised cell
+    directly instead of composing three marginals it does not need to.
+
+    **Seed ensembling** follows `XGBCandidate`: the members' `predict_proba`
+    outputs are averaged across seeds and the simulation is run once on the
+    averaged hazard, rather than simulating each seed and averaging outcome
+    distributions. That is the same "average the probabilities" convention
+    every other ensemble in this project uses.
+
+    **Symmetrisation** follows `mma.inference.predict_symmetrized`: each
+    evaluation fight is predicted from both corner orderings (the mirrored
+    orientation via `hazard.mirror_corners`) and the two joint distributions
+    are averaged after the mirrored one is mapped back -- which for a joint
+    means exchanging its A and B blocks, not just flipping a scalar. Both
+    orderings share one RNG stream, so a matchup with no corner asymmetry
+    comes back at exactly 0.5 rather than 0.5 plus Monte Carlo noise
+    (`tests/test_candidates.py` pins that).
+
+    **Calibration (`calibrate=True`, SP3's fallback branch).** E2 measured the
+    simulator's winner marginal at ECE 0.0286 against the blend's 0.0124 --
+    the simulator has no calibration step at all, where every other candidate
+    in this project has one. Turning `calibrate` on adds the one the blend
+    uses: a temperature fitted on the fold's inner-validation year (never on
+    an evaluation row) and applied to the winner marginal, then imposed back
+    on the joint by `mma.joint.impose_winner_marginal` so the cells stay
+    coherent with it. It is a DIAGNOSTIC that separates calibration from
+    paradigm, and it is off by default.
+
+    `fights` supplies `finish_round`, which the feature table only carries
+    bucketed as '45'; the exact round is what makes the hazard rows'
+    censoring correct, so it is required rather than approximated.
+    """
+    name: str = "hazard"
+    fights: pd.DataFrame | None = None
+    seeds: tuple = (0, 1, 2, 3, 4)
+    params: dict = field(default_factory=dict)
+    drop_columns: tuple = ()
+    n_runs: int = HAZARD_N_RUNS
+    alpha: float = HAZARD_ALPHA
+    sim_seed: int = 0
+    # D1 (SP3 fallback branch): temperature-scale the simulator's WINNER
+    # marginal on the fold's inner-validation year, exactly as
+    # `BlendCandidate` scales its post-average winner, and impose the result
+    # back on the joint. Off by default, so `hazard_e1`/`hazard_e2` and every
+    # other committed simulator report reproduce unchanged.
+    calibrate: bool = False
+    #: The fitted members of the most recent `fit_predict`, keyed "hazard" /
+    #: "decision" -- see the loop that fills it.
+    fitted_members: dict = field(default_factory=dict)
+
+    def _seed_params(self, seed: int) -> dict:
+        if "random_state" in self.params:
+            raise ValueError(
+                "HazardCandidate(seeds=...) sets random_state per member, but params "
+                f"already fixes random_state={self.params['random_state']!r}; pass one of them"
+            )
+        return {**self.params, "random_state": int(seed)}
+
+    def fit_predict(self, features: pd.DataFrame, fold: Fold, sample_weight=None):
+        if self.fights is None:
+            raise ValueError(
+                "HazardCandidate needs the fights table (it carries finish_round, which "
+                "the feature table only has bucketed as '45'); pass fights=..."
+            )
+        if self.calibrate and (fold.inner_val & fold.eval).any():
+            raise ValueError(
+                f"fold {fold.year}: inner_val and eval overlap, so the post-simulation "
+                "temperature would be fitted on evaluation rows"
+            )
+        train_feats = features.loc[fold.train].reset_index(drop=True)
+        val_feats = features.loc[fold.inner_val].reset_index(drop=True)
+        eval_feats = features.loc[fold.eval].reset_index(drop=True)
+        n_eval = len(eval_feats)
+        # Calibrating needs the simulator's winner marginal on the
+        # inner-validation year too, so those rows are simulated as well --
+        # appended AFTER the evaluation rows, never before, so that every
+        # evaluation fight keeps the per-row RNG stream (`sim_seed`, row
+        # position) it had in the uncalibrated run. The temperature is then
+        # the ONLY difference between this candidate and the plain simulator.
+        sim_feats = (
+            pd.concat([eval_feats, val_feats], ignore_index=True)
+            if self.calibrate else eval_feats
+        )
+        sim_mirror = mirror_corners(sim_feats)
+
+        haz_train = build_hazard_rows(train_feats, self.fights)
+        haz_val = build_hazard_rows(val_feats, self.fights)
+        dec_train = build_decision_rows(train_feats, self.fights)
+        dec_val = build_decision_rows(val_feats, self.fights)
+        _require_all_classes(haz_train["hazard_label"], HAZARD_CLASSES, "hazard", fold)
+
+        n_rounds = (
+            sim_feats["scheduled_rounds"].fillna(HAZARD_DEFAULT_ROUNDS).to_numpy(dtype=int)
+        )
+        n_sim = len(sim_feats)
+
+        # One model matrix per member, built from the training, inner-val and
+        # both evaluation orientations at once so the `weight_class` category
+        # set and the column order are identical across all four.
+        haz_frames = [haz_train.drop(columns=["hazard_label"]),
+                      haz_val.drop(columns=["hazard_label"]),
+                      round_frame(sim_feats, n_rounds),
+                      round_frame(sim_mirror, n_rounds)]
+        dec_frames = [dec_train.drop(columns=["decision_label"]),
+                      dec_val.drop(columns=["decision_label"]),
+                      sim_feats, sim_mirror]
+        xh = _split_frames(feature_frame(pd.concat(haz_frames, ignore_index=True),
+                                         self.drop_columns), haz_frames)
+        xd = _split_frames(feature_frame(pd.concat(dec_frames, ignore_index=True),
+                                         self.drop_columns), dec_frames)
+
+        w = None if sample_weight is None else np.asarray(sample_weight, dtype=float)
+        by_fight = None if w is None else dict(zip(features["fight_id"], w))
+
+        def weights(rows):
+            return None if by_fight is None else rows["fight_id"].map(by_fight).to_numpy(dtype=float)
+
+        hazard_probs, mirror_probs, decision_probs, mirror_decision = [], [], [], []
+        iterations = {"hazard": [], "decision": []}
+        # The fitted members are kept so the served predictor can be handed the
+        # very models a fold measured (`tests/test_serving_parity.py`): a
+        # parity test that refitted its own lookalikes would be comparing two
+        # fits, not two code paths.
+        self.fitted_members = {"hazard": [], "decision": []}
+        for seed in self.seeds:
+            params = self._seed_params(seed)
+            hz = train_multiclass(xh[0], haz_train["hazard_label"], xh[1], haz_val["hazard_label"],
+                                  HAZARD_CLASSES, params=params, sample_weight=weights(haz_train))
+            dc = train_binary(xd[0], dec_train["decision_label"], xd[1], dec_val["decision_label"],
+                              params=params, sample_weight=weights(dec_train))
+            self.fitted_members["hazard"].append(hz)
+            self.fitted_members["decision"].append(dc)
+            hazard_probs.append(hz.predict_proba(xh[2]))
+            mirror_probs.append(hz.predict_proba(xh[3]))
+            decision_probs.append(dc.predict_proba(xd[2])[:, 1])
+            mirror_decision.append(dc.predict_proba(xd[3])[:, 1])
+            iterations["hazard"].append(int(hz.best_iteration))
+            iterations["decision"].append(int(dc.best_iteration))
+
+        hazard = normalise_rows(mean_over_seeds(hazard_probs))
+        mirrored = normalise_rows(mean_over_seeds(mirror_probs))
+        decision = mean_over_seeds(decision_probs)
+        mirror_dec = mean_over_seeds(mirror_decision)
+
+        # The simulation itself, and the corner-averaging that composes the
+        # two orientations into one joint, live in `mma.simulator` -- the
+        # served predictor calls the SAME function, so the deployed hybrid
+        # cannot drift from the one the harness measured.
+        simulated = simulate_fights(
+            hazard, mirrored, decision, mirror_dec, n_rounds,
+            n_runs=self.n_runs, alpha=self.alpha, sim_seed=self.sim_seed,
+            n_round_classes=len(ROUND_CLASSES),
+        )
+        cells, zero_mass = simulated["cells"], simulated["zero_mass"]
+        # The diagnostics describe the SCORED rows only; with calibration on,
+        # the inner-validation rows are simulated too and appended after them.
+        errors = simulated["standard_errors"][:n_eval]
+        empty = int(simulated["n_zero_mass_reachable"][:n_eval].sum())
+        valid = int(simulated["n_reachable_cells"][:n_eval].sum())
+
+        temperature = None
+        if self.calibrate:
+            # `BlendCandidate`'s calibration step, moved downstream of the
+            # simulation: fit on the inner-validation year's winner marginal,
+            # then impose the scaled probability back on the joint. Imposing
+            # rather than merely reporting it is what keeps the cells coherent
+            # -- each corner's block is scaled by one scalar, so
+            # P(method, round | winner) is exactly the simulator's.
+            simulated = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)["winner"]
+            y_val = features.loc[fold.inner_val, "y_winner"].to_numpy(dtype=float)
+            temperature = float(fit_temperature(logit(simulated[n_eval:]), y_val))
+            cells, zero_mass = cells[:n_eval], zero_mass[:n_eval]
+            cells = impose_winner_marginal(
+                cells, apply_temperature(simulated[:n_eval], temperature),
+                METHOD_CLASSES, ROUND_CLASSES,
+            )
+
+        marginals = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)
+        pred = {
+            "winner": marginals["winner"],
+            "method": marginals["method"],
+            "round": marginals["round"],
+            "joint_cells": cells,
+            "joint_zero_mass": zero_mass,
+        }
+        info = {
+            "hazard": {"best_iteration": _one_or_all(iterations["hazard"]),
+                       "n_train": int(len(haz_train))},
+            "decision": {"best_iteration": _one_or_all(iterations["decision"]),
+                         "n_train": int(len(dec_train))},
+            "n_train": int(fold.train.sum()),
+            "n_runs": int(self.n_runs),
+            "alpha": float(self.alpha),
+            "mc_standard_error": round(float(np.mean(errors)), 6),
+            "mc_standard_error_max": round(float(np.max(errors)), 6),
+            "zero_mass_cell_fraction": round(empty / valid, 6),
+            # Recorded only when the fallback branch's calibration is on, so a
+            # report from the default path keeps the fit_info shape the
+            # committed simulator reports already have.
+            **({} if temperature is None
+               else {"temperature": round(temperature, 4), "calibrated": True}),
+        }
+        return pred, info
+
+
+def _split_frames(matrix: pd.DataFrame, frames: list) -> list:
+    """Slice one concatenated model matrix back into its parts, in order."""
+    bounds = np.cumsum([0] + [len(f) for f in frames])
+    return [matrix.iloc[bounds[i]:bounds[i + 1]] for i in range(len(frames))]
+
+
+def _one_or_all(values: list):
+    """The scalar for a one-member ensemble, the list otherwise -- the shape
+    convention `XGBCandidate` established for `best_iteration`."""
+    return values[0] if len(values) == 1 else list(values)
+
+
+@dataclass
+class HybridCandidate:
+    """The v3 spec's defined fallback: the blend's winner, the simulator's shape.
+
+    > "a documented hybrid where the direct winner model's probability is
+    > imposed and the simulator supplies P(method, round | winner) by
+    > re-weighting simulated runs."
+    > -- docs/superpowers/specs/2026-09-06-predictor-v3-simulator-design.md, SP3
+
+    This is a pre-registered branch, taken because E2 landed exactly on the
+    case it was written for: the simulator's joint beat the incumbent's by
+    0.0537 (five times the 0.01 bar) while its winner marginal lost by 0.0042
+    (twelve times sigma_seed), and D1 showed that calibrating the simulator
+    recovers only about half of that.
+
+    The composition is arithmetic on two existing candidates' outputs, so
+    both are reused whole rather than reimplemented:
+
+        P_hybrid(winner, method, round) = P_blend(winner)
+                                          x P_sim(method, round | winner)
+
+    `mma.joint.impose_winner_marginal` does it by scaling each corner's block
+    of simulated cells by a single scalar -- which is literally re-weighting
+    the simulated runs by who won them, and leaves every conditional the
+    simulation produced untouched.
+
+    **The winner clause is satisfied by construction, not by measurement.**
+    `pred["winner"]` is the blend member's array itself, so the hybrid's
+    winner log-loss, accuracy, Brier and ECE are the incumbent's to the last
+    bit. Only the joint is a new number.
+
+    The hazard member deliberately runs UNCALIBRATED: imposing a winner
+    marginal overwrites whatever winner the simulator had, and a scalar
+    rescale cannot change a conditional, so calibrating it first would
+    produce identical cells at twice the cost.
+    """
+    name: str = "hybrid"
+    fights: pd.DataFrame | None = None
+    seeds: tuple = (0, 1, 2, 3, 4)
+    weight: float = 0.5  # the blend member's weight on ITS xgb member
+    calibrate: bool = True  # the blend member's post-average temperature
+    calibrator: str = "temperature"
+    params: dict = field(default_factory=dict)  # XGB params, shared by both members
+    config: dict = field(default_factory=dict)  # the blend's torch member config
+    max_epochs: int = 200
+    patience: int = 20
+    drop_columns: tuple = ()
+    n_runs: int = HAZARD_N_RUNS
+    alpha: float = HAZARD_ALPHA
+    sim_seed: int = 0
+
+    def members(self):
+        """The incumbent blend and the simulator, sharing seeds and columns."""
+        return (
+            BlendCandidate(name="blend", seeds=tuple(self.seeds), weight=self.weight,
+                           calibrate=self.calibrate, calibrator=self.calibrator,
+                           params=self.params, config=self.config,
+                           max_epochs=self.max_epochs, patience=self.patience,
+                           drop_columns=self.drop_columns),
+            HazardCandidate(name="hazard", fights=self.fights, seeds=tuple(self.seeds),
+                            params=self.params, drop_columns=self.drop_columns,
+                            n_runs=self.n_runs, alpha=self.alpha, sim_seed=self.sim_seed,
+                            calibrate=False),
+        )
+
+    def fit_predict(self, features: pd.DataFrame, fold: Fold, sample_weight=None):
+        blend_member, hazard_member = self.members()
+        blend_pred, blend_info = blend_member.fit_predict(features, fold, sample_weight)
+        hazard_pred, hazard_info = hazard_member.fit_predict(features, fold, sample_weight)
+
+        cells = impose_winner_marginal(
+            hazard_pred["joint_cells"], blend_pred["winner"], METHOD_CLASSES, ROUND_CLASSES)
+        marginals = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)
+        pred = {
+            # The blend's own array, not a copy read back off the cells: the
+            # winner clause is met by construction and every winner metric in
+            # the report must be the incumbent's number exactly.
+            "winner": blend_pred["winner"],
+            "method": marginals["method"],
+            "round": marginals["round"],
+            "joint_cells": cells,
+            # Re-weighting scales cells; it cannot make an empty one non-empty,
+            # so the simulator's raw zero-mass flags carry over unchanged.
+            "joint_zero_mass": hazard_pred["joint_zero_mass"],
+        }
+        info = {
+            "n_train": int(fold.train.sum()),
+            "blend": blend_info,
+            "hazard": hazard_info,
         }
         return pred, info

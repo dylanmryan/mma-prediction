@@ -151,6 +151,32 @@ class _FakeEnsemble:
         }
 
 
+class _FakeHybrid(_FakeEnsemble):
+    """`_FakeEnsemble` plus a joint distribution, as `SimulatorPredictor`
+    returns one: the cells composed from the marginals above, so the record's
+    joint and its marginals agree the way the real one's do."""
+
+    def predict(self, features: pd.DataFrame) -> dict:
+        from mma.joint import compose_joint_cells
+
+        result = super().predict(features)
+        # `compose_joint_cells` wants the decision class last; the fake's
+        # method order puts it first, so reorder for the composition only.
+        method = result["method_probs"][:, [1, 2, 0]]
+        cells = compose_joint_cells(
+            result["winner_prob"], method, result["round_probs"],
+            ["ko_tko", "submission", "decision"], result["round_classes"],
+        )
+        return {
+            **result,
+            "method_classes": ["ko_tko", "submission", "decision"],
+            "method_probs": method,
+            "joint_cells": cells,
+            "joint_zero_mass": np.zeros(cells.shape, dtype=bool),
+            "p_distance": cells[:, -2:].sum(axis=1),
+        }
+
+
 def _snapshots():
     return pd.DataFrame(
         {
@@ -222,6 +248,54 @@ def test_predict_fight_success_case():
     assert result["elo_a"] == 1600.0
     assert result["elo_b"] == 1450.0
     assert set(result["method_probs"]) == {"decision", "ko_tko", "submission"}
+    assert sum(result["method_probs"].values()) == pytest.approx(1.0)
+
+
+def test_predict_fight_records_the_joint_when_the_scorer_supplies_one():
+    """SP3: the record gains the whole outcome distribution, and the fields
+    that were already there keep their meaning."""
+    wiki_fight = {
+        "fighter_a_name": "Fighter A", "fighter_b_name": "Fighter B",
+        "weight_class": "Lightweight", "title_fight": False, "main_event": False,
+    }
+    result = predict_fight(
+        wiki_fight, _name_index(), _snapshots(), _fighters_bio(),
+        _FakeHybrid(), as_of=pd.Timestamp("2026-07-18"),
+    )
+    joint = result["joint_probs"]
+    assert set(joint) == {"a", "b"}
+    assert set(joint["a"]) == {"ko_tko", "submission", "decision"}
+    assert set(joint["a"]["ko_tko"]) == {"1", "2", "3", "45"}
+    total = sum(
+        value if method == "decision" else sum(value.values())
+        for corner in joint.values() for method, value in corner.items()
+    )
+    assert total == pytest.approx(1.0)
+
+    # the joint's own marginals are the record's other fields
+    a_mass = sum(
+        value if method == "decision" else sum(value.values())
+        for method, value in joint["a"].items()
+    )
+    assert a_mass == pytest.approx(result["p_a_wins"])
+    assert result["p_distance"] == pytest.approx(
+        joint["a"]["decision"] + joint["b"]["decision"])
+    assert result["p_distance"] == pytest.approx(result["method_probs"]["decision"])
+
+
+def test_predict_fight_omits_the_joint_for_a_scorer_without_one():
+    """Old records stay readable and a blend-only scorer still works: the
+    joint fields are added, never substituted."""
+    wiki_fight = {
+        "fighter_a_name": "Fighter A", "fighter_b_name": "Fighter B",
+        "weight_class": "Lightweight", "title_fight": False, "main_event": False,
+    }
+    result = predict_fight(
+        wiki_fight, _name_index(), _snapshots(), _fighters_bio(),
+        _FakeEnsemble(), as_of=pd.Timestamp("2026-07-18"),
+    )
+    assert "joint_probs" not in result and "p_distance" not in result
+    assert 0.0 <= result["p_a_wins"] <= 1.0
     assert sum(result["method_probs"].values()) == pytest.approx(1.0)
 
 
@@ -306,6 +380,46 @@ def test_predict_event_predicts_every_fight_on_card():
     assert len(results) == 2
     assert results[0]["skipped"] is False
     assert results[1]["skipped"] is True
+
+
+def test_predict_event_degrades_one_raising_fight_to_a_skip():
+    """One fight that blows up must not take the rest of the card with it.
+
+    `scripts/predict_upcoming.py` has no try/except anywhere between here and
+    `main`, and the workflow's commit step runs `if: always()`, so an
+    exception raised for one matchup would drop every remaining fight AND
+    every later event on the card list -- and then commit the truncated week
+    as though it were complete. A failing scorer is recorded as a skip with a
+    reason, which is the same stub an unmatched name produces and which a
+    later run is allowed to re-attempt.
+    """
+    class _Exploding(_FakeEnsemble):
+        def predict(self, features):
+            if float(features["elo_diff"].iloc[0]) < 0:
+                raise RuntimeError("boom")
+            return super().predict(features)
+
+    event = {"event_name": "UFC Fight Night: Test", "date": "2026-07-18"}
+    wiki_fights = [
+        {"fighter_a_name": "Fighter A", "fighter_b_name": "Fighter B",
+         "weight_class": "Lightweight", "title_fight": False, "main_event": True},
+        {"fighter_a_name": "Fighter A", "fighter_b_name": "Unknown Person",
+         "weight_class": "Lightweight", "title_fight": False, "main_event": False},
+    ]
+    results = predict_event(
+        event, wiki_fights, _name_index(), _snapshots(), _fighters_bio(), _Exploding()
+    )
+    assert len(results) == 2
+    # the raising fight degrades, and carries the same fields a skip carries
+    assert results[0]["skipped"] is True
+    assert "RuntimeError" in results[0]["reason"] and "boom" in results[0]["reason"]
+    assert results[0]["fighter_a_name"] == "Fighter A"
+    assert results[0]["fighter_b_name"] == "Fighter B"
+    assert results[0]["weight_class"] == "Lightweight"
+    assert "p_a_wins" not in results[0]
+    # and the rest of the card is still predicted
+    assert results[1]["skipped"] is True
+    assert "Unknown Person" in results[1]["reason"]
 
 
 # --- idempotent writing ---------------------------------------------------

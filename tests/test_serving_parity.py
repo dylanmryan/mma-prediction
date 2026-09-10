@@ -10,6 +10,7 @@ import bisect
 from collections import defaultdict
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -245,3 +246,134 @@ def test_training_table_and_served_row_have_the_same_columns(tables):
     # green suite. Pin the order too.
     non_identifier_columns = [c for c in trained.columns if c not in identifiers]
     assert non_identifier_columns == list(served.columns)
+
+
+# --------------------------------------------------------------------------
+# The PREDICTION served must equal the prediction the harness measured (SP3)
+# --------------------------------------------------------------------------
+# Everything above pins the feature ROW: the values a future fight is served
+# are the values the model trained on. The hybrid needs the same discipline one
+# level up, on the prediction itself. `mma.candidates.HybridCandidate` is what
+# the walk-forward harness scored and `mma.inference.SimulatorPredictor` is
+# what serves, and they are two different code paths over the same models --
+# one builds four frames at once from a fold's masks, the other aligns a
+# served frame to each booster's own columns and categories.
+#
+# So this hands the SERVED path the very models a harness fold fitted, on the
+# very fights that fold evaluated, and requires the joint distribution to come
+# back identical. Refitting a lookalike would compare two fits; keeping the
+# fitted members (`HazardCandidate.fitted_members`) compares two code paths,
+# which is the thing that can silently drift.
+
+
+class _StubBlend:
+    """A blend that returns a fixed winner probability.
+
+    `SimulatorPredictor` composes P_blend(winner) with the simulator's
+    conditional; which winner it is does not matter to the parity claim, and
+    fixing it keeps this test off the torch artifacts (and out of a two-minute
+    blend fit) while still exercising the exact composition that ships.
+    """
+
+    ensemble = preprocessor = None
+    weight = temperature = 0.0
+
+    def __init__(self, winner):
+        self.winner = np.asarray(winner, dtype=float)
+
+    def predict(self, features):
+        from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
+        n = len(features)
+        return {
+            "winner_prob": self.winner[:n],
+            "winner_spread": np.zeros(n),
+            "method_probs": np.full((n, len(METHOD_CLASSES)), 1 / len(METHOD_CLASSES)),
+            "round_probs": np.full((n, len(ROUND_CLASSES)), 1 / len(ROUND_CLASSES)),
+            "method_classes": METHOD_CLASSES,
+            "round_classes": ROUND_CLASSES,
+        }
+
+
+@pytest.fixture(scope="module")
+def harness_hybrid(tables, tmp_path_factory):
+    """One real walk-forward fold, fitted once: its joint cells, the models
+    that produced them (written out as deployment artifacts), and the
+    evaluation fights they were produced for."""
+    from mma.candidates import HazardCandidate
+    from mma.walkforward import make_folds
+
+    features = pd.read_parquet(PROCESSED / "features.parquet")
+    # The most recent fights only: a full-table fold is a minute of fitting for
+    # a claim that a few thousand rows establish just as well.
+    features = features.tail(2500).sort_values("date", kind="stable").reset_index(drop=True)
+    fold = make_folds(features["date"], fold_years=(2025,))[0]
+    candidate = HazardCandidate(fights=tables["fights"], seeds=(0, 1),
+                                params={"max_depth": 3}, n_runs=2000)
+    pred, _ = candidate.fit_predict(features, fold, None)
+
+    models_dir = tmp_path_factory.mktemp("served") / "models"
+    models_dir.mkdir()
+    for member, models in candidate.fitted_members.items():
+        for seed, model in zip(candidate.seeds, models):
+            model.save_model(models_dir / f"xgb_{member}_seed{seed}.json")
+
+    eval_feats = features.loc[fold.eval].reset_index(drop=True)
+    # A blend-shaped winner probability: deterministic, varied, and never 0 or 1.
+    winner = 0.5 + 0.35 * np.sin(np.arange(len(eval_feats), dtype=float))
+    return {"cells": pred["joint_cells"], "eval": eval_feats, "winner": winner,
+            "root": models_dir.parent, "candidate": candidate}
+
+
+def test_served_hybrid_reproduces_the_harness_joint(harness_hybrid):
+    """The single claim this whole deployment rests on.
+
+    Served through `SimulatorPredictor`, the models a fold fitted must produce
+    the fold's own joint distribution -- cell for cell -- once the blend's
+    winner is imposed on it, which is exactly `HybridCandidate`'s composition.
+    Anything less and the numbers in `models/walkforward/sp3_decision.json`
+    describe a scorer other than the one serving.
+    """
+    from mma.inference import SimulatorPredictor
+    from mma.joint import impose_winner_marginal, marginals_from_cells
+    from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
+    from mma.simulator import DEFAULT_ALPHA, DEFAULT_ROUNDS, DEFAULT_SIM_SEED
+
+    served = SimulatorPredictor.load(
+        root=harness_hybrid["root"], blend=_StubBlend(harness_hybrid["winner"]),
+        config={"n_runs": harness_hybrid["candidate"].n_runs, "alpha": DEFAULT_ALPHA,
+                "sim_seed": DEFAULT_SIM_SEED, "default_rounds": DEFAULT_ROUNDS},
+    ).predict(harness_hybrid["eval"])
+
+    expected = impose_winner_marginal(
+        harness_hybrid["cells"], harness_hybrid["winner"], METHOD_CLASSES, ROUND_CLASSES)
+    np.testing.assert_array_equal(served["joint_cells"], expected)
+
+    marginals = marginals_from_cells(expected, METHOD_CLASSES, ROUND_CLASSES)
+    np.testing.assert_array_equal(served["method_probs"], marginals["method"])
+    np.testing.assert_array_equal(served["round_probs"], marginals["round"])
+    # and the winner marginal of what is served is the blend's, exactly
+    np.testing.assert_allclose(marginals["winner"], harness_hybrid["winner"], atol=1e-12)
+
+
+def test_served_hybrid_reproduces_the_harness_simulator_before_any_imposition(harness_hybrid):
+    """The simulator half on its own, with no winner imposed.
+
+    Imposing a joint's OWN winner marginal is an exact no-op, so serving with
+    a stub blend that returns the simulator's winner has to return the
+    simulator's cells. That isolates the simulation and the seed ensembling
+    from the hybrid composition: if this passes and the test above fails, the
+    composition drifted; if this fails, the served simulation did.
+    """
+    from mma.inference import SimulatorPredictor
+    from mma.joint import marginals_from_cells
+    from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
+    from mma.simulator import DEFAULT_ALPHA, DEFAULT_ROUNDS, DEFAULT_SIM_SEED
+
+    own_winner = marginals_from_cells(
+        harness_hybrid["cells"], METHOD_CLASSES, ROUND_CLASSES)["winner"]
+    served = SimulatorPredictor.load(
+        root=harness_hybrid["root"], blend=_StubBlend(own_winner),
+        config={"n_runs": harness_hybrid["candidate"].n_runs, "alpha": DEFAULT_ALPHA,
+                "sim_seed": DEFAULT_SIM_SEED, "default_rounds": DEFAULT_ROUNDS},
+    ).predict(harness_hybrid["eval"])
+    np.testing.assert_allclose(served["joint_cells"], harness_hybrid["cells"], atol=1e-12)

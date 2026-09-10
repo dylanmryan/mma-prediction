@@ -30,8 +30,11 @@ serves**, each evaluated honestly by expanding-window walk-forward over
   the way.
 - **Uncertainty done properly**: spread across the five per-seed blends
   (booster *i* paired with net *i*), MC dropout from the neural member, a
-  temperature fitted on held-out data *after* the blend average, display
-  probabilities recalibrated to historical base rates.
+  temperature fitted on held-out data *after* the blend average. The method
+  and round probabilities used to be rescaled to historical base rates before
+  display; since the simulator ships they are marginals of one coherent joint
+  distribution and are shown raw, with the calibration measured weekly
+  (`models/display_calibration.json`) rather than corrected.
 - **Self-updating**: a weekly GitHub Action refreshes the dataset and rebuilds
   every artifact; the entire pipeline reproduces byte-for-byte.
 - **Prospective evaluation**: real upcoming UFC events get predicted and
@@ -846,10 +849,13 @@ work. On promotion
 the candidate ensemble is *staged* into `models/torch` (the incumbent is
 backed up on disk first) and nothing else happens — the script performs no
 git writes. A human then re-runs the refit recipe (bare `scripts/train_xgb.py`,
-`scripts/train_torch.py`, `scripts/build_display_priors.py` — a split-protocol
+`scripts/train_torch.py`, `scripts/train_hazard.py`,
+`scripts/check_display_calibration.py` — a split-protocol
 candidate never ships as-is), runs the suite, reviews the metrics diff, and
 commits by hand; the new model's artifact hash (`mma.versioning.model_version`,
-computed over the torch weights and preprocessing stats) becomes the new
+computed over every artifact that scores — the torch weights and preprocessing
+stats, the twenty-five per-seed XGBoost boosters, `models/blend.json` and
+`models/simulator.json`) becomes the new
 `model_version` and starts a fresh `track_record.json` section automatically.
 Promotion is deliberately a
 manual, stage-only step (`--execute`, run by hand via `workflow_dispatch`)
@@ -952,13 +958,21 @@ and the full ROI sweep at 0%/5%/10% thresholds) are in the committed
 - `OMP_NUM_THREADS=1` for any script that imports both torch and xgboost.
 - **Model identity and evidence.** Prospective predictions are stamped with
   `mma.versioning.model_version()`, a hash of **everything that scores** —
-  the torch weights and preprocessing statistics *and* the fifteen per-seed
-  XGBoost boosters — so the track record splits by model, not by commit.
+  the torch weights and preprocessing statistics, the twenty-five per-seed
+  XGBoost boosters (winner/method/round, plus SP3's hazard and decision), and
+  the two config artifacts whose hand-set numbers are as load-bearing as any
+  trained one, `models/blend.json` (weight, temperature) and
+  `models/simulator.json` (`n_runs`, `alpha`, `sim_seed`, `default_rounds`) —
+  so the track record splits by model, not by commit.
   Before SP2.2 the hash covered only the torch half, which was correct while
   XGBoost was an explainer and would have covered half of what serves now;
-  it is verified sensitive to a mutation on either side. Display priors stay
-  excluded on purpose, so regenerating them does not open a new track-record
-  section for byte-identical predictions. Retraining (weekly refresh or walk-forward promotion) starts a new
+  SP3 needed the same expansion again for the simulator. It is verified
+  sensitive to a mutation on any member. `models/display_calibration.json`
+  stays excluded: since SP3 nothing recalibrates a displayed number, so that
+  file is a measurement of the model rather than an input to a prediction, and
+  hashing it would open a new track-record section for byte-identical
+  predictions whenever the weekly measurement moved a decimal.
+  Retraining (weekly refresh or walk-forward promotion) starts a new
   section automatically; retraining is deterministic, so an unchanged
   dataset yields an unchanged version. The evidence behind each deployed
   model lives in `models/walkforward/` (the harness reports, noise floors,

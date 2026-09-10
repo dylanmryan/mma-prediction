@@ -75,6 +75,35 @@ def test_grade_fight_correct_confident_win():
     assert graded["elo_dummy_correct"] is True  # higher elo (x) actually won
 
 
+def test_grade_fight_parses_a_pre_sp3_and_an_sp3_record_identically():
+    """Grading reads the winner probability, which SP3 did not change.
+
+    A record written before SP3 has no joint; one written after carries the
+    whole outcome distribution alongside the same `p_a_wins`. Both must grade
+    to the same numbers, or deploying the hybrid would have quietly split the
+    track record's own arithmetic.
+    """
+    old = {"fighter_a_id": "x", "fighter_b_id": "y", "p_a_wins": 0.9,
+           "elo_a": 1600.0, "elo_b": 1500.0}
+    new = {
+        **old,
+        "p_distance": 0.45,
+        "joint_probs": {
+            "a": {"ko_tko": {"1": 0.2, "2": 0.1, "3": 0.05, "45": 0.0},
+                  "submission": {"1": 0.1, "2": 0.05, "3": 0.05, "45": 0.0},
+                  "decision": 0.35},
+            "b": {"ko_tko": {"1": 0.02, "2": 0.01, "3": 0.01, "45": 0.0},
+                  "submission": {"1": 0.01, "2": 0.0, "3": 0.0, "45": 0.0},
+                  "decision": 0.1},
+        },
+    }
+    result = pd.Series({"fighter_a_id": "x", "fighter_b_id": "y", "winner": "a"})
+    assert grade_fight(new, result) == grade_fight(old, result)
+    # and grading adds only its own keys -- it never touches the prediction
+    graded = grade_fight(new, result)
+    assert not set(graded) & {"joint_probs", "p_distance", "p_a_wins"}
+
+
 def test_grade_fight_incorrect_prediction():
     fight = {"fighter_a_id": "x", "fighter_b_id": "y", "p_a_wins": 0.9,
              "elo_a": 1600.0, "elo_b": 1500.0}

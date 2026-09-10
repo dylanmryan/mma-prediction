@@ -2,8 +2,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mma.candidates import BlendCandidate, EloCandidate, TorchCandidate, XGBCandidate
-from mma.walkforward import Fold, make_folds
+from mma.blend import apply_temperature
+from mma.candidates import (
+    BlendCandidate, EloCandidate, HazardCandidate, HybridCandidate, TorchCandidate,
+    XGBCandidate,
+)
+from mma.joint import (
+    compose_joint_cells, corner_cells, impose_winner_marginal, marginals_from_cells,
+)
+from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
+from mma.walkforward import Fold, make_folds, score_rows
 
 
 def _table(n=600, seed=0):
@@ -375,3 +383,328 @@ def test_fit_isotonic_is_monotone_and_clipped_away_from_zero_and_one():
     # out-of-range inputs clip to the end values rather than raising
     assert apply(np.array([-5.0]))[0] == pytest.approx(out[0])
     assert apply(np.array([5.0]))[0] == pytest.approx(out[-1])
+
+
+# --------------------------------------------------------------------------
+# HazardCandidate (SP3 Task 3)
+# --------------------------------------------------------------------------
+
+def _hazard_pair(n=500, seed=1):
+    """A feature table and the matching fights table, with the method/round
+    labels made mutually consistent so the hazard rows are well formed."""
+    rng = np.random.default_rng(seed)
+    dates = pd.to_datetime("2014-01-01") + pd.to_timedelta(
+        rng.integers(0, 6 * 365, size=n), unit="D")
+    elo_diff = rng.normal(0, 120, size=n)
+    p = 1 / (1 + 10 ** (-elo_diff / 400))
+    y = (rng.uniform(size=n) < p).astype(int)
+    scheduled = rng.choice([3, 5], size=n, p=[0.85, 0.15])
+    method = rng.choice(["ko_tko", "submission", "decision"], size=n, p=[0.35, 0.2, 0.45])
+    finish_round = np.array([
+        0 if m == "decision" else rng.integers(1, s + 1)
+        for m, s in zip(method, scheduled)
+    ])
+    bucket = np.where(method == "decision", None,
+                      np.where(finish_round >= 4, "45", finish_round.astype(str)))
+    features = pd.DataFrame({
+        "fight_id": [f"f{i}" for i in range(n)], "date": dates, "swapped": False,
+        "y_winner": y, "y_method": pd.array(method, dtype="string"),
+        "y_finish_round": pd.array(bucket, dtype="string"),
+        "weight_class": pd.array(rng.choice(["Lightweight", "Women's Strawweight"], size=n),
+                                 dtype="string"),
+        "title_fight": False, "scheduled_rounds": pd.array(scheduled, dtype="Int64"),
+        "elo_diff": elo_diff, "age_diff": rng.normal(0, 5, size=n),
+        "debut_a": False, "debut_b": False,
+        "age_a": rng.normal(30, 4, size=n), "age_b": rng.normal(30, 4, size=n),
+    }).sort_values("date", kind="stable").reset_index(drop=True)
+    fights = pd.DataFrame({
+        "fight_id": features["fight_id"],
+        "winner": np.where(features["y_winner"] == 1, "a", "b"),
+        "method": features["y_method"].astype("string"),
+        "finish_round": pd.array(
+            [None if m == "decision" else int(r) for m, r in
+             zip(features["y_method"], features["y_finish_round"].fillna("0").replace(
+                 {"45": "4"}).astype(int))], dtype="Int64"),
+        "scheduled_rounds": features["scheduled_rounds"],
+    })
+    return features, fights
+
+
+@pytest.fixture(scope="module")
+def hazard_pair():
+    return _hazard_pair()
+
+
+@pytest.fixture(scope="module")
+def hazard_fold(hazard_pair):
+    return make_folds(hazard_pair[0]["date"], fold_years=(2019,))[0]
+
+
+def _hazard_candidate(fights, **overrides):
+    kwargs = {"seeds": (0,), "params": {"max_depth": 2}, "n_runs": 400, **overrides}
+    return HazardCandidate(fights=fights, **kwargs)
+
+
+def test_hazard_candidate_shapes_and_joint_cells(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    pred, info = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    n = int(hazard_fold.eval.sum())
+    assert pred["winner"].shape == (n,)
+    assert pred["method"].shape == (n, 3) and pred["round"].shape == (n, 4)
+    assert pred["joint_cells"].shape == (n, 18)
+    assert pred["joint_zero_mass"].shape == (n, 18)
+    assert pred["joint_cells"].sum(axis=1) == pytest.approx(np.ones(n))
+    assert (pred["joint_cells"] >= 0).all()
+
+
+def test_hazard_marginals_are_read_off_the_same_joint(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    pred, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    cells = pred["joint_cells"]
+    a_mass = cells[:, :8].sum(axis=1) + cells[:, 16]
+    assert pred["winner"] == pytest.approx(a_mass)
+    ko = cells[:, 0:4].sum(axis=1) + cells[:, 8:12].sum(axis=1)
+    assert pred["method"][:, 0] == pytest.approx(ko)
+    assert pred["method"][:, 2] == pytest.approx(cells[:, 16:].sum(axis=1))
+    assert pred["method"].sum(axis=1) == pytest.approx(np.ones(len(cells)))
+    assert pred["round"].sum(axis=1) == pytest.approx(np.ones(len(cells)))
+
+
+def test_hazard_three_round_fights_get_no_round_45_mass(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    pred, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    three = (features.loc[hazard_fold.eval, "scheduled_rounds"] <= 3).to_numpy()
+    assert pred["round"][three, 3].sum() == 0.0
+    assert pred["joint_cells"][three][:, [3, 7, 11, 15]].sum() == 0.0
+    assert pred["joint_cells"][~three][:, [3, 7, 11, 15]].sum() > 0.0
+
+
+def test_hazard_symmetric_matchup_is_exactly_a_coin_flip(hazard_pair, hazard_fold):
+    """The symmetrisation contract: averaging the two corner orderings has to
+    map A onto B correctly, so a matchup with no corner asymmetry must come
+    back at exactly 0.5 -- not 0.5 plus Monte Carlo noise."""
+    features, fights = hazard_pair
+    symmetric = features.copy()
+    evaluated = hazard_fold.eval
+    for column in ("elo_diff", "age_diff"):
+        symmetric.loc[evaluated, column] = 0.0
+    symmetric.loc[evaluated, "age_b"] = symmetric.loc[evaluated, "age_a"].to_numpy()
+    pred, _ = _hazard_candidate(fights).fit_predict(symmetric, hazard_fold, None)
+    assert (pred["winner"] == 0.5).all()
+    cells = pred["joint_cells"]
+    assert cells[:, :8] == pytest.approx(cells[:, 8:16], abs=0.0)
+    assert cells[:, 16] == pytest.approx(cells[:, 17], abs=0.0)
+
+
+def test_hazard_candidate_is_deterministic(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    a, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    b, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    assert np.array_equal(a["winner"], b["winner"])
+    assert np.array_equal(a["joint_cells"], b["joint_cells"])
+
+
+def test_hazard_info_carries_both_members_and_the_monte_carlo_diagnostics(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    _, info = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    assert set(info["hazard"]) == {"best_iteration", "n_train"}
+    assert set(info["decision"]) == {"best_iteration", "n_train"}
+    assert info["n_runs"] == 400 and info["alpha"] == 1.0
+    assert 0.0 < info["mc_standard_error"] < 0.05
+    assert 0.0 <= info["zero_mass_cell_fraction"] <= 1.0
+    assert info["n_train"] == int(hazard_fold.train.sum())
+
+
+def test_hazard_candidate_never_trains_on_the_evaluation_outcomes(hazard_pair, hazard_fold):
+    """Scrambling the evaluation rows' labels must not move a single
+    prediction -- the hazard rows are built from the training fights only."""
+    features, fights = hazard_pair
+    base, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    scrambled = features.copy()
+    scrambled.loc[hazard_fold.eval, "y_winner"] = 1 - scrambled.loc[hazard_fold.eval, "y_winner"]
+    scrambled.loc[hazard_fold.eval, "y_method"] = "decision"
+    scrambled.loc[hazard_fold.eval, "y_finish_round"] = None
+    other, _ = _hazard_candidate(fights).fit_predict(scrambled, hazard_fold, None)
+    assert np.array_equal(base["joint_cells"], other["joint_cells"])
+
+
+def test_hazard_candidate_needs_the_fights_table(hazard_pair, hazard_fold):
+    features, _ = hazard_pair
+    with pytest.raises(ValueError, match="fights"):
+        HazardCandidate(seeds=(0,), n_runs=100).fit_predict(features, hazard_fold, None)
+
+
+def test_hazard_seed_ensemble_averages_the_member_probabilities(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    one, info_one = _hazard_candidate(fights, seeds=(0,)).fit_predict(features, hazard_fold, None)
+    two, info_two = _hazard_candidate(fights, seeds=(0, 1)).fit_predict(features, hazard_fold, None)
+    assert isinstance(info_one["hazard"]["best_iteration"], int)
+    assert len(info_two["hazard"]["best_iteration"]) == 2
+    assert not np.array_equal(one["joint_cells"], two["joint_cells"])
+
+
+# --------------------------------------------------------------------------
+# D1: the calibrated simulator (SP3 fallback branch)
+# --------------------------------------------------------------------------
+
+def test_hazard_calibration_rescales_only_the_winner_marginal(hazard_pair, hazard_fold):
+    """The fitted temperature is the whole of the difference: the evaluation
+    rows' simulation is bit-for-bit the uncalibrated run's, and the joint is
+    the uncalibrated joint with the recalibrated winner imposed on it."""
+    features, fights = hazard_pair
+    raw, raw_info = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    cal, info = _hazard_candidate(fights, calibrate=True).fit_predict(features, hazard_fold, None)
+    assert "temperature" not in raw_info and raw_info.get("calibrated") is None
+    assert info["calibrated"] is True and info["temperature"] > 0
+    assert cal["winner"] == pytest.approx(apply_temperature(raw["winner"], info["temperature"]))
+    assert cal["joint_cells"] == pytest.approx(
+        impose_winner_marginal(raw["joint_cells"], cal["winner"], METHOD_CLASSES, ROUND_CLASSES))
+    assert np.array_equal(cal["joint_zero_mass"], raw["joint_zero_mass"])
+
+
+def test_hazard_calibrated_joint_stays_coherent_with_its_marginals(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    cal, _ = _hazard_candidate(fights, calibrate=True).fit_predict(features, hazard_fold, None)
+    cells = cal["joint_cells"]
+    assert cells.sum(axis=1) == pytest.approx(np.ones(len(cells)))
+    read = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)
+    assert read["winner"] == pytest.approx(cal["winner"])
+    assert read["method"] == pytest.approx(cal["method"])
+    assert read["round"] == pytest.approx(cal["round"])
+
+
+def test_hazard_calibration_preserves_each_corner_s_method_and_round_shape(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    raw, _ = _hazard_candidate(fights).fit_predict(features, hazard_fold, None)
+    cal, _ = _hazard_candidate(fights, calibrate=True).fit_predict(features, hazard_fold, None)
+    for block in corner_cells(METHOD_CLASSES, ROUND_CLASSES):
+        before = raw["joint_cells"][:, block]
+        after = cal["joint_cells"][:, block]
+        assert (after / after.sum(axis=1, keepdims=True)) == pytest.approx(
+            before / before.sum(axis=1, keepdims=True))
+
+
+def test_hazard_calibration_never_sees_an_evaluation_label(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    base, base_info = _hazard_candidate(fights, calibrate=True).fit_predict(features, hazard_fold, None)
+    scrambled = features.copy()
+    scrambled.loc[hazard_fold.eval, "y_winner"] = 1 - scrambled.loc[hazard_fold.eval, "y_winner"]
+    scrambled.loc[hazard_fold.eval, "y_method"] = "decision"
+    scrambled.loc[hazard_fold.eval, "y_finish_round"] = None
+    other, other_info = _hazard_candidate(fights, calibrate=True).fit_predict(
+        scrambled, hazard_fold, None)
+    assert other_info["temperature"] == base_info["temperature"]
+    assert np.array_equal(base["joint_cells"], other["joint_cells"])
+
+
+def test_hazard_calibration_refuses_an_inner_val_that_overlaps_eval(hazard_pair):
+    features, fights = hazard_pair
+    mask = np.ones(len(features), dtype=bool)
+    fold = Fold(year=2019, train=~mask, inner_val=mask, eval=mask)
+    with pytest.raises(ValueError, match="overlap"):
+        _hazard_candidate(fights, calibrate=True).fit_predict(features, fold, None)
+
+
+# --------------------------------------------------------------------------
+# D2: the hybrid -- blend winner x simulator conditional (SP3 fallback branch)
+# --------------------------------------------------------------------------
+
+HYBRID_KWARGS = dict(seeds=(0,), params={"max_depth": 2}, config={"hidden": (16, 8)},
+                     max_epochs=3, n_runs=400)
+
+
+def _hybrid(fights, **overrides):
+    return HybridCandidate(fights=fights, **{**HYBRID_KWARGS, **overrides})
+
+
+@pytest.fixture(scope="module")
+def hybrid_parts(hazard_pair, hazard_fold):
+    features, fights = hazard_pair
+    cand = _hybrid(fights)
+    blend, hazard = cand.members()
+    return (cand.fit_predict(features, hazard_fold, None),
+            blend.fit_predict(features, hazard_fold, None),
+            hazard.fit_predict(features, hazard_fold, None))
+
+
+def test_hybrid_winner_marginal_is_exactly_the_blend_s(hybrid_parts):
+    """The winner clause is satisfied by construction rather than measured:
+    the hybrid's winner marginal IS the incumbent's, bit for bit."""
+    (pred, info), (blend_pred, _), _ = hybrid_parts
+    assert np.array_equal(pred["winner"], blend_pred["winner"])
+    read = marginals_from_cells(pred["joint_cells"], METHOD_CLASSES, ROUND_CLASSES)
+    assert read["winner"] == pytest.approx(blend_pred["winner"])
+    assert set(info) >= {"blend", "hazard", "n_train"}
+
+
+def test_hybrid_conditional_method_and_round_are_exactly_the_simulator_s(hybrid_parts):
+    """And the other half of the composition: P(method, round | winner) comes
+    from the simulated runs untouched, which is what re-weighting means."""
+    (pred, _), _, (haz_pred, _) = hybrid_parts
+    for block in corner_cells(METHOD_CLASSES, ROUND_CLASSES):
+        hybrid = pred["joint_cells"][:, block]
+        simulated = haz_pred["joint_cells"][:, block]
+        assert (hybrid / hybrid.sum(axis=1, keepdims=True)) == pytest.approx(
+            simulated / simulated.sum(axis=1, keepdims=True))
+
+
+def test_hybrid_joint_is_a_coherent_distribution(hybrid_parts):
+    (pred, _), _, _ = hybrid_parts
+    cells = pred["joint_cells"]
+    assert (cells >= 0).all()
+    assert cells.sum(axis=1) == pytest.approx(np.ones(len(cells)))
+    read = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)
+    assert read["method"] == pytest.approx(pred["method"])
+    assert read["round"] == pytest.approx(pred["round"])
+    assert pred["method"].sum(axis=1) == pytest.approx(np.ones(len(cells)))
+
+
+def test_hybrid_three_round_fights_keep_an_empty_round_45(hazard_pair, hybrid_parts):
+    features, _ = hazard_pair
+    (pred, _), _, _ = hybrid_parts
+    fold = make_folds(features["date"], fold_years=(2019,))[0]
+    three = (features.loc[fold.eval, "scheduled_rounds"] <= 3).to_numpy()
+    assert pred["joint_cells"][three][:, [3, 7, 11, 15]].sum() == 0.0
+    assert pred["round"][three, 3].sum() == 0.0
+
+
+def test_hybrid_needs_the_fights_table(hazard_pair, hazard_fold):
+    features, _ = hazard_pair
+    with pytest.raises(ValueError, match="fights"):
+        HybridCandidate(**HYBRID_KWARGS).fit_predict(features, hazard_fold, None)
+
+
+def test_hybrid_members_carry_the_shared_configuration(hazard_pair):
+    _, fights = hazard_pair
+    blend, hazard = _hybrid(fights, drop_columns=("age_diff",), weight=0.3).members()
+    assert isinstance(blend, BlendCandidate) and isinstance(hazard, HazardCandidate)
+    assert blend.weight == 0.3 and blend.seeds == (0,) and blend.drop_columns == ("age_diff",)
+    assert hazard.seeds == (0,) and hazard.drop_columns == ("age_diff",)
+    assert hazard.fights is fights and hazard.calibrate is False
+
+
+# --------------------------------------------------------------------------
+# D3 control: the blend's own prediction, scored through the cell layout
+# --------------------------------------------------------------------------
+
+def test_blend_joint_cells_change_no_head_and_compose_the_marginals(table, fold):
+    """The control has to be the SAME prediction, differing only in which
+    scorer reads it -- otherwise it is not a control."""
+    plain, _ = BlendCandidate(**BLEND_KWARGS).fit_predict(table, fold, None)
+    cells, info = BlendCandidate(emit_joint_cells=True, **BLEND_KWARGS).fit_predict(
+        table, fold, None)
+    for head in ("winner", "method", "round"):
+        assert np.array_equal(plain[head], cells[head])
+    assert plain.get("joint_cells") is None
+    assert cells["joint_cells"] == pytest.approx(compose_joint_cells(
+        plain["winner"], plain["method"], plain["round"], METHOD_CLASSES, ROUND_CLASSES))
+    assert cells["joint_cells"].sum(axis=1) == pytest.approx(np.ones(len(plain["winner"])))
+
+
+def test_blend_joint_cells_score_what_the_composed_path_scores(table, fold):
+    pred, _ = BlendCandidate(emit_joint_cells=True, **BLEND_KWARGS).fit_predict(table, fold, None)
+    rows = table.loc[fold.eval]
+    composed = score_rows(rows, {k: v for k, v in pred.items() if k != "joint_cells"},
+                          METHOD_CLASSES, ROUND_CLASSES)
+    through_cells = score_rows(rows, pred, METHOD_CLASSES, ROUND_CLASSES)
+    assert through_cells["joint_log_loss"] == composed["joint_log_loss"]

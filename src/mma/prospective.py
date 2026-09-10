@@ -7,9 +7,19 @@ never rewrites an already-timestamped prediction.
 
 The scorer is passed in and only has to satisfy `Ensemble.predict`'s contract,
 so nothing here changed when the deployed model became a blend
-(`mma.inference.BlendedPredictor`) -- but it is the blend that
+(`mma.inference.BlendedPredictor`) -- but it is the deployed scorer that
 `scripts/predict_upcoming.py` passes, and `predict_symmetrized` therefore
-corner-averages the blend rather than one of its members.
+corner-averages that scorer rather than one of its members.
+
+Since SP3 the deployed scorer is the hybrid (`SimulatorPredictor`), which
+additionally returns a joint distribution over outcome cells, and a record
+gains two fields for it: `joint_probs` (P(corner wins by method in round) for
+every cell, as nested plain JSON) and `p_distance`. They are ADDED, never
+substituted: `p_a_wins`, `method_probs` and `round_probs` keep their meaning
+and their place, so every record written before SP3 still reads the same way
+and `scripts/grade_predictions.py` -- which grades the winner probability --
+parses both shapes unchanged. A scorer that returns no joint (the blend
+alone, a test double) simply produces a record without the two fields.
 """
 from __future__ import annotations
 
@@ -21,6 +31,7 @@ from pathlib import Path
 import pandas as pd
 
 from mma.inference import build_matchup, predict_symmetrized
+from mma.joint import cells_to_dict
 
 
 def normalize_name(name: str) -> str:
@@ -102,6 +113,17 @@ def event_filename(event_name: str, event_date: str) -> str:
     return f"UFC_{slug}_{event_date}.json"
 
 
+def _base_record(wiki_fight: dict) -> dict:
+    """The identifying half of a fight record: what a skipped stub carries and
+    what a real prediction is built on top of. Read straight off the card
+    entry, so it is available even when nothing else about the fight is."""
+    return {
+        "fighter_a_name": wiki_fight["fighter_a_name"],
+        "fighter_b_name": wiki_fight["fighter_b_name"],
+        "weight_class": wiki_fight.get("weight_class"),
+    }
+
+
 def predict_fight(
     wiki_fight: dict,
     name_index: dict[str, dict[str, list[str]]],
@@ -116,16 +138,14 @@ def predict_fight(
 
     `ensemble` only needs to work with `mma.inference.build_matchup` /
     `predict_symmetrized` -- pass a fake in unit tests to avoid loading the
-    real artifacts. The weekly run passes a `BlendedPredictor`, so the
-    `p_a_wins` written here is the symmetrized BLEND.
+    real artifacts. The weekly run passes a `SimulatorPredictor`, so the
+    `p_a_wins` written here is the symmetrized BLEND (the hybrid returns the
+    blend's winner untouched) and the record also carries the simulator's
+    joint distribution.
     """
     name_a = wiki_fight["fighter_a_name"]
     name_b = wiki_fight["fighter_b_name"]
-    base = {
-        "fighter_a_name": name_a,
-        "fighter_b_name": name_b,
-        "weight_class": wiki_fight.get("weight_class"),
-    }
+    base = _base_record(wiki_fight)
 
     id_a, tier_a, reason_a = match_fighter_id(name_a, name_index)
     id_b, tier_b, reason_b = match_fighter_id(name_b, name_index)
@@ -163,7 +183,7 @@ def predict_fight(
     )
     result = predict_symmetrized(ensemble, matchup_ab, matchup_ba)
 
-    return {
+    record = {
         **base,
         "fighter_a_id": id_a,
         "fighter_b_id": id_b,
@@ -185,6 +205,15 @@ def predict_fight(
         "elo_b": float(snap_b["elo_overall"]),
         "skipped": False,
     }
+    if "joint_cells" in result:
+        # The hybrid's joint, stored whole. `p_a_wins` above is its winner
+        # marginal exactly (the blend's number, imposed on the cells), and
+        # `method_probs` / `round_probs` are read off these same cells, so the
+        # record cannot contain two distributions that disagree.
+        record["joint_probs"] = cells_to_dict(
+            result["joint_cells"], result["method_classes"], result["round_classes"])
+        record["p_distance"] = float(result["p_distance"])
+    return record
 
 
 def predict_event(
@@ -196,12 +225,33 @@ def predict_event(
     ensemble,
 ) -> list[dict]:
     """Predict every fight on a card. `event['date']` is an ISO date string
-    used as the as-of date for age / days-since-last-fight features."""
+    used as the as-of date for age / days-since-last-fight features.
+
+    A fight whose prediction RAISES degrades to the same `skipped: True` stub
+    an unmatched name produces, with the exception as its reason, rather than
+    taking the card down with it. `predict_fight` is written not to raise on
+    bad input, but the scorer it calls is a whole model stack, and the blast
+    radius of one unexpected exception here is the entire weekly run:
+    `scripts/predict_upcoming.py` has no try/except between this call and
+    `main`, so one bad matchup would drop every remaining fight and every
+    later event -- and the workflow's `if: always()` commit step would then
+    commit the truncated week as though it were complete. A skip is
+    re-attemptable by a later run (see `write_event_prediction`'s re-attempt
+    policy); a missing fight looks like a card that never had it.
+    """
     as_of = pd.Timestamp(event["date"])
-    return [
-        predict_fight(fight, name_index, snapshots, fighters, ensemble, as_of)
-        for fight in wiki_fights
-    ]
+    out = []
+    for fight in wiki_fights:
+        try:
+            out.append(
+                predict_fight(fight, name_index, snapshots, fighters, ensemble, as_of))
+        except Exception as error:  # noqa: BLE001 -- one fight must not kill the card
+            out.append({
+                **_base_record(fight),
+                "skipped": True,
+                "reason": f"prediction failed: {type(error).__name__}: {error}",
+            })
+    return out
 
 
 def load_event_record(path: Path) -> dict | None:

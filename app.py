@@ -1,4 +1,12 @@
-"""MMA matchup predictor -- Streamlit app over the committed blended scorer."""
+"""MMA matchup predictor -- Streamlit app over the committed hybrid scorer.
+
+Since SP3 the deployed scorer is `mma.inference.SimulatorPredictor`: the blend
+supplies P(A wins) and a Monte Carlo fight simulator supplies
+P(method, round | winner). The app's payoff is the outcome table below --
+every way the fight can end, with one probability each, read straight off the
+one joint distribution the model produces. They sum to 1 because they are one
+distribution, not three heads multiplied together.
+"""
 from __future__ import annotations
 
 import json
@@ -20,16 +28,15 @@ import streamlit as st
 from mma.explain import contributions, humanize, load_boosters
 from mma.inference import (
     BLEND_REPORT,
-    BlendedPredictor,
-    apply_prior_correction,
+    SimulatorPredictor,
     build_matchup,
     predict_symmetrized,
 )
+from mma.joint import cells_to_dict
 from mma.snapshots import build_snapshots
 
 ROOT = Path(__file__).resolve().parent
 PROCESSED = ROOT / "data" / "processed"
-DISPLAY_PRIORS = ROOT / "models" / "torch" / "display_priors.json"
 TORCH_METRICS = ROOT / "models" / "torch" / "metrics_val.json"
 XGB_METRICS = ROOT / "models" / "xgb_metrics_val.json"
 ELO_WALKFORWARD = ROOT / "models" / "walkforward" / "elo.json"
@@ -61,6 +68,12 @@ def model_card_text(weight: float, temperature: float) -> str:
     """Model-card caption built from the committed metrics files and the
     deployed blend's own harness report.
 
+    The deployed scorer is the SP3 hybrid, but its WIN PROBABILITY is the
+    blend's, unchanged -- so the accuracy/log-loss/Brier/ECE quoted here are
+    still the blend's numbers and still describe what serves. The simulator's
+    own evidence is the joint-outcome log-loss, which is quoted in the tail
+    rather than mixed in with winner metrics it is not comparable to.
+
     `weight`/`temperature` are the deployed scorer's own committed
     configuration (`models/blend.json`, via `mma.inference.load_blend_config`
     -- the caller passes `predictor.weight`/`predictor.temperature` so the
@@ -85,14 +98,22 @@ def model_card_text(weight: float, temperature: float) -> str:
     blend = _read_json(BLEND_REPORT)
     deployed = _read_json(BLEND_TEMPERATURE).get("deployed", {}).get("honest_pooled", {})
     head = (
-        f"Model card: a blend — {weight:g}/{1 - weight:g} average of a "
-        "5-seed XGBoost ensemble and a 5-seed multi-task net "
-        "(winner/method/finish-round), temperature-calibrated after averaging "
-        f"(T={temperature:g}). ")
+        f"Model card: a hybrid — the win probability is a blend, a "
+        f"{weight:g}/{1 - weight:g} average of a 5-seed XGBoost ensemble and a "
+        "5-seed multi-task net, temperature-calibrated after averaging "
+        f"(T={temperature:g}); the outcome table is a Monte Carlo fight "
+        "simulator (a 5-seed per-round hazard model and a 5-seed decision "
+        "model, 40,000 simulated fights per matchup — 10,000 runs in each of "
+        "four passes, since every matchup is played out from both corners and "
+        "then again in the mirrored corner ordering) conditioned on that win "
+        "probability. ")
     tail = ("The prospective track record (predictions/track_record.json) is the "
-            "only true holdout. Method and round probabilities assume independence "
-            "from the winner, and predictions are symmetrized across both fighter "
-            "orderings (see code comments). "
+            "only true holdout. The headline numbers below are the win "
+            "probability's; the simulator was shipped on a joint-outcome "
+            "log-loss of 2.1432 against the previous composition's 2.2028 "
+            "(models/walkforward/sp3_decision.json), and it leaves the win "
+            "probability itself unchanged. Predictions are symmetrized across "
+            "both fighter orderings (see code comments). "
             "[Source](https://github.com/dylanmryan/mma-prediction)")
 
     def _triple(block: dict) -> str | None:
@@ -149,6 +170,34 @@ def model_card_text(weight: float, temperature: float) -> str:
                 f"{torch_line}. " + tail)
     return head + "Metrics files not found. " + tail
 
+METHOD_LABELS = {"ko_tko": "KO/TKO", "submission": "Submission"}
+ROUND_LABELS = {"1": "round 1", "2": "round 2", "3": "round 3", "45": "rounds 4-5"}
+#: A cell below this is not shown as its own row. Rounds the bout cannot reach
+#: carry exactly zero in both corners, and a "0.0%" row for rounds 4-5 of a
+#: three-round fight is noise rather than information.
+OUTCOME_FLOOR = 0.0005
+
+
+def outcome_rows(joint: dict, method_classes, round_classes) -> list[tuple]:
+    """`(label, P(corner A wins that way), P(corner B wins that way))` per row.
+
+    `joint` is `mma.joint.cells_to_dict` output -- the whole outcome
+    distribution for one fight. Rows are in reading order: each finishing
+    method by round, then the decision. Every cell of the distribution appears
+    exactly once, except cells below `OUTCOME_FLOOR` in both corners, so the
+    rows shown account for the fight.
+    """
+    rows = []
+    for method_name in (m for m in method_classes if m != "decision"):
+        for round_class in round_classes:
+            values = [joint[corner][method_name][round_class] for corner in ("a", "b")]
+            if max(values) > OUTCOME_FLOOR:
+                label = f"{METHOD_LABELS[method_name]} in {ROUND_LABELS[round_class]}"
+                rows.append((label, *values))
+    rows.append(("Decision", joint["a"]["decision"], joint["b"]["decision"]))
+    return rows
+
+
 st.set_page_config(page_title="MMA Fight Predictor", page_icon="🥊", layout="wide")
 
 
@@ -166,24 +215,28 @@ def load_everything():
     fighters = pd.read_parquet(PROCESSED / "fighters.parquet")
     ratings = pd.read_parquet(PROCESSED / "ratings.parquet")
     snapshots = build_snapshots(fights, stats, ratings)
-    # The deployed scorer: both members, plus the deployed weight and
-    # post-average temperature it was loaded with (models/blend.json, via
-    # mma.inference.load_blend_config -- see predictor.weight/.temperature).
-    predictor = BlendedPredictor.load()
+    # The deployed scorer: the blend (both members, plus the weight and
+    # post-average temperature from models/blend.json -- see
+    # predictor.weight/.temperature) wrapped in the simulator that turns its
+    # winner probability into a joint distribution over outcomes.
+    #
+    # Nothing recalibrates the displayed method/round splits any more. They
+    # used to be multiplied by mean-matching factors because the class-weighted
+    # heads overstated rare classes by up to 2.5x; the simulator's marginals
+    # land within a few points of the base rates on their own
+    # (models/display_calibration.json records the measurement), and
+    # correcting two marginals separately would pull them off the joint they
+    # are read from -- reintroducing exactly the contradiction SP3 removed.
+    predictor = SimulatorPredictor.load()
     as_of = fights["date"].max()
     weight_classes = sorted(fights["weight_class"].dropna().unique().tolist())
-    # Mean-matching correction factors precomputed by
-    # scripts/build_display_priors.py: empirical base rates over the rows the
-    # deployed members trained on (every fight through their train_through
-    # under the refit recipe) divided by the BLEND's mean prediction there.
-    display_factors = json.loads(DISPLAY_PRIORS.read_text())
     return (
         fights, fighters.set_index("fighter_id"), ratings, snapshots, predictor,
-        as_of, weight_classes, display_factors,
+        as_of, weight_classes,
     )
 
 
-fights, fighters, ratings, snapshots, predictor, as_of, weight_classes, display_factors = load_everything()
+fights, fighters, ratings, snapshots, predictor, as_of, weight_classes = load_everything()
 
 eligible = snapshots.join(fighters[["name"]], how="inner").sort_values("name")
 names = eligible["name"].tolist()
@@ -191,7 +244,8 @@ by_name = {name: fighter_id for fighter_id, name in eligible["name"].items()}
 
 st.title("🥊 MMA Fight Predictor")
 st.caption(
-    f"Elo → XGBoost → neural ensemble → calibrated blend, honestly evaluated. "
+    f"Elo → XGBoost → neural ensemble → calibrated blend → fight simulator, "
+    f"honestly evaluated. "
     f"Fighter stats as of {as_of:%Y-%m-%d}."
 )
 
@@ -303,45 +357,53 @@ if name_a and name_b and name_a != name_b:
             "these as what the tree half saw rather than the whole story."
         )
 
-    # Final review finding: the raw model heads are trained with class-weighted
-    # loss, so their softmax outputs overstate rare classes (e.g. predicted
-    # P(rounds 4-5) for 5-round fights was ~3.8x the empirical rate). We
-    # recalibrate before display with mean-matching factors
-    # (empirical prior / mean model prediction on the training split, see
-    # mma.inference.compute_correction_factors) and never show raw numbers.
-    method_raw = dict(zip(result["method_classes"], result["method_probs"]))
-    round_raw = dict(zip(result["round_classes"], result["round_probs"]))
-    round_key = "round_3" if scheduled_rounds <= 3 else "round_5"
-    method = apply_prior_correction(method_raw, display_factors["method"])
-    rounds = apply_prior_correction(round_raw, display_factors[round_key])
+    # The payoff of the whole simulator sub-project: every way this fight can
+    # end, with one probability each, read straight off the joint distribution
+    # the model produced. These are not three heads multiplied together -- the
+    # simulator played the fight out round by round 40,000 times (10,000 runs
+    # in each of four passes: both corners, in both corner orderings) and this
+    # is where those fights ended, so the cells sum to 1 and cannot assert
+    # something no fight could do (a round-3 finish in a two-round bout, a
+    # knockout and a decision at once).
+    joint = cells_to_dict(
+        result["joint_cells"], result["method_classes"], result["round_classes"])
+    outcomes = outcome_rows(joint, result["method_classes"], result["round_classes"])
 
-    labels = {"ko_tko": "KO/TKO", "submission": "Submission", "decision": "Decision"}
-    outcome_rows = []
-    for fighter, p_fighter in ((name_a, p_a), (name_b, 1 - p_a)):
-        for method_name in result["method_classes"]:
-            outcome_rows.append(
-                {
-                    "Winner": fighter,
-                    "Method": labels[method_name],
-                    "Probability": f"{p_fighter * method[method_name]:.1%}",
-                }
-            )
     st.subheader("How it ends")
-    st.caption(
-        "Method and round splits are recalibrated to historical base rates; "
-        "treat as tendencies, not betting odds."
+    distance = result["p_distance"]
+    best = max(outcomes, key=lambda row: max(row[1], row[2]))
+    best_corner = name_a if best[1] >= best[2] else name_b
+    metrics = st.columns(2)
+    metrics[0].metric("Goes the distance", f"{distance:.0%}")
+    metrics[1].metric("Ends inside the distance", f"{1 - distance:.0%}")
+    st.caption(f"Most likely single outcome: **{best_corner} by {best[0].lower()}** "
+               f"at {max(best[1], best[2]):.0%}.")
+    st.dataframe(
+        pd.DataFrame(
+            {name_a: [f"{row[1]:.1%}" for row in outcomes],
+             name_b: [f"{row[2]:.1%}" for row in outcomes]},
+            index=[row[0] for row in outcomes],
+        ),
     )
-    st.dataframe(pd.DataFrame(outcome_rows), hide_index=True)
-    round_labels = ["Round 1", "Round 2", "Round 3", "Rounds 4-5"]
-    finish_share = 1 - method["decision"]
+    # Two things the rendering does that the numbers underneath do not, both
+    # of which the caption has to stop short of claiming away:
+    #   * the headline above is rendered at whole percent and these cells at
+    #     one decimal, so a column can read 62.5% under a 62% headline, and
+    #     rounding alone can push A + B to 100.2%. The columns DO sum to the
+    #     win probability in the distribution; they need not once rounded, so
+    #     the claim is made about the distribution and not about the table.
+    #   * these are Monte Carlo estimates. Re-running at a different `sim_seed`
+    #     moves a cell by ~0.24 points, so the displayed decimal is noise. It
+    #     is kept anyway: rounding to whole percent would print "0%" for the
+    #     real, above-floor cells that make up the tail of a finish
+    #     distribution, which reads as impossible rather than as small.
     st.caption(
-        "If it doesn't go the distance ("
-        + f"{finish_share:.0%} chance), the finish comes in: "
-        + "  ·  ".join(
-            f"{label} {rounds[cls]:.0%}"
-            for label, cls in zip(round_labels, result["round_classes"])
-            if rounds[cls] > 0.001
-        )
+        f"Each cell is the probability that fighter wins that exact way, and "
+        "together they account for the whole fight. They come from one simulated "
+        "process rather than three separate heads, so each column sums to that "
+        "fighter's win probability above rather than drifting from it — figures "
+        "are rounded, and are simulation estimates good to about ±0.2 points. "
+        "Tendencies, not betting odds."
     )
 
     elo_a = ratings[ratings["fighter_id"] == id_a][["date", "post_overall"]]
