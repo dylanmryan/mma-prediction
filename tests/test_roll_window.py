@@ -1,416 +1,66 @@
+"""The retired promotion gate (scripts/roll_window.py).
+
+The gate is gone; the file is kept because it is the record of why it could
+not work, and this module pins the parts of that record a future edit could
+quietly lose:
+
+* it must not run a gate -- no retrain, no staging, no exit code that reads
+  as a promotion decision;
+* it must name what replaced it, so a reader who lands here from an old
+  runbook or workflow step is sent somewhere useful;
+* it must keep BOTH structural reasons the gate failed. The first (it scored
+  one member of four) is the obvious one; the second (a refit-through-latest
+  incumbent makes the held-forward slice in-sample) is the one that says the
+  question itself went away, and it is the reason the replacement asks a
+  different question rather than a fixed version of this one.
+"""
 from __future__ import annotations
 
-from pathlib import Path
-
-import pandas as pd
-import pytest
-
 import scripts.roll_window as roll_window
-from scripts.roll_window import (
-    current_data_cutoff,
-    decide_promotion,
-    graded_fights_since,
-    incumbent_in_sample,
-    promotion_protocol_text,
-)
 
 
-def test_current_data_cutoff_is_max_date():
-    features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2023-06-15", "2022-01-01"])})
-    assert current_data_cutoff(features) == pd.Timestamp("2023-06-15")
+def test_it_runs_nothing():
+    """No retrain, no staging, no promotion decision -- there is no gate left."""
+    for gone in ("_execute", "_retrain_candidate", "_ensemble_val_log_loss",
+                 "decide_promotion", "PROMOTION_THRESHOLD", "PROMOTION_MARGIN"):
+        assert not hasattr(roll_window, gone), gone
 
 
-def _event(event_date, fights):
-    return {"event_name": "Test", "event_date": event_date, "fights": fights}
-
-
-def test_graded_fights_since_excludes_events_before_cutoff():
-    cutoff = pd.Timestamp("2026-01-01")
-    events = [
-        _event("2025-06-01", [{"skipped": False, "actual_winner": "x"}]),  # before cutoff
-        _event("2026-06-01", [{"skipped": False, "actual_winner": "y"}]),  # after cutoff
-    ]
-    graded = graded_fights_since(events, cutoff)
-    assert len(graded) == 1
-    assert graded[0]["actual_winner"] == "y"
-
-
-def test_graded_fights_since_excludes_skipped_and_ungraded():
-    cutoff = pd.Timestamp("2026-01-01")
-    events = [
-        _event("2026-06-01", [
-            {"skipped": True, "reason": "no match"},
-            {"skipped": False},  # not yet graded
-            {"skipped": False, "actual_winner": "z"},
-        ]),
-    ]
-    graded = graded_fights_since(events, cutoff)
-    assert len(graded) == 1
-    assert graded[0]["actual_winner"] == "z"
-
-
-def test_graded_fights_since_empty():
-    assert graded_fights_since([], pd.Timestamp("2026-01-01")) == []
-
-
-def test_promotion_protocol_text_mentions_threshold_and_margin():
-    text = promotion_protocol_text(150, pd.Timestamp("2023-01-01"))
-    assert "150" in text
-    assert "0.002" in text
-    assert "2023-01-01" in text
-    # the protocol names the artifact hash, not a commit sha, and warns that
-    # the split-slice gate is in-sample for a refit incumbent
-    assert "mma.versioning.model_version" in text
-    assert "git sha" not in text
-    assert "IN-SAMPLE" in text and "models/walkforward/" in text
-    assert "scripts/check_display_calibration.py" in text
-
-
-def test_incumbent_in_sample_refit_reaching_into_slice():
-    refit = {"mode": "refit_through", "train_through": "2026-08-08"}
-    assert incumbent_in_sample(refit, "2024-08-08") is True
-    assert incumbent_in_sample(refit, "2026-08-08") is True   # boundary: equal
-    assert incumbent_in_sample(refit, "2026-08-09") is False  # slice fully after
-
-
-def test_incumbent_in_sample_split_mode_never():
-    # split-protocol metrics files have no "mode" key: train < train_end,
-    # slice after it -> never in-sample
-    assert incumbent_in_sample({"winner_ensemble": {"log_loss": 0.65}}, "2024-08-08") is False
-    assert incumbent_in_sample({}, "2024-08-08") is False
-
-
-def test_decide_promotion_beats_margin():
-    assert decide_promotion(new_log_loss=0.640, incumbent_log_loss=0.650) is True
-
-
-def test_decide_promotion_within_margin_rejects():
-    # 0.001 improvement -- below the 0.002 margin -> reject
-    assert decide_promotion(new_log_loss=0.649, incumbent_log_loss=0.650) is False
-
-
-def test_decide_promotion_worse_rejects():
-    assert decide_promotion(new_log_loss=0.660, incumbent_log_loss=0.650) is False
-
-
-def test_decide_promotion_custom_margin():
-    assert decide_promotion(new_log_loss=0.640, incumbent_log_loss=0.650, margin=0.02) is False
-
-
-# --- ensemble-based promotion gate (_execute) --------------------------------
-#
-# _execute retrains the FULL torch ensemble into a temp dir and gates on it.
-# The real retrain is minutes long and the real evaluation loads torch nets,
-# so both are mocked: the candidate retrain (a subprocess) is replaced with a
-# stub that writes fake candidate artifacts, and the two ensemble evaluations
-# are driven with controlled (incumbent_ll, candidate_ll) values. We never
-# touch the real committed models/torch -- MODELS_DIR is monkeypatched to a
-# tmp dir holding fake incumbent artifacts with distinctive bytes.
-
-# The incumbent metrics file is a split-protocol one (no "mode" key), so the
-# refit in-sample guard lets _execute proceed; see the guard tests below for
-# the refit case.
-INCUMBENT_FILES = {
-    "net_seed0.pt": b"INCUMBENT_NET_0",
-    "net_seed1.pt": b"INCUMBENT_NET_1",
-    "preprocess.json": b"INCUMBENT_PREP",
-    # any third file in models/torch: this fixture is about backup/restore
-    # covering the whole directory, not about this file's contents
-    "display_priors.json": b"INCUMBENT_PRIORS",
-    "metrics_val.json": b'{"winner_ensemble": {"log_loss": 0.65}}',
-}
-CANDIDATE_FILES = {
-    "net_seed0.pt": b"CANDIDATE_NET_0",
-    "net_seed1.pt": b"CANDIDATE_NET_1",
-    "preprocess.json": b"CANDIDATE_PREP",
-    "metrics_val.json": b"CANDIDATE_METRICS",
-}
-
-
-def _write_dir(directory: Path, files: dict[str, bytes]) -> None:
-    directory.mkdir(parents=True, exist_ok=True)
-    for name, content in files.items():
-        (directory / name).write_bytes(content)
-
-
-def _read_dir(directory: Path) -> dict[str, bytes]:
-    return {p.name: p.read_bytes() for p in directory.iterdir() if p.is_file()}
-
-
-@pytest.fixture
-def staged(tmp_path, monkeypatch):
-    """A tmp MODELS_DIR with fake incumbent models/torch artifacts."""
-    models_dir = tmp_path / "models"
-    torch_dir = models_dir / "torch"
-    _write_dir(torch_dir, INCUMBENT_FILES)
-    monkeypatch.setattr(roll_window, "MODELS_DIR", models_dir)
-    return models_dir, torch_dir
-
-
-def _drive_execute(
-    models_dir, monkeypatch, incumbent_ll, candidate_ll, remeasure=None
-):
-    """Run _execute with the retrain, both ensemble evals, and the display-
-    calibration re-measurement all mocked. The re-measurement is ALWAYS
-    patched (default no-op) so a promote path never shells out to the real
-    check_display_calibration.py and touches the real models/torch.
-
-    It is a re-MEASUREMENT, not a rebuild of priors: since SP3 nothing
-    recalibrates a displayed number, and models/display_calibration.json
-    records a property of the model rather than feeding one."""
-    candidate_torch_dir = models_dir / roll_window.CANDIDATE_DIR_NAME / "torch"
-
-    def fake_retrain(out_dir, train_end, val_start, val_end):
-        # stand in for the minutes-long train_torch.py subprocess
-        _write_dir(Path(out_dir), CANDIDATE_FILES)
-
-    def fake_eval(ensemble_dir, features, val_start, val_end):
-        # incumbent scored on models/torch, candidate on the temp dir
-        if roll_window.CANDIDATE_DIR_NAME in str(ensemble_dir):
-            return candidate_ll
-        return incumbent_ll
-
-    monkeypatch.setattr(roll_window, "_retrain_candidate", fake_retrain)
-    monkeypatch.setattr(roll_window, "_ensemble_val_log_loss", fake_eval)
-    monkeypatch.setattr(
-        roll_window, "_remeasure_display_calibration", remeasure or (lambda: None)
-    )
-
-    features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
-    roll_window._execute(features, cutoff=pd.Timestamp("2024-06-01"))
-    return candidate_torch_dir
-
-
-def test_execute_promotes_when_candidate_beats_margin(staged, monkeypatch, capsys):
-    models_dir, torch_dir = staged
-    calls = {"remeasured": 0}
-
-    def record_remeasure():
-        calls["remeasured"] += 1
-
-    candidate_torch_dir = _drive_execute(
-        models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.640,
-        remeasure=record_remeasure,
-    )
-
-    # candidate artifacts staged into models/torch
-    staged_now = _read_dir(torch_dir)
-    for name, content in CANDIDATE_FILES.items():
-        assert staged_now[name] == content
-
-    # incumbent backed up (originals recoverable on disk)
-    backup_dir = models_dir / roll_window.BACKUP_DIR_NAME
-    assert backup_dir.exists()
-    assert _read_dir(backup_dir) == INCUMBENT_FILES
-
-    # display calibration re-measured against the newly staged ensemble
-    assert calls["remeasured"] == 1
-
-    # temp candidate dir cleaned up
-    assert not candidate_torch_dir.parent.exists()
-
+def test_main_prints_the_notice_and_exits_zero(capsys):
+    assert roll_window.main([]) == 0
     out = capsys.readouterr().out
-    assert "PROMOTED" in out
-    assert "STAGED" in out or "staged" in out
-    assert "re-measured" in out
+    assert "RETIRED" in out
+    assert roll_window.REPLACEMENT in out
 
 
-def test_execute_promotion_survives_a_remeasurement_failure(staged, monkeypatch, capsys):
-    """A display-calibration re-measurement failure must NOT abort the
-    promotion: the ensemble stays staged and a clear warning is printed
-    instead of raising. Since SP3 that file is a measurement rather than an
-    input to serving, so a stale one misleads a reader rather than changing a
-    prediction."""
-    models_dir, torch_dir = staged
-
-    def boom():
-        raise RuntimeError("kaboom")
-
-    candidate_torch_dir = _drive_execute(
-        models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.600,
-        remeasure=boom,  # does not propagate out of _execute
-    )
-
-    # ensemble still staged despite the re-measurement failure
-    staged_now = _read_dir(torch_dir)
-    for name, content in CANDIDATE_FILES.items():
-        assert staged_now[name] == content
-
-    # temp dir still cleaned up
-    assert not candidate_torch_dir.parent.exists()
-
-    out = capsys.readouterr().out
-    assert "PROMOTED" in out
-    assert "WARNING" in out
-    assert "kaboom" in out
+def test_the_retired_flags_still_reach_the_notice(capsys):
+    """An old invocation must get the explanation, not an argparse error that
+    says nothing about what happened to the gate."""
+    assert roll_window.main(["--execute"]) == 0
+    assert "RETIRED" in capsys.readouterr().out
 
 
-def test_execute_rejects_when_candidate_within_margin(staged, monkeypatch, capsys):
-    models_dir, torch_dir = staged
-    candidate_torch_dir = _drive_execute(
-        models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.649
-    )
-
-    # incumbent artifacts byte-identical unchanged
-    assert _read_dir(torch_dir) == INCUMBENT_FILES
-
-    # temp dir cleaned + no backup created (torch was never touched)
-    assert not candidate_torch_dir.parent.exists()
-    assert not (models_dir / roll_window.BACKUP_DIR_NAME).exists()
-
-    out = capsys.readouterr().out
-    assert "REJECTED" in out
+def test_the_notice_names_what_replaced_it_and_how_to_run_it():
+    assert "revalidate_recipe.py" in roll_window.NOTICE
+    assert "--check-staleness" in roll_window.NOTICE
+    assert "recipe_revalidation.json" in roll_window.NOTICE
 
 
-def test_execute_rejects_when_candidate_worse(staged, monkeypatch):
-    models_dir, torch_dir = staged
-    _drive_execute(models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.700)
-    assert _read_dir(torch_dir) == INCUMBENT_FILES
+def test_the_docstring_keeps_both_reasons_the_gate_could_not_work():
+    doc = roll_window.__doc__
+    # (1) it scored one member of the deployed hybrid
+    assert "one member of four" in doc
+    assert "simulator" in doc and "blend" in doc
+    # (2) the held-forward slice was in-sample for a refit incumbent
+    assert "in-sample" in doc.lower()
+    assert "refit_through_latest" in doc
+    # and why that second one retired the question rather than posing a bug
+    assert "no candidate-versus-incumbent choice" in doc
 
 
-def test_execute_always_cleans_temp_dir(staged, monkeypatch):
-    """The candidate temp dir must never linger, promote or reject; and a
-    reject leaves no backup dir behind."""
-    models_dir, _ = staged
-    candidate_root = models_dir / roll_window.CANDIDATE_DIR_NAME
-
-    # promote path
-    _drive_execute(models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.600)
-    assert not candidate_root.exists()
-
-    # reject path from a clean state (rebuild incumbent since promote
-    # overwrote it; clear the promote's retained incumbent backup)
-    import shutil as _shutil
-    _shutil.rmtree(models_dir / roll_window.BACKUP_DIR_NAME, ignore_errors=True)
-    _write_dir(models_dir / "torch", INCUMBENT_FILES)
-    _drive_execute(models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.650)
-    assert not candidate_root.exists()
-    assert not (models_dir / roll_window.BACKUP_DIR_NAME).exists()
-
-
-def test_blended_incumbent_is_detected_from_the_artifacts(tmp_path):
-    models = tmp_path / "models"
-    (models / "torch").mkdir(parents=True)
-    assert roll_window.blended_incumbent(models) is False
-    (models / "xgb_winner_seed0.json").write_text("{}")
-    assert roll_window.blended_incumbent(models) is True
-
-
-def test_execute_aborts_on_a_blended_incumbent_before_touching_anything(staged, monkeypatch):
-    """Since SP2.2 the served model is a blend and this gate scores the torch
-    member alone. A number about half the served model is not a promotion gate
-    for the served model, so --execute refuses to produce one."""
-    models_dir, torch_dir = staged
-    (models_dir / "xgb_winner_seed0.json").write_text("{}")
-    called = {"retrain": False, "eval": False}
-    monkeypatch.setattr(roll_window, "_retrain_candidate",
-                        lambda *a, **k: called.__setitem__("retrain", True))
-    monkeypatch.setattr(roll_window, "_ensemble_val_log_loss",
-                        lambda *a, **k: called.__setitem__("eval", True) or 0.65)
-    features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
-    with pytest.raises(SystemExit, match="BLEND"):
-        roll_window._execute(features, cutoff=pd.Timestamp("2024-06-01"))
-
-    assert called == {"retrain": False, "eval": False}
-    assert (torch_dir / "net_seed0.pt").read_bytes() == INCUMBENT_FILES["net_seed0.pt"]
-    assert not (models_dir / roll_window.BACKUP_DIR_NAME).exists()
-    assert not (models_dir / roll_window.CANDIDATE_DIR_NAME).exists()
-
-
-def test_the_dry_run_protocol_text_describes_the_incumbent_on_disk(tmp_path):
-    """CAVEAT 1 has to be true of whatever is deployed, not of whatever was
-    deployed when the sentence was written."""
-    models = tmp_path / "models"
-    (models / "torch").mkdir(parents=True)
-    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"), models)
-    assert "torch ensemble this gate retrains" in text
-
-    (models / "xgb_winner_seed0.json").write_text("{}")
-    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"), models)
-    assert "BLEND" in text and "half the served model" in text
-
-    (models / "xgb_hazard_seed0.json").write_text("{}")
-    (models / "xgb_decision_seed0.json").write_text("{}")
-    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"), models)
-    assert "HYBRID" in text
-    assert "none of the method, round or joint distribution" in text
-
-
-def test_hybrid_incumbent_needs_both_simulator_members(tmp_path):
-    models = tmp_path / "models"
-    (models / "torch").mkdir(parents=True)
-    assert roll_window.hybrid_incumbent(models) is False
-    (models / "xgb_hazard_seed0.json").write_text("{}")
-    assert roll_window.hybrid_incumbent(models) is False  # half a simulator is not one
-    (models / "xgb_decision_seed0.json").write_text("{}")
-    assert roll_window.hybrid_incumbent(models) is True
-
-
-def test_execute_aborts_on_a_hybrid_incumbent_naming_what_it_does_not_cover(
-        staged, monkeypatch):
-    """The abort has to say what the gate actually misses. Against a hybrid
-    that is more than half a winner probability: the whole joint distribution
-    the app and the prediction records show comes from members this gate never
-    touches."""
-    models_dir, torch_dir = staged
-    (models_dir / "xgb_winner_seed0.json").write_text("{}")
-    (models_dir / "xgb_hazard_seed0.json").write_text("{}")
-    (models_dir / "xgb_decision_seed0.json").write_text("{}")
-    called = {"retrain": False, "eval": False}
-    monkeypatch.setattr(roll_window, "_retrain_candidate",
-                        lambda *a, **k: called.__setitem__("retrain", True))
-    monkeypatch.setattr(roll_window, "_ensemble_val_log_loss",
-                        lambda *a, **k: called.__setitem__("eval", True) or 0.65)
-    features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
-    with pytest.raises(SystemExit, match="HYBRID"):
-        roll_window._execute(features, cutoff=pd.Timestamp("2024-06-01"))
-
-    assert called == {"retrain": False, "eval": False}
-    assert (torch_dir / "net_seed0.pt").read_bytes() == INCUMBENT_FILES["net_seed0.pt"]
-
-
-def test_execute_aborts_when_incumbent_is_refit_in_sample(staged, monkeypatch):
-    """A refit_through incumbent trained through the latest date is in-sample
-    on the newest-2-years slice: --execute must refuse before scoring or
-    retraining anything, and leave models/torch untouched."""
-    models_dir, torch_dir = staged
-    (torch_dir / "metrics_val.json").write_text(
-        '{"mode": "refit_through", "train_through": "2026-06-01"}'
-    )
-    called = {"retrain": False, "eval": False}
-
-    def fake_retrain(*a, **k):
-        called["retrain"] = True
-
-    def fake_eval(*a, **k):
-        called["eval"] = True
-        return 0.65
-
-    monkeypatch.setattr(roll_window, "_retrain_candidate", fake_retrain)
-    monkeypatch.setattr(roll_window, "_ensemble_val_log_loss", fake_eval)
-    features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
-    with pytest.raises(SystemExit, match="in-sample"):
-        roll_window._execute(features, cutoff=pd.Timestamp("2024-06-01"))
-
-    assert called == {"retrain": False, "eval": False}
-    assert (torch_dir / "net_seed0.pt").read_bytes() == INCUMBENT_FILES["net_seed0.pt"]
-    assert not (models_dir / roll_window.BACKUP_DIR_NAME).exists()
-    assert not (models_dir / roll_window.CANDIDATE_DIR_NAME).exists()
-
-
-def test_execute_aborts_when_no_incumbent_ensemble(tmp_path, monkeypatch, capsys):
-    models_dir = tmp_path / "models"
-    (models_dir / "torch").mkdir(parents=True)  # empty -- no net_seed*.pt
-    monkeypatch.setattr(roll_window, "MODELS_DIR", models_dir)
-
-    called = {"retrain": False}
-
-    def fake_retrain(*a, **k):
-        called["retrain"] = True
-
-    monkeypatch.setattr(roll_window, "_retrain_candidate", fake_retrain)
-    features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
-    roll_window._execute(features, cutoff=pd.Timestamp("2024-06-01"))
-
-    assert called["retrain"] is False  # aborted before any retrain
-    assert "No incumbent" in capsys.readouterr().out
+def test_the_docstring_still_says_nothing_is_promoted_automatically():
+    """The one thing the gate got right, and the property the replacement
+    inherits: a bar that no longer clears goes to a human."""
+    doc = " ".join(roll_window.__doc__.split())
+    assert "it never promoted anything automatically" in doc
+    assert "reported to a human, not acted on" in doc

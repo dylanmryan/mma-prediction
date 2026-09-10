@@ -18,8 +18,11 @@ same split in the XGBoost trainer):
   of them selects it) -- fit the preprocessor and each seed on ``date <
   --train-end``, early-stop on the ``[--val-start, --val-end]`` slice, fit
   each seed's temperature on that slice, and report the slice's ensemble
-  metrics. This is the original pre-2021 / 2021-2023 recipe and what
-  ``scripts/roll_window.py --execute`` drives with explicit dates.
+  metrics. This is the original pre-2021 / 2021-2023 recipe, and it is what
+  the walk-forward harness's protocol A measures. Nothing deploys it: the
+  script that used to drive it with explicit dates
+  (``scripts/roll_window.py --execute``) is retired, and its aborts are
+  half the reason why.
 
 Why refit is the default: the walk-forward harness (scripts/run_walkforward.py)
 compared early-stopping on a held-out year against a fixed budget on all

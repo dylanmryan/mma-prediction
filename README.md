@@ -919,41 +919,64 @@ picking up the result; since the daily scrape became a standing stage of
 every rebuild that wait is down to days. Nothing here is cherry-picked:
 every prediction this pipeline ever makes gets a row, win or lose.
 
-A walk-forward retraining hook (`scripts/roll_window.py`) watches this
-track record: once 150 graded prospective fights have accumulated since
-the current model's data cutoff, it reports a pre-registered promotion
-protocol. The gate operates on the **full 5-seed torch ensemble**, not a
-proxy: it retrains the ensemble on a pushed-forward cutoff into a temp dir,
-scores both that candidate and the committed incumbent ensemble on the same
-newest-2-years held-forward slice (each as its complete artifact, per-seed
-temperatures included), and promotes only if the candidate beats the
-incumbent by more than 0.002 log-loss. **Since SP2.2 that ensemble is only
-half of the served scorer**, so `--execute` now detects a blended incumbent
-from the artifacts on disk and aborts before retraining or scoring anything,
-rather than reporting a number about half a model as if it described the
-model; the dry-run text the weekly Action prints carries the same caveat.
-Moving this gate onto the blend, or onto the walk-forward harness, is SP4
-work. On promotion
-the candidate ensemble is *staged* into `models/torch` (the incumbent is
-backed up on disk first) and nothing else happens — the script performs no
-git writes. A human then re-runs the refit recipe (bare `scripts/train_xgb.py`,
-`scripts/train_torch.py`, `scripts/train_hazard.py`,
-`scripts/check_display_calibration.py` — a split-protocol
-candidate never ships as-is), runs the suite, reviews the metrics diff, and
-commits by hand; the new model's artifact hash (`mma.versioning.model_version`,
-computed over every artifact that scores — the torch weights and preprocessing
-stats, the twenty-five per-seed XGBoost boosters, `models/blend.json` and
-`models/simulator.json`) becomes the new
-`model_version` and starts a fresh `track_record.json` section automatically.
-Promotion is deliberately a
-manual, stage-only step (`--execute`, run by hand via `workflow_dispatch`)
-and is never wired into CI auto-promotion — the weekly Action only ever runs
-it in `--dry-run` and prints the report. One caveat since the refit recipe
-shipped: the deployed incumbent trains through the latest event, so the
-newest-2-years slice is *in-sample* for it and `--execute` now aborts
-rather than run an invalid comparison. Until SP4 moves this gate onto the
-walk-forward harness, recipe comparisons go through the harness
-(`models/walkforward/`), not this slice.
+There used to be a promotion gate here (`scripts/roll_window.py`): once 150
+graded prospective fights had accumulated it would retrain the torch ensemble
+on a pushed-forward cutoff and promote it over the incumbent if it won on a
+held-forward two-year slice. It is **retired**, and the file is kept as the
+record of why — read its module docstring before building another one. Two
+independent faults, both of which it detected and aborted on itself rather
+than reporting a biased number: it retrained **one member of four** (since SP3
+the served scorer is the hybrid, so a torch-only number is half the winner
+probability and none of the joint distribution), and its held-forward slice
+was **in-sample for the incumbent**, because the deployed recipe trains
+through the latest event. That second one is not a bug: it is the recipe
+working. Under refit-through-latest the weekly Action retrains every member on
+all data whenever new fights arrive, so the fresh fit *is* the incumbent and
+there is no candidate-versus-incumbent choice left for a gate to make.
+
+What replaced it asks the question that stays open once nothing is competing
+to ship. The deployed recipe — feature blocks, held-out columns, blend weight
+and temperature, fit budgets, the hybrid composition — was justified by
+walk-forward evidence computed on a table that ends **2026-08-08**, while the
+models now train through **2026-09-05** and further every week. Nothing
+re-checked that the recipe still clears its bars on the data it is actually
+deployed on. `scripts/revalidate_recipe.py` does: it re-runs the deployed
+hybrid and every paired comparison its bars need on the current table (six
+harness runs, a few minutes), then re-applies the bars **already recorded in
+the committed decision artifacts** — SP3's joint bar and σ_seed from
+`sp3_decision.json`, the deployment-recipe rule from `refit_decision_b1.json`,
+SP2.2's amended ECE gate from `sp2_2_decision.json` — reading every threshold
+out of those artifacts rather than retyping it, so a bar that drifts is a loud
+failure. Run configurations come out of the committed reports' own `config`
+blocks, and the refit B runs take their budget from the *freshly re-run* A,
+because a budget derived on a smaller table is a budget for a different table.
+It writes `models/walkforward/recipe_revalidation.json` and exits non-zero
+only when a gated bar is no longer met.
+
+**First run, 2026-09-09** (`models/walkforward/recipe_revalidation.json`), on
+the 11,290-row table through 2026-09-05 against evidence computed on 11,238
+rows through 2026-08-08: **every bar still clears.** SP3's joint bar by
+−0.0580 against a required 0.01 — 5.8x the margin, negative in every fold
+year — with the winner delta exactly 0.000000, so the clause that holds by
+construction still does. The refit rule by −0.0002 against σ_seed 0.000346 on
+torch (−0.0008 on the XGB member, reported but not gated: the recorded rule
+gates on torch). The blend's ECE gate at 0.0146 against a threshold of
+0.017241. One margin moved materially, and it is the calibration one: the
+blend's harness-form pooled ECE went 0.0124 → 0.0146 on 52 new fights, more
+than halving its headroom (0.0056 → 0.0026). Nothing to act on — the gate
+passes — but it is the number to read first next time.
+
+Like the gate it replaces, it promotes nothing: it deploys no model, stages no
+artifact and makes no git write. A bar that no longer clears is a finding for
+a human. The weekly Action runs only its cheap `--check-staleness` mode, which
+reads dates and fits nothing — the full re-validation would cost every weekly
+run several minutes of re-measuring a table that barely moved, and would turn
+a call about the deployed recipe into a side effect of a cron job. Retraining
+still changes the artifact hash (`mma.versioning.model_version`, computed over
+every artifact that scores — the torch weights and preprocessing stats, the
+twenty-five per-seed XGBoost boosters, `models/blend.json` and
+`models/simulator.json`) and starts a fresh `track_record.json` section
+automatically.
 
 ## Model vs. the betting market
 
@@ -1133,17 +1156,21 @@ refuses to overwrite it without `--force`.
   file is a measurement of the model rather than an input to a prediction, and
   hashing it would open a new track-record section for byte-identical
   predictions whenever the weekly measurement moved a decimal.
-  Retraining (weekly refresh or walk-forward promotion) starts a new
+  Retraining (the weekly refresh, or a deliberate refit by hand) starts a new
   section automatically; retraining is deterministic, so an unchanged
   dataset yields an unchanged version. The evidence behind each deployed
   model lives in `models/walkforward/` (the harness reports, noise floors,
   and refit decision), and the metrics files quote it. After a weekly data
   refresh the refit reuses the committed budget (6 epochs / T 1.15;
   109/73/71 trees on each of five seeds) on the newer data, but the harness
-  reports are *not* re-run by the Action — re-run `scripts/run_walkforward.py`,
-  `scripts/noise_floor.py`, and `scripts/refit_decision.py --reports b1` by
-  hand to refresh the evidence (the train scripts warn when the harness's
-  data is older than the training cutoff). Automating that is SP4.
+  reports are *not* re-run by the Action — run `scripts/revalidate_recipe.py`
+  by hand to re-measure every recorded bar on the current table (it re-runs
+  the harness for the deployed configuration and its paired comparisons, and
+  writes `models/walkforward/recipe_revalidation.json`). The train scripts
+  warn when the harness's data is older than the training cutoff, and the
+  weekly Action reports the same gap through
+  `scripts/revalidate_recipe.py --check-staleness`, which is the signal that
+  it is worth running the full thing.
 
 ## Interactive app
 

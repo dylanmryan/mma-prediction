@@ -548,6 +548,17 @@ refit-through-latest incumbents, leaves the promotion path fully inert. SP4
 must resolve it, and the spec's existing preference (move the gate onto the
 walk-forward harness) resolves both aborts at once.
 
+**Resolved 2026-09-09 — by retiring the question, not the gate's mechanics.**
+The second abort is not a fault to fix: it is the deployment recipe working.
+Under `refit_through_latest` the weekly Action retrains every member on all
+data whenever new fights arrive, so the fresh fit *is* the incumbent and
+there is no candidate-versus-incumbent choice left for a gate to make. Moving
+the same gate onto the harness would have produced a promotion decision with
+nothing to promote. `scripts/roll_window.py` is therefore retired to a
+deprecation record — kept, because its own honest account of both aborts is
+the lesson — and the harness work it was pointing at went into the question
+that *is* open, below.
+
 ### SP3 — Fight simulator
 
 Goal: a Monte Carlo simulator whose empirical outcome distribution is the
@@ -698,12 +709,32 @@ side effect of a data refresh.
   R2: 11%"), P(distance), and the "simulated N times" framing; explanations
   move to the hazard model's top factors.
 - Prospective records store the full joint distribution; grading scores joint
-  log-loss and marginals; `roll_window.py`'s promotion gate switches to the
-  SP1 bar on the walk-forward metric — **now required rather than preferred**:
-  since SP2.2 the gate aborts on a blended incumbent as well as on an
-  in-sample refit one, so the promotion path is inert until this move
-  happens. The weekly Action rebuilds `round_stats` and the derived external
-  table.
+  log-loss and marginals. `roll_window.py`'s promotion gate does **not** move
+  onto the walk-forward metric: **done 2026-09-09, and differently.** The
+  gate's second abort (a refit-through-latest incumbent makes its held-forward
+  slice in-sample) is the recipe working rather than a defect, and under a
+  recipe that refits continuously there is no promotion to gate. The gate is
+  retired to a deprecation record and replaced by
+  `scripts/revalidate_recipe.py`, which asks the question that actually
+  matters once nothing is competing to ship: *does the deployed recipe still
+  clear the bars it was justified by, on the table it now trains on?* It
+  re-runs the deployed hybrid and its paired comparisons on the current table
+  and re-applies SP3's joint bar, the refit rule and SP2.2's amended ECE gate,
+  reading every threshold out of the committed decision artifacts rather than
+  retyping it. Human-triggered and reported: it deploys nothing and exits
+  non-zero only when a bar is no longer met. The weekly Action runs its cheap
+  `--check-staleness` mode instead of the retired dry run — the full
+  re-validation is several minutes of fitting and writes a decision artifact,
+  so making it weekly would turn a human's call into a cron job's side effect.
+  **First run 2026-09-09, on the 11,290-row table through 2026-09-05: every
+  bar still clears.** Joint −0.0580 against a 0.01 bar and negative in every
+  fold year, winner delta exactly 0.000000, refit rule −0.0002 on torch
+  against σ_seed 0.000346, blend ECE 0.0146 against a 0.017241 threshold. The
+  one margin that moved materially is the calibration one — the blend's
+  harness-form pooled ECE 0.0124 → 0.0146 on 52 new fights, more than halving
+  its headroom (0.0056 → 0.0026). It passes; it is what the next re-validation
+  should be read for first.
+  The weekly Action rebuilds `round_stats` and the derived external table.
 - README rewritten around the new ladder (v1 heads → simulator), the
   walk-forward results, and the honest "market still wins / market gap"
   section carried forward.
