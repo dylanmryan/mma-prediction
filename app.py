@@ -103,7 +103,9 @@ def model_card_text(weight: float, temperature: float) -> str:
         "5-seed multi-task net, temperature-calibrated after averaging "
         f"(T={temperature:g}); the outcome table is a Monte Carlo fight "
         "simulator (a 5-seed per-round hazard model and a 5-seed decision "
-        "model, 10,000 simulated fights per matchup) conditioned on that win "
+        "model, 40,000 simulated fights per matchup — 10,000 runs in each of "
+        "four passes, since every matchup is played out from both corners and "
+        "then again in the mirrored corner ordering) conditioned on that win "
         "probability. ")
     tail = ("The prospective track record (predictions/track_record.json) is the "
             "only true holdout. The headline numbers below are the win "
@@ -358,8 +360,9 @@ if name_a and name_b and name_a != name_b:
     # The payoff of the whole simulator sub-project: every way this fight can
     # end, with one probability each, read straight off the joint distribution
     # the model produced. These are not three heads multiplied together -- the
-    # simulator played the fight out round by round 10,000 times and this is
-    # where those fights ended, so the cells sum to 1 and cannot assert
+    # simulator played the fight out round by round 40,000 times (10,000 runs
+    # in each of four passes: both corners, in both corner orderings) and this
+    # is where those fights ended, so the cells sum to 1 and cannot assert
     # something no fight could do (a round-3 finish in a two-round bout, a
     # knockout and a decision at once).
     joint = cells_to_dict(
@@ -382,11 +385,25 @@ if name_a and name_b and name_a != name_b:
             index=[row[0] for row in outcomes],
         ),
     )
+    # Two things the rendering does that the numbers underneath do not, both
+    # of which the caption has to stop short of claiming away:
+    #   * the headline above is rendered at whole percent and these cells at
+    #     one decimal, so a column can read 62.5% under a 62% headline, and
+    #     rounding alone can push A + B to 100.2%. The columns DO sum to the
+    #     win probability in the distribution; they need not once rounded, so
+    #     the claim is made about the distribution and not about the table.
+    #   * these are Monte Carlo estimates. Re-running at a different `sim_seed`
+    #     moves a cell by ~0.24 points, so the displayed decimal is noise. It
+    #     is kept anyway: rounding to whole percent would print "0%" for the
+    #     real, above-floor cells that make up the tail of a finish
+    #     distribution, which reads as impossible rather than as small.
     st.caption(
         f"Each cell is the probability that fighter wins that exact way, and "
         "together they account for the whole fight. They come from one simulated "
-        "process rather than three separate heads, so each column adds up to that "
-        "fighter's win probability above, exactly. Tendencies, not betting odds."
+        "process rather than three separate heads, so each column sums to that "
+        "fighter's win probability above rather than drifting from it — figures "
+        "are rounded, and are simulation estimates good to about ±0.2 points. "
+        "Tendencies, not betting odds."
     )
 
     elo_a = ratings[ratings["fighter_id"] == id_a][["date", "post_overall"]]
