@@ -1298,6 +1298,18 @@ will never have again.
   paying, `scripts/build_external.py` needs a refreshable source, or the
   pre-UFC record needs to come from a live scrape.
 
+  *Followed up 2026-09-09, and the caveat does not hold on the deployed
+  scorer.* Coverage decayed as predicted -- `external_missing` is now 0.510
+  over the trailing twelve months and the 2025 FOLD (which spans 2025-2026)
+  runs at 0.4225 -- so the question was re-asked under a pre-registered
+  removal rule (`docs/superpowers/plans/2026-09-09-external-decay-decision.md`).
+  Dropping the six differentials from the **hybrid** costs **+0.0059** pooled
+  joint log-loss and **+0.0041** row-weighted on 2024-2025, with all eight
+  folds worse; at fresh seeds 5-9, +0.0061 and +0.0026. The "-0.0006 on
+  2024-2025" above is a torch-only number, and SP2.2 had already found these
+  blocks alive through the XGBoost member the deployed blend carries. The
+  block stays; nothing was redeployed. `models/walkforward/external_decay_decision.json`.
+
 **Incumbent after this block (and still the incumbent after Task 12, since
 neither `notice` nor `rankings` shipped):
 `models/walkforward/xgb_external_diffsonly_extslice.json`

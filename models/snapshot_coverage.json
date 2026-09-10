@@ -1,0 +1,215 @@
+{
+  "flag": "external_missing",
+  "threshold": 0.4,
+  "window_months": 12,
+  "trailing": {
+    "window_start": "2025-08-08",
+    "window_end": "2026-08-08",
+    "months": 12,
+    "n": 604,
+    "missing": 308,
+    "share": 0.5099
+  },
+  "breached": true,
+  "standing_decision": {
+    "artifact": "external_decay_decision.json",
+    "verdict": "keep every snapshot-dependent column; CONTEXT is AMBIGUOUS after the fresh-seed confirmation, so nothing is deployed",
+    "per_group": {
+      "EXTERNAL": "KEEP",
+      "NOTICE": "KEEP",
+      "CONTEXT": "AMBIGUOUS"
+    },
+    "trailing_12m_at_decision": 0.5099,
+    "most_recent_fold_at_decision": {
+      "year": "2025",
+      "n": 935,
+      "missing": 395,
+      "share": 0.4225
+    }
+  },
+  "drift_since_decision": 0.0,
+  "by_year": {
+    "1993": {
+      "n": 8,
+      "missing": 0,
+      "share": 0.0
+    },
+    "1994": {
+      "n": 31,
+      "missing": 0,
+      "share": 0.0
+    },
+    "1995": {
+      "n": 38,
+      "missing": 0,
+      "share": 0.0
+    },
+    "1996": {
+      "n": 43,
+      "missing": 0,
+      "share": 0.0
+    },
+    "1997": {
+      "n": 46,
+      "missing": 5,
+      "share": 0.1087
+    },
+    "1998": {
+      "n": 43,
+      "missing": 11,
+      "share": 0.2558
+    },
+    "1999": {
+      "n": 70,
+      "missing": 22,
+      "share": 0.3143
+    },
+    "2000": {
+      "n": 98,
+      "missing": 43,
+      "share": 0.4388
+    },
+    "2001": {
+      "n": 101,
+      "missing": 44,
+      "share": 0.4356
+    },
+    "2002": {
+      "n": 138,
+      "missing": 66,
+      "share": 0.4783
+    },
+    "2003": {
+      "n": 115,
+      "missing": 43,
+      "share": 0.3739
+    },
+    "2004": {
+      "n": 154,
+      "missing": 77,
+      "share": 0.5
+    },
+    "2005": {
+      "n": 205,
+      "missing": 85,
+      "share": 0.4146
+    },
+    "2006": {
+      "n": 377,
+      "missing": 156,
+      "share": 0.4138
+    },
+    "2007": {
+      "n": 344,
+      "missing": 133,
+      "share": 0.3866
+    },
+    "2008": {
+      "n": 455,
+      "missing": 203,
+      "share": 0.4462
+    },
+    "2009": {
+      "n": 475,
+      "missing": 196,
+      "share": 0.4126
+    },
+    "2010": {
+      "n": 500,
+      "missing": 170,
+      "share": 0.34
+    },
+    "2011": {
+      "n": 488,
+      "missing": 157,
+      "share": 0.3217
+    },
+    "2012": {
+      "n": 390,
+      "missing": 31,
+      "share": 0.0795
+    },
+    "2013": {
+      "n": 389,
+      "missing": 4,
+      "share": 0.0103
+    },
+    "2014": {
+      "n": 494,
+      "missing": 2,
+      "share": 0.004
+    },
+    "2015": {
+      "n": 464,
+      "missing": 1,
+      "share": 0.0022
+    },
+    "2016": {
+      "n": 483,
+      "missing": 3,
+      "share": 0.0062
+    },
+    "2017": {
+      "n": 485,
+      "missing": 31,
+      "share": 0.0639
+    },
+    "2018": {
+      "n": 522,
+      "missing": 45,
+      "share": 0.0862
+    },
+    "2019": {
+      "n": 553,
+      "missing": 39,
+      "share": 0.0705
+    },
+    "2020": {
+      "n": 492,
+      "missing": 40,
+      "share": 0.0813
+    },
+    "2021": {
+      "n": 546,
+      "missing": 38,
+      "share": 0.0696
+    },
+    "2022": {
+      "n": 582,
+      "missing": 69,
+      "share": 0.1186
+    },
+    "2023": {
+      "n": 581,
+      "missing": 71,
+      "share": 0.1222
+    },
+    "2024": {
+      "n": 593,
+      "missing": 82,
+      "share": 0.1383
+    },
+    "2025": {
+      "n": 594,
+      "missing": 213,
+      "share": 0.3586
+    },
+    "2026": {
+      "n": 341,
+      "missing": 182,
+      "share": 0.5337
+    }
+  },
+  "overall": {
+    "n": 11238,
+    "missing": 2262,
+    "share": 0.2013
+  },
+  "source": {
+    "snapshot": "ehan03/jds-mma-data",
+    "commit": "ec77f53737829c51fbf15ba140b46d36dee65d22",
+    "ufc_coverage_end": "2024-12-14",
+    "static": true
+  },
+  "why": "The snapshot is static, so this share grows with every event. Past the threshold the rows being served are less covered than the 2025 fold the decay decision was measured on, and that decision (docs/superpowers/plans/2026-09-09-external-decay-decision.md) is due to be re-taken."
+}
