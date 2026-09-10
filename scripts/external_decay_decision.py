@@ -169,6 +169,32 @@ def check_pairing(candidate: dict, incumbent: dict, groups) -> dict:
     }
 
 
+def features_as_reported(features: pd.DataFrame, report: dict) -> pd.DataFrame:
+    """The feature table as it stood when `report` was computed.
+
+    The weekly refresh keeps appending fights, and the last fold is
+    unbounded above (`mma.walkforward.make_folds`), so every appended fight
+    lands in it. Re-deriving the fold weights from today's table would
+    reweight folds against the `n` the harness recorded on a smaller one --
+    silently, and in the one direction that matters most, the recent fold.
+    Every report says which table it ran on, so use that rather than
+    whatever is on disk now.
+    """
+    config = report.get("config", {})
+    cutoff = config.get("features_max_date")
+    if cutoff is None:
+        return features
+    trimmed = features[features["date"] <= pd.Timestamp(cutoff)]
+    expected = config.get("n_feature_rows")
+    if expected is not None and len(trimmed) != expected:
+        raise SystemExit(
+            f"the committed feature table has {len(trimmed)} rows through {cutoff}, "
+            f"but {report.get('name')} was computed on {expected}: the table has been "
+            "rebuilt in a way that changed history, so the report must be re-run"
+        )
+    return trimmed
+
+
 def scored_rows_per_fold(features: pd.DataFrame) -> dict:
     """Rows the joint metric averages over, per fold year, and the fold `n`.
 
@@ -206,8 +232,11 @@ def build(*, print_it: bool = False) -> dict:
         )
 
     features = pd.read_parquet(FEATURES)
-    weights = scored_rows_per_fold(features)
     incumbent = load(INCUMBENT)
+    # The fold weights are pinned to the table the reports were computed on;
+    # the coverage block below deliberately reads the CURRENT table, because
+    # measuring how far the static snapshot has decayed is its whole job.
+    weights = scored_rows_per_fold(features_as_reported(features, incumbent))
 
     results = {}
     for cid, (stem, groups) in CANDIDATES.items():
