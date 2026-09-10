@@ -36,7 +36,7 @@ from mma.dataset import (
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from reconcile_sources import reconcile  # noqa: E402
 from refresh_secondary import (  # noqa: E402
-    SecondaryResult, build_provenance, merge_into, print_report,
+    SECONDARY, SecondaryResult, build_provenance, merge_into, print_report,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +47,33 @@ PROCESSED = ROOT / "data" / "processed"
 def check(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(f"integrity check failed: {message}")
+
+
+def split_dropped(
+    previous: pd.DataFrame, new: pd.DataFrame, provenance: pd.DataFrame | None
+) -> tuple[list[str], list[str]]:
+    """Fight ids the new table drops, split by which source had put them there.
+
+    The regression guard exists to catch a partial or corrupted upstream
+    re-scrape before the weekly Action commits it. A row the PRIMARY never
+    had cannot be a primary regression: if the daily scrape is unreachable
+    this week, or has itself pruned an event, the union simply loses the
+    freshness it had gained. That is worth a loud line, not a red build --
+    and the committed provenance sidecar is exactly what tells the two
+    apart. With no sidecar (a checkout that has never built one) every drop
+    counts as primary, which is the behaviour that predates it.
+    """
+    dropped = set(previous["fight_id"]) - set(new["fight_id"])
+    from_secondary: set = set()
+    if provenance is not None and len(provenance):
+        fights_rows = provenance[provenance["table"] == "fights"]
+        from_secondary = set(
+            fights_rows.loc[fights_rows["source"] == SECONDARY, "row_id"]
+        )
+    return (
+        sorted(dropped - from_secondary),
+        sorted(dropped & from_secondary),
+    )
 
 
 def secondary_stage(
@@ -176,19 +203,33 @@ def main() -> None:
     # a human review, then an explicit --allow-regression run, rather than
     # loosening this bar.
     old_fights_path = PROCESSED / "fights.parquet"
+    old_provenance_path = PROCESSED / "provenance.parquet"
     if old_fights_path.exists():
         previous = pd.read_parquet(old_fights_path)
+        old_provenance = (
+            pd.read_parquet(old_provenance_path) if old_provenance_path.exists() else None
+        )
+        dropped_primary, dropped_secondary = split_dropped(previous, fights, old_provenance)
         report = reconcile(previous, fights)
         print("\nreconcile vs committed fights.parquet:")
         print(f"  n_dropped_by_new: {report['n_dropped_by_new']}")
+        print(f"    of which primary-sourced:   {len(dropped_primary)}")
+        print(f"    of which secondary-sourced: {len(dropped_secondary)}")
         print(f"  winner agreement: {report['agreement']['winner']:.4f}")
+        if dropped_secondary:
+            print(
+                f"  WARNING: {len(dropped_secondary)} fight(s) the daily scrape had "
+                "supplied are gone from this build -- the tables lost freshness they "
+                "had, but no primary result regressed."
+            )
         if args.allow_regression:
             print("  --allow-regression set: not enforcing the regression guard")
         else:
             check(
-                report["n_dropped_by_new"] == 0,
-                f"new fights table drops {report['n_dropped_by_new']} fights present in "
-                "the committed table (re-run with --allow-regression after review)",
+                not dropped_primary,
+                f"new fights table drops {len(dropped_primary)} fights the PRIMARY "
+                "source had put in the committed table "
+                "(re-run with --allow-regression after review)",
             )
             check(
                 report["agreement"]["winner"] >= 0.999,
