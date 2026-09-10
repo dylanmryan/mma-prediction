@@ -1,0 +1,54 @@
+name: Tests
+
+# The suite ran nowhere but a developer's machine. `refresh-data.yml` does run
+# pytest, but only `if steps.refresh.outputs.refresh == 'true'` and only after
+# it has rebuilt the dataset -- so a week with no new fights runs no tests, and
+# a pull request runs none at all. That is how a script nothing exercises rots
+# unnoticed until someone tries to use it, which is exactly what happened to
+# `scripts/build_odds_benchmark.py --mode oof`.
+#
+# This workflow exists to make the suite the gate it was already being treated
+# as. It needs no secrets and no network beyond the package index: everything
+# the tests read -- the processed parquet tables, the deployed model artifacts,
+# the walk-forward reports and decision artifacts -- is committed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      # CPU wheels: nothing here needs CUDA, and the default wheels are a
+      # multi-gigabyte download that dominates the job. Same index the weekly
+      # refresh installs from, so the two jobs resolve the same versions.
+      - name: Install dependencies
+        run: pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cpu
+
+      # tests/conftest.py pins this too; setting it here as well means a
+      # failure in collection, before conftest is imported, still gets it.
+      # torch and xgboost each bring their own OpenMP runtime and clash
+      # without it.
+      - name: Run test suite
+        env:
+          OMP_NUM_THREADS: "1"
+        run: pytest -q

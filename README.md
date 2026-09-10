@@ -1154,6 +1154,11 @@ so first.
   Better still, keep the repo itself outside iCloud (or exclude `.git` from
   sync): sync has corrupted `.git` metadata here more than once.
 - `OMP_NUM_THREADS=1` for any script that imports both torch and xgboost.
+- **CI.** `.github/workflows/tests.yml` runs the suite on every pull request
+  and every push to `main`. It needs no secrets: everything the tests read —
+  the processed tables, the deployed artifacts, the walk-forward reports — is
+  committed. The weekly refresh runs pytest too, but only when new fights
+  arrived, so it is not a gate.
 - **Model identity and evidence.** Prospective predictions are stamped with
   `mma.versioning.model_version()`, a hash of **everything that scores** —
   the torch weights and preprocessing statistics, the twenty-five per-seed
