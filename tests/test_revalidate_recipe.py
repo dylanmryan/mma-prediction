@@ -298,3 +298,28 @@ def test_staleness_needs_no_model_and_no_fit():
     report = rr.staleness_from_disk()
     assert report["table_max_date"] == "2026-09-05"
     assert set(report["members"]) == {"torch", "xgb", "hazard"}
+
+
+def test_staleness_warns_on_stderr_when_the_evidence_is_older_than_the_data():
+    """The weekly Action's step is report-only; the warning is how a stale
+    justification reaches a reader, the way check_snapshot_coverage.py warns
+    about the other measurement that ages rather than breaks."""
+    report = rr.staleness(
+        table_max_date="2026-09-05", n_table_rows=11290,
+        members={"torch": {"train_through": "2026-09-05",
+                           "harness_features_max_date": "2026-08-08"},
+                 "xgb": {"train_through": "2026-09-05",
+                         "harness_features_max_date": "2026-08-08"}},
+    )
+    warning = rr.staleness_warning(report)
+    assert "28 day(s)" in warning
+    assert "revalidate_recipe.py" in warning
+
+
+def test_staleness_is_silent_when_the_evidence_covers_the_data():
+    report = rr.staleness(
+        table_max_date="2026-08-08", n_table_rows=11238,
+        members={"torch": {"train_through": "2026-08-08",
+                           "harness_features_max_date": "2026-08-08"}},
+    )
+    assert rr.staleness_warning(report) is None
