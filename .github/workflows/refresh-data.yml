@@ -102,6 +102,20 @@ jobs:
           OMP_NUM_THREADS: "1"
         run: python scripts/check_display_calibration.py
 
+      # The other weekly measurement, and the one that ages rather than
+      # breaks. The external/notice/context blocks all read one STATIC
+      # snapshot (ehan03/jds-mma-data, UFC coverage to 2024-12-14), so the
+      # share of rows it has never seen grows with every event. Report-only,
+      # like the calibration check above: it puts the number in a committed
+      # diff and warns on stderr once the trailing 12 months are less covered
+      # than the fold the block was last judged on.
+      - name: Measure external-snapshot coverage
+        if: steps.refresh.outputs.refresh == 'true'
+        continue-on-error: true
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/check_snapshot_coverage.py
+
       - name: Run test suite
         if: steps.refresh.outputs.refresh == 'true'
         env:

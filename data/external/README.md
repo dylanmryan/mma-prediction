@@ -31,6 +31,78 @@ coverage ends 2024-12-14, so fighters who debuted after that are
 unmatched by construction. That is what the row-level `external_missing` flag
 and the walk-forward slice of the same name exist to measure.
 
+## How far it has decayed, measured
+
+`external_missing` (at least one corner the snapshot has never seen) over the
+11,238 feature rows, by fight year — regenerate with
+`python scripts/check_snapshot_coverage.py`, which writes
+`models/snapshot_coverage.json` and runs weekly in the Action:
+
+| 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | **2025** | **2026** |
+|---|---|---|---|---|---|---|---|---|
+| 0.086 | 0.071 | 0.081 | 0.070 | 0.119 | 0.122 | 0.138 | **0.359** | **0.534** |
+
+Overall 0.201. Trailing twelve months (2025-08-08 .. 2026-08-08, 604 fights)
+**0.510**. Two things about this table are easy to misread:
+
+* **The high rates before ~2012 are not decay.** The by-year figures run
+  0.34–0.50 across 1999–2011 and then collapse to 0.002 by 2015. That is the
+  snapshot's own historical thinness — cross-source mappings for fighters
+  whose careers ended twenty years ago — and it is stable, not growing. The
+  decay is the 2022→2026 climb.
+* **A walk-forward FOLD is not a calendar year.** The last fold is unbounded
+  above, so the 2025 fold spans 2025 *and* 2026 and runs at **0.4225** missing,
+  not 0.359. Every "recent fold" number quoted anywhere in this repo was earned
+  on those rows; `mma.decay.coverage_by_fold` is what states it correctly, and
+  `models/walkforward/external_decay_decision.json` records it per fold.
+
+## What that means for this block's original result
+
+**The SP2 result is still true and no longer says what it appears to say.**
+SP2 Task 11 shipped `external` at −0.0034 pooled winner log-loss and recorded
+that its gain was *entirely* historical: −0.0047 row-weighted on 2018–2023
+against −0.0006 on 2024–2025, with a "caveat for SP4" that the block would stop
+paying as the snapshot aged. Anyone reading that alongside the decay above
+would reasonably conclude the block is now dead weight.
+
+It is not, and the reason is the scorer. That measurement was made on the
+**torch ensemble alone**, against `torch_v1`. The deployed scorer since SP2.2
+is a blend whose other half is XGBoost, and SP2.2's own finding was that these
+blocks are *alive through the XGBoost member* — the XGB arm is 0.6462 on the
+combined feature set against 0.6490 without it, while the torch arm is 0.6475
+either way. So the "pays only on stale folds" story is a property of the MLP,
+not of the block.
+
+Re-measured on the **deployed hybrid** in September 2026, against
+`models/walkforward/hybrid_e2.json`, by dropping each group of
+snapshot-dependent columns from the model matrix while leaving the table
+untouched (positive = removing them costs):
+
+| removed | pooled joint | recent-fold (2024–25) joint | pooled winner | verdict |
+|---|---|---|---|---|
+| the six `pre_ufc_*` / `days_since_pro_debut` differentials | **+0.0059** | **+0.0041** | +0.0034 | **keep** |
+| the eight `notice` columns | +0.0014 | +0.0031 | +0.0008 | **keep** |
+| `home_country_unknown` | +0.0000 | +0.0003 | +0.0000 | ambiguous — kept |
+| all fifteen | +0.0076 | +0.0053 | +0.0041 | **keep** |
+
+Removing the `external` differentials makes **every one of the eight folds
+worse**, 2024 by +0.0034 and 2025 by +0.0046 of joint log-loss, and the
+recent-fold cost is twelve times the threshold the decision was pre-registered
+against. Confirmed at fresh seeds 5–9 (+0.0061 pooled, +0.0026 recent). The
+block earns its place on the folds that represent the future, on 0.578 coverage,
+and would earn it on less.
+
+The decision, its pre-registered rule and every number above:
+[`docs/superpowers/plans/2026-09-09-external-decay-decision.md`](../../docs/superpowers/plans/2026-09-09-external-decay-decision.md)
+and `models/walkforward/external_decay_decision.json`.
+
+**What would make this worth re-taking.** Coverage moving materially from the
+0.510 trailing rate the decision was taken at. `scripts/check_snapshot_coverage.py`
+runs weekly, warns past 0.40 — so it warns today, deliberately — and prints the
+standing decision and the drift since it beside the number, so the warning is a
+staleness reminder rather than an alarm about a state that has already been
+judged.
+
 Per-column non-null counts over the 2553 committed rows:
 
 | column | non-null | share |

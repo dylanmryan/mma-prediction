@@ -1,0 +1,971 @@
+{
+  "experiment": "external snapshot decay -- does the block still earn its place?",
+  "pre_registration": "docs/superpowers/plans/2026-09-09-external-decay-decision.md",
+  "generated_by": "scripts/external_decay_decision.py",
+  "rule": {
+    "quoted_from_the_plan": "## 5. The rule, stated mechanically\n\nLet, for a removal candidate R against K:\n\n- `d_pooled_joint  = R.pooled.joint_log_loss  \u2212 K.pooled.joint_log_loss`\n- `d_recent_joint  = recent(R.joint_log_loss) \u2212 recent(K.joint_log_loss)`\n- `d_pooled_winner = R.pooled.winner_log_loss \u2212 K.pooled.winner_log_loss`\n\nThe **contribution of keeping** the columns on the recent folds is stated in\nthe direction English states it \u2014 how much worse the removed model is \u2014\n\n```\nkeep_gain_recent = recent(R.joint_log_loss) \u2212 recent(K.joint_log_loss) = d_recent_joint\n```\n\nso it is **positive when keeping them helps** the recent folds. Note that this\nis the same number as `d_recent_joint` and therefore reads in the *opposite*\ndirection to the other two deltas, which are negative-is-better: those are\nabout the removal, this one is about keeping.\n\n> **Sign correction, made 2026-09-09 before any candidate report existed.**\n> As first committed this line read `keep_recent = \u2212d_recent_joint`, which is\n> the wrong sign: negating `removed \u2212 kept` makes \"keeping helps\" come out\n> negative and would have inverted clause 2. The error was found while writing\n> `tests/test_decay.py`, with all four walk-forward runs still in flight and\n> no candidate number read \u2014 the correcting commit precedes the first report\n> in the log. Nothing else in the rule changed. Both directions are now pinned\n> by `tests/test_decay.py::test_a_candidate_that_is_worse_recently_means_keeping_pays_and_keeps`\n> and `::test_a_candidate_that_is_better_recently_removes`.\n\n> **REMOVE the columns iff all three hold:**\n>\n> 1. `d_pooled_joint < 0.01` \u2014 removing them does not worsen pooled joint\n>    log-loss by more than the 0.01 bar; **and**\n> 2. `keep_gain_recent < 0.001` \u2014 the recent-fold (2024\u20132025) contribution of\n>    keeping them is not better than the bar's tenth; **and**\n> 3. `d_pooled_winner <= 0.000346` \u2014 the winner marginal does not regress by\n>    more than \u03c3_seed.\n>\n> Otherwise **KEEP**.\n\nClause 3 is the secondary guard from \u00a74, stated as a veto so it can be applied\nwithout judgement. Clause 1's `<` and clause 2's `<` are strict; clause 3's\n`<=` is inclusive because it is a tolerance rather than a bar. All three are\nevaluated on values rounded to 6 dp, as `mma.walkforward.bar_check` does, so a\ncandidate sitting exactly on a threshold does not cross it on float noise.\n\n**Why the burden is asymmetric.** SP1's rule for an *addition* is \"improve\npooled log-loss by more than the bar\". This is not an addition; it is a\n**simplification**, and the two are not symmetric:\n\n- A block that pays only on stale folds is a **liability** once its coverage\n  decays. Its pooled number averages folds whose coverage (7\u201312% missing) we\n  will never have again with folds whose coverage (36\u201353% missing) is what the\n  deployed model actually faces. Requiring the *simpler* model to beat that\n  average would be requiring it to beat a measurement of a world that no longer\n  exists.\n- The simpler model has **no decay to manage**: no snapshot to refresh, no\n  coverage threshold to watch, no growing gap between the rows the model was\n  fitted on and the rows it serves. That is a real, permanent reduction in\n  maintenance risk that the pooled log-loss does not price.\n- So the pooled clause is a **do-no-harm** clause (the removal must not cost\n  more than the same 0.01 bar an addition would have to clear), while the clause\n  that actually decides is the **recent-fold** one, at a tenth of the bar. The\n  columns keep their place only by earning it on the folds that represent the\n  future, and by a margin an order of magnitude below what a new block would\n  need \u2014 because they are already here and removal has its own cost.\n\n**Ambiguity.** If the three clauses do not agree, or if a candidate's\n`d_pooled_joint` or `keep_gain_recent` lands within 1e-4 of its threshold, the\nresult is recorded as **AMBIGUOUS** and reported rather than resolved. No\ntiebreak is invented after the fact.\n\n**Scope of the decision.** The rule is applied to each of `R_ext`,\n`R_notice` and `R_ctx` independently. The change that is *deployed* is the\nunion of the groups the rule says REMOVE, and that union must itself satisfy\nthe rule as candidate `R_all` before anything is retrained. If the union is\n`EXTERNAL \u222a NOTICE \u222a CONTEXT` then `R_all` is that check; if the union is a\nsingle group, that group's own candidate is the check and `R_all` is reported\nas context.",
+    "thresholds_read_from_that_text": {
+      "joint_bar": 0.01,
+      "recent_bar": 0.001,
+      "sigma_seed": 0.000346
+    },
+    "measured_sigma_seed": 0.0003464101615137373,
+    "recent_years": [
+      2024,
+      2025
+    ]
+  },
+  "column_groups": {
+    "EXTERNAL": [
+      "pre_ufc_wins_diff",
+      "pre_ufc_losses_diff",
+      "pre_ufc_finish_rate_diff",
+      "pre_ufc_finish_loss_rate_diff",
+      "pre_ufc_avg_opp_wins_diff",
+      "days_since_pro_debut_diff"
+    ],
+    "NOTICE": [
+      "notice_shortfall_days_diff",
+      "missed_weight_over_lbs_diff",
+      "short_notice_7_a",
+      "short_notice_7_b",
+      "short_notice_30_a",
+      "short_notice_30_b",
+      "missed_weight_a",
+      "missed_weight_b"
+    ],
+    "CONTEXT": [
+      "home_country_unknown"
+    ]
+  },
+  "flags_held_out_by_every_candidate": [
+    "external_missing",
+    "same_country",
+    "notice_unknown",
+    "home_country_a",
+    "home_country_b"
+  ],
+  "fold_weights": {
+    "joint": {
+      "2018": 521,
+      "2019": 552,
+      "2020": 490,
+      "2021": 544,
+      "2022": 581,
+      "2023": 578,
+      "2024": 591,
+      "2025": 935
+    },
+    "winner": {
+      "2018": 522,
+      "2019": 553,
+      "2020": 492,
+      "2021": 546,
+      "2022": 582,
+      "2023": 581,
+      "2024": 593,
+      "2025": 935
+    }
+  },
+  "coverage": {
+    "flag": "external_missing",
+    "by_year": {
+      "1993": {
+        "n": 8,
+        "missing": 0,
+        "share": 0.0
+      },
+      "1994": {
+        "n": 31,
+        "missing": 0,
+        "share": 0.0
+      },
+      "1995": {
+        "n": 38,
+        "missing": 0,
+        "share": 0.0
+      },
+      "1996": {
+        "n": 43,
+        "missing": 0,
+        "share": 0.0
+      },
+      "1997": {
+        "n": 46,
+        "missing": 5,
+        "share": 0.1087
+      },
+      "1998": {
+        "n": 43,
+        "missing": 11,
+        "share": 0.2558
+      },
+      "1999": {
+        "n": 70,
+        "missing": 22,
+        "share": 0.3143
+      },
+      "2000": {
+        "n": 98,
+        "missing": 43,
+        "share": 0.4388
+      },
+      "2001": {
+        "n": 101,
+        "missing": 44,
+        "share": 0.4356
+      },
+      "2002": {
+        "n": 138,
+        "missing": 66,
+        "share": 0.4783
+      },
+      "2003": {
+        "n": 115,
+        "missing": 43,
+        "share": 0.3739
+      },
+      "2004": {
+        "n": 154,
+        "missing": 77,
+        "share": 0.5
+      },
+      "2005": {
+        "n": 205,
+        "missing": 85,
+        "share": 0.4146
+      },
+      "2006": {
+        "n": 377,
+        "missing": 156,
+        "share": 0.4138
+      },
+      "2007": {
+        "n": 344,
+        "missing": 133,
+        "share": 0.3866
+      },
+      "2008": {
+        "n": 455,
+        "missing": 203,
+        "share": 0.4462
+      },
+      "2009": {
+        "n": 475,
+        "missing": 196,
+        "share": 0.4126
+      },
+      "2010": {
+        "n": 500,
+        "missing": 170,
+        "share": 0.34
+      },
+      "2011": {
+        "n": 488,
+        "missing": 157,
+        "share": 0.3217
+      },
+      "2012": {
+        "n": 390,
+        "missing": 31,
+        "share": 0.0795
+      },
+      "2013": {
+        "n": 389,
+        "missing": 4,
+        "share": 0.0103
+      },
+      "2014": {
+        "n": 494,
+        "missing": 2,
+        "share": 0.004
+      },
+      "2015": {
+        "n": 464,
+        "missing": 1,
+        "share": 0.0022
+      },
+      "2016": {
+        "n": 483,
+        "missing": 3,
+        "share": 0.0062
+      },
+      "2017": {
+        "n": 485,
+        "missing": 31,
+        "share": 0.0639
+      },
+      "2018": {
+        "n": 522,
+        "missing": 45,
+        "share": 0.0862
+      },
+      "2019": {
+        "n": 553,
+        "missing": 39,
+        "share": 0.0705
+      },
+      "2020": {
+        "n": 492,
+        "missing": 40,
+        "share": 0.0813
+      },
+      "2021": {
+        "n": 546,
+        "missing": 38,
+        "share": 0.0696
+      },
+      "2022": {
+        "n": 582,
+        "missing": 69,
+        "share": 0.1186
+      },
+      "2023": {
+        "n": 581,
+        "missing": 71,
+        "share": 0.1222
+      },
+      "2024": {
+        "n": 593,
+        "missing": 82,
+        "share": 0.1383
+      },
+      "2025": {
+        "n": 594,
+        "missing": 213,
+        "share": 0.3586
+      },
+      "2026": {
+        "n": 341,
+        "missing": 182,
+        "share": 0.5337
+      }
+    },
+    "by_fold": {
+      "2018": {
+        "n": 522,
+        "missing": 45,
+        "share": 0.0862
+      },
+      "2019": {
+        "n": 553,
+        "missing": 39,
+        "share": 0.0705
+      },
+      "2020": {
+        "n": 492,
+        "missing": 40,
+        "share": 0.0813
+      },
+      "2021": {
+        "n": 546,
+        "missing": 38,
+        "share": 0.0696
+      },
+      "2022": {
+        "n": 582,
+        "missing": 69,
+        "share": 0.1186
+      },
+      "2023": {
+        "n": 581,
+        "missing": 71,
+        "share": 0.1222
+      },
+      "2024": {
+        "n": 593,
+        "missing": 82,
+        "share": 0.1383
+      },
+      "2025": {
+        "n": 935,
+        "missing": 395,
+        "share": 0.4225
+      }
+    },
+    "most_recent_fold": {
+      "year": "2025",
+      "n": 935,
+      "missing": 395,
+      "share": 0.4225
+    },
+    "trailing_12m": {
+      "window_start": "2025-08-08",
+      "window_end": "2026-08-08",
+      "months": 12,
+      "n": 604,
+      "missing": 308,
+      "share": 0.5099
+    },
+    "overall_share": 0.2013,
+    "weekly_check": "scripts/check_snapshot_coverage.py"
+  },
+  "incumbent": {
+    "name": "hybrid_e2",
+    "report": "models/walkforward/hybrid_e2.json",
+    "pooled": {
+      "n": 4804,
+      "winner_log_loss": 0.6437,
+      "accuracy": 0.6216,
+      "brier": 0.2264,
+      "ece": 0.0124,
+      "joint_log_loss": 2.1432,
+      "method_macro_f1": 0.3398,
+      "round_macro_f1": 0.1686,
+      "n_method": 4792,
+      "n_round": 2446,
+      "zero_mass_cell_fraction": 0.0
+    }
+  },
+  "candidates": {
+    "R_ext": {
+      "groups": [
+        "EXTERNAL"
+      ],
+      "report": "models/walkforward/hybrid_drop_external.json",
+      "pairing": {
+        "removed_columns": [
+          "days_since_pro_debut_diff",
+          "pre_ufc_avg_opp_wins_diff",
+          "pre_ufc_finish_loss_rate_diff",
+          "pre_ufc_finish_rate_diff",
+          "pre_ufc_losses_diff",
+          "pre_ufc_wins_diff"
+        ],
+        "flags_held_out_by_both": [
+          "external_missing",
+          "home_country_a",
+          "home_country_b",
+          "notice_unknown",
+          "same_country"
+        ],
+        "shared_config": {
+          "candidate": "hybrid",
+          "seeds": "0,1,2,3,4",
+          "n_feature_rows": 11238,
+          "features_max_date": "2026-08-08"
+        }
+      },
+      "candidate": "hybrid_drop_external",
+      "incumbent": "hybrid_e2",
+      "comparable": true,
+      "missing_folds": [],
+      "recent_years": [
+        2024,
+        2025
+      ],
+      "pooled": {
+        "candidate_joint": 2.1491,
+        "incumbent_joint": 2.1432,
+        "candidate_winner": 0.6471,
+        "incumbent_winner": 0.6437,
+        "d_joint": 0.0059,
+        "d_winner": 0.0034
+      },
+      "recent": {
+        "candidate_joint": 2.097177,
+        "incumbent_joint": 2.093042,
+        "candidate_winner": 0.62727,
+        "incumbent_winner": 0.625991,
+        "d_joint": 0.004135,
+        "d_winner": 0.001279,
+        "keep_gain_recent": 0.004135
+      },
+      "fold_deltas_joint": {
+        "2018": 0.0065,
+        "2019": 0.0102,
+        "2020": 0.005,
+        "2021": 0.004,
+        "2022": 0.0037,
+        "2023": 0.0101,
+        "2024": 0.0034,
+        "2025": 0.0046
+      },
+      "fold_deltas_winner": {
+        "2018": 0.0042,
+        "2019": 0.0085,
+        "2020": 0.0003,
+        "2021": 0.0031,
+        "2022": 0.003,
+        "2023": 0.0073,
+        "2024": 0.0003,
+        "2025": 0.0019
+      },
+      "clauses": {
+        "pooled_joint_do_no_harm": {
+          "value": 0.0059,
+          "threshold": 0.01,
+          "comparison": "<",
+          "holds": true,
+          "margin": 0.0041
+        },
+        "recent_fold_contribution_of_keeping": {
+          "value": 0.004135,
+          "threshold": 0.001,
+          "comparison": "<",
+          "holds": false,
+          "margin": 0.003135
+        },
+        "winner_marginal_tolerance": {
+          "value": 0.0034,
+          "threshold": 0.000346,
+          "comparison": "<=",
+          "holds": false,
+          "margin": 0.003054
+        }
+      },
+      "ambiguous_clauses": [],
+      "verdict": "KEEP",
+      "external_missing_slice": {
+        "candidate": {
+          "n": 779,
+          "winner_log_loss": 0.6297,
+          "joint_log_loss": 2.2006,
+          "ece": 0.0407
+        },
+        "incumbent": {
+          "n": 779,
+          "winner_log_loss": 0.6297,
+          "joint_log_loss": 2.1993,
+          "ece": 0.0474
+        }
+      }
+    },
+    "R_notice": {
+      "groups": [
+        "NOTICE"
+      ],
+      "report": "models/walkforward/hybrid_drop_notice.json",
+      "pairing": {
+        "removed_columns": [
+          "missed_weight_a",
+          "missed_weight_b",
+          "missed_weight_over_lbs_diff",
+          "notice_shortfall_days_diff",
+          "short_notice_30_a",
+          "short_notice_30_b",
+          "short_notice_7_a",
+          "short_notice_7_b"
+        ],
+        "flags_held_out_by_both": [
+          "external_missing",
+          "home_country_a",
+          "home_country_b",
+          "notice_unknown",
+          "same_country"
+        ],
+        "shared_config": {
+          "candidate": "hybrid",
+          "seeds": "0,1,2,3,4",
+          "n_feature_rows": 11238,
+          "features_max_date": "2026-08-08"
+        }
+      },
+      "candidate": "hybrid_drop_notice",
+      "incumbent": "hybrid_e2",
+      "comparable": true,
+      "missing_folds": [],
+      "recent_years": [
+        2024,
+        2025
+      ],
+      "pooled": {
+        "candidate_joint": 2.1446,
+        "incumbent_joint": 2.1432,
+        "candidate_winner": 0.6445,
+        "incumbent_winner": 0.6437,
+        "d_joint": 0.0014,
+        "d_winner": 0.0008
+      },
+      "recent": {
+        "candidate_joint": 2.09618,
+        "incumbent_joint": 2.093042,
+        "candidate_winner": 0.626941,
+        "incumbent_winner": 0.625991,
+        "d_joint": 0.003138,
+        "d_winner": 0.000949,
+        "keep_gain_recent": 0.003138
+      },
+      "fold_deltas_joint": {
+        "2018": -0.0053,
+        "2019": 0.0021,
+        "2020": 0.0033,
+        "2021": 0.0008,
+        "2022": 0.0007,
+        "2023": 0.0017,
+        "2024": 0.0013,
+        "2025": 0.0043
+      },
+      "fold_deltas_winner": {
+        "2018": -0.0015,
+        "2019": 0.0024,
+        "2020": -0.0008,
+        "2021": 0.0001,
+        "2022": 0.0017,
+        "2023": 0.0022,
+        "2024": 0.0015,
+        "2025": 0.0006
+      },
+      "clauses": {
+        "pooled_joint_do_no_harm": {
+          "value": 0.0014,
+          "threshold": 0.01,
+          "comparison": "<",
+          "holds": true,
+          "margin": 0.0086
+        },
+        "recent_fold_contribution_of_keeping": {
+          "value": 0.003138,
+          "threshold": 0.001,
+          "comparison": "<",
+          "holds": false,
+          "margin": 0.002138
+        },
+        "winner_marginal_tolerance": {
+          "value": 0.0008,
+          "threshold": 0.000346,
+          "comparison": "<=",
+          "holds": false,
+          "margin": 0.000454
+        }
+      },
+      "ambiguous_clauses": [],
+      "verdict": "KEEP",
+      "external_missing_slice": {
+        "candidate": {
+          "n": 779,
+          "winner_log_loss": 0.6294,
+          "joint_log_loss": 2.2008,
+          "ece": 0.0435
+        },
+        "incumbent": {
+          "n": 779,
+          "winner_log_loss": 0.6297,
+          "joint_log_loss": 2.1993,
+          "ece": 0.0474
+        }
+      }
+    },
+    "R_ctx": {
+      "groups": [
+        "CONTEXT"
+      ],
+      "report": "models/walkforward/hybrid_drop_context.json",
+      "pairing": {
+        "removed_columns": [
+          "home_country_unknown"
+        ],
+        "flags_held_out_by_both": [
+          "external_missing",
+          "home_country_a",
+          "home_country_b",
+          "notice_unknown",
+          "same_country"
+        ],
+        "shared_config": {
+          "candidate": "hybrid",
+          "seeds": "0,1,2,3,4",
+          "n_feature_rows": 11238,
+          "features_max_date": "2026-08-08"
+        }
+      },
+      "candidate": "hybrid_drop_context",
+      "incumbent": "hybrid_e2",
+      "comparable": true,
+      "missing_folds": [],
+      "recent_years": [
+        2024,
+        2025
+      ],
+      "pooled": {
+        "candidate_joint": 2.1432,
+        "incumbent_joint": 2.1432,
+        "candidate_winner": 0.6437,
+        "incumbent_winner": 0.6437,
+        "d_joint": 0.0,
+        "d_winner": 0.0
+      },
+      "recent": {
+        "candidate_joint": 2.093358,
+        "incumbent_joint": 2.093042,
+        "candidate_winner": 0.626269,
+        "incumbent_winner": 0.625991,
+        "d_joint": 0.000316,
+        "d_winner": 0.000278,
+        "keep_gain_recent": 0.000316
+      },
+      "fold_deltas_joint": {
+        "2018": -0.001,
+        "2019": 0.0017,
+        "2020": 0.0002,
+        "2021": -0.0027,
+        "2022": -0.0002,
+        "2023": 0.0006,
+        "2024": 0.0005,
+        "2025": 0.0002
+      },
+      "fold_deltas_winner": {
+        "2018": 0.0004,
+        "2019": -0.0009,
+        "2020": -0.0007,
+        "2021": 0.0,
+        "2022": 0.0,
+        "2023": 0.001,
+        "2024": 0.0004,
+        "2025": 0.0002
+      },
+      "clauses": {
+        "pooled_joint_do_no_harm": {
+          "value": 0.0,
+          "threshold": 0.01,
+          "comparison": "<",
+          "holds": true,
+          "margin": 0.01
+        },
+        "recent_fold_contribution_of_keeping": {
+          "value": 0.000316,
+          "threshold": 0.001,
+          "comparison": "<",
+          "holds": true,
+          "margin": 0.000684
+        },
+        "winner_marginal_tolerance": {
+          "value": 0.0,
+          "threshold": 0.000346,
+          "comparison": "<=",
+          "holds": true,
+          "margin": 0.000346
+        }
+      },
+      "ambiguous_clauses": [],
+      "verdict": "REMOVE",
+      "external_missing_slice": {
+        "candidate": {
+          "n": 779,
+          "winner_log_loss": 0.629,
+          "joint_log_loss": 2.1978,
+          "ece": 0.0344
+        },
+        "incumbent": {
+          "n": 779,
+          "winner_log_loss": 0.6297,
+          "joint_log_loss": 2.1993,
+          "ece": 0.0474
+        }
+      }
+    },
+    "R_all": {
+      "groups": [
+        "EXTERNAL",
+        "NOTICE",
+        "CONTEXT"
+      ],
+      "report": "models/walkforward/hybrid_drop_snapshot.json",
+      "pairing": {
+        "removed_columns": [
+          "days_since_pro_debut_diff",
+          "home_country_unknown",
+          "missed_weight_a",
+          "missed_weight_b",
+          "missed_weight_over_lbs_diff",
+          "notice_shortfall_days_diff",
+          "pre_ufc_avg_opp_wins_diff",
+          "pre_ufc_finish_loss_rate_diff",
+          "pre_ufc_finish_rate_diff",
+          "pre_ufc_losses_diff",
+          "pre_ufc_wins_diff",
+          "short_notice_30_a",
+          "short_notice_30_b",
+          "short_notice_7_a",
+          "short_notice_7_b"
+        ],
+        "flags_held_out_by_both": [
+          "external_missing",
+          "home_country_a",
+          "home_country_b",
+          "notice_unknown",
+          "same_country"
+        ],
+        "shared_config": {
+          "candidate": "hybrid",
+          "seeds": "0,1,2,3,4",
+          "n_feature_rows": 11238,
+          "features_max_date": "2026-08-08"
+        }
+      },
+      "candidate": "hybrid_drop_snapshot",
+      "incumbent": "hybrid_e2",
+      "comparable": true,
+      "missing_folds": [],
+      "recent_years": [
+        2024,
+        2025
+      ],
+      "pooled": {
+        "candidate_joint": 2.1508,
+        "incumbent_joint": 2.1432,
+        "candidate_winner": 0.6478,
+        "incumbent_winner": 0.6437,
+        "d_joint": 0.0076,
+        "d_winner": 0.0041
+      },
+      "recent": {
+        "candidate_joint": 2.098299,
+        "incumbent_joint": 2.093042,
+        "candidate_winner": 0.627069,
+        "incumbent_winner": 0.625991,
+        "d_joint": 0.005257,
+        "d_winner": 0.001078,
+        "keep_gain_recent": 0.005257
+      },
+      "fold_deltas_joint": {
+        "2018": 0.0019,
+        "2019": 0.0153,
+        "2020": 0.0144,
+        "2021": 0.0067,
+        "2022": 0.0072,
+        "2023": 0.0069,
+        "2024": 0.0025,
+        "2025": 0.007
+      },
+      "fold_deltas_winner": {
+        "2018": 0.0033,
+        "2019": 0.0124,
+        "2020": 0.0047,
+        "2021": 0.0035,
+        "2022": 0.0049,
+        "2023": 0.0048,
+        "2024": 0.0012,
+        "2025": 0.001
+      },
+      "clauses": {
+        "pooled_joint_do_no_harm": {
+          "value": 0.0076,
+          "threshold": 0.01,
+          "comparison": "<",
+          "holds": true,
+          "margin": 0.0024
+        },
+        "recent_fold_contribution_of_keeping": {
+          "value": 0.005257,
+          "threshold": 0.001,
+          "comparison": "<",
+          "holds": false,
+          "margin": 0.004257
+        },
+        "winner_marginal_tolerance": {
+          "value": 0.0041,
+          "threshold": 0.000346,
+          "comparison": "<=",
+          "holds": false,
+          "margin": 0.003754
+        }
+      },
+      "ambiguous_clauses": [],
+      "verdict": "KEEP",
+      "external_missing_slice": {
+        "candidate": {
+          "n": 779,
+          "winner_log_loss": 0.6281,
+          "joint_log_loss": 2.2051,
+          "ece": 0.0392
+        },
+        "incumbent": {
+          "n": 779,
+          "winner_log_loss": 0.6297,
+          "joint_log_loss": 2.1993,
+          "ece": 0.0474
+        }
+      }
+    }
+  },
+  "per_group_verdict_seeds_0_4": {
+    "EXTERNAL": "KEEP",
+    "NOTICE": "KEEP",
+    "CONTEXT": "REMOVE"
+  },
+  "consolidated_verdict": "KEEP",
+  "fresh_seed_confirmation": {
+    "decided": true,
+    "incumbent": "hybrid_e2_seeds5",
+    "seeds": "5,6,7,8,9",
+    "candidates": {
+      "R_ext": {
+        "report": "models/walkforward/hybrid_drop_external_seeds5.json",
+        "candidate": "hybrid_drop_external_seeds5",
+        "incumbent": "hybrid_e2_seeds5",
+        "comparable": true,
+        "missing_folds": [],
+        "recent_years": [
+          2024,
+          2025
+        ],
+        "pooled": {
+          "candidate_joint": 2.1493,
+          "incumbent_joint": 2.1432,
+          "candidate_winner": 0.6471,
+          "incumbent_winner": 0.6434,
+          "d_joint": 0.0061,
+          "d_winner": 0.0037
+        },
+        "recent": {
+          "candidate_joint": 2.095733,
+          "incumbent_joint": 2.093119,
+          "candidate_winner": 0.626714,
+          "incumbent_winner": 0.625614,
+          "d_joint": 0.002613,
+          "d_winner": 0.0011,
+          "keep_gain_recent": 0.002613
+        },
+        "fold_deltas_joint": {
+          "2018": 0.0078,
+          "2019": 0.0144,
+          "2020": 0.0092,
+          "2021": 0.001,
+          "2022": 0.0032,
+          "2023": 0.0104,
+          "2024": 0.0039,
+          "2025": 0.0018
+        },
+        "fold_deltas_winner": {
+          "2018": 0.0042,
+          "2019": 0.0094,
+          "2020": 0.0048,
+          "2021": 0.002,
+          "2022": 0.0039,
+          "2023": 0.0044,
+          "2024": 0.0011,
+          "2025": 0.0011
+        },
+        "clauses": {
+          "pooled_joint_do_no_harm": {
+            "value": 0.0061,
+            "threshold": 0.01,
+            "comparison": "<",
+            "holds": true,
+            "margin": 0.0039
+          },
+          "recent_fold_contribution_of_keeping": {
+            "value": 0.002613,
+            "threshold": 0.001,
+            "comparison": "<",
+            "holds": false,
+            "margin": 0.001613
+          },
+          "winner_marginal_tolerance": {
+            "value": 0.0037,
+            "threshold": 0.000346,
+            "comparison": "<=",
+            "holds": false,
+            "margin": 0.003354
+          }
+        },
+        "ambiguous_clauses": [],
+        "verdict": "KEEP"
+      },
+      "R_ctx": {
+        "report": "models/walkforward/hybrid_drop_context_seeds5.json",
+        "candidate": "hybrid_drop_context_seeds5",
+        "incumbent": "hybrid_e2_seeds5",
+        "comparable": true,
+        "missing_folds": [],
+        "recent_years": [
+          2024,
+          2025
+        ],
+        "pooled": {
+          "candidate_joint": 2.1429,
+          "incumbent_joint": 2.1432,
+          "candidate_winner": 0.6439,
+          "incumbent_winner": 0.6434,
+          "d_joint": -0.0003,
+          "d_winner": 0.0005
+        },
+        "recent": {
+          "candidate_joint": 2.094175,
+          "incumbent_joint": 2.093119,
+          "candidate_winner": 0.626939,
+          "incumbent_winner": 0.625614,
+          "d_joint": 0.001056,
+          "d_winner": 0.001325,
+          "keep_gain_recent": 0.001056
+        },
+        "fold_deltas_joint": {
+          "2018": -0.0035,
+          "2019": -0.0003,
+          "2020": -0.0008,
+          "2021": -0.0021,
+          "2022": -0.0018,
+          "2023": 0.002,
+          "2024": 0.0051,
+          "2025": -0.0015
+        },
+        "fold_deltas_winner": {
+          "2018": -0.0012,
+          "2019": -0.0013,
+          "2020": 0.0004,
+          "2021": -0.0003,
+          "2022": 0.0011,
+          "2023": 0.001,
+          "2024": 0.0031,
+          "2025": 0.0002
+        },
+        "clauses": {
+          "pooled_joint_do_no_harm": {
+            "value": -0.0003,
+            "threshold": 0.01,
+            "comparison": "<",
+            "holds": true,
+            "margin": 0.0103
+          },
+          "recent_fold_contribution_of_keeping": {
+            "value": 0.001056,
+            "threshold": 0.001,
+            "comparison": "<",
+            "holds": false,
+            "margin": 5.6e-05
+          },
+          "winner_marginal_tolerance": {
+            "value": 0.0005,
+            "threshold": 0.000346,
+            "comparison": "<=",
+            "holds": false,
+            "margin": 0.000154
+          }
+        },
+        "ambiguous_clauses": [
+          "recent_fold_contribution_of_keeping"
+        ],
+        "verdict": "AMBIGUOUS"
+      }
+    }
+  },
+  "decided": true,
+  "decision": {
+    "outcome": "keep every snapshot-dependent column; CONTEXT is AMBIGUOUS after the fresh-seed confirmation, so nothing is deployed",
+    "confirmed_per_group": {
+      "EXTERNAL": "KEEP",
+      "NOTICE": "KEEP",
+      "CONTEXT": "AMBIGUOUS"
+    },
+    "groups_to_remove": [],
+    "ambiguous_groups": [
+      "CONTEXT"
+    ],
+    "seeds_0_4": {
+      "EXTERNAL": "KEEP",
+      "NOTICE": "KEEP",
+      "CONTEXT": "REMOVE"
+    },
+    "seeds_5_9": {
+      "EXTERNAL": "KEEP",
+      "CONTEXT": "AMBIGUOUS"
+    },
+    "fresh_seed_agreement": {
+      "run": true,
+      "agree": false
+    },
+    "consolidated_R_all": "KEEP",
+    "taken_by": "the pre-registered rule, applied mechanically by this script"
+  }
+}
