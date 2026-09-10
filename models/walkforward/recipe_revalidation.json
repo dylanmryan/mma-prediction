@@ -1,0 +1,298 @@
+{
+  "experiment": "periodic re-validation of the deployed recipe on the current table",
+  "generated_by": "scripts/revalidate_recipe.py",
+  "date": "2026-09-09",
+  "replaces": "scripts/roll_window.py's promotion gate, which asked a question this project no longer has: the deployed recipe is refit-through-latest and the weekly Action already retrains every member, so there is no candidate-versus-incumbent choice to make",
+  "table": {
+    "features_max_date": "2026-09-05",
+    "n_feature_rows": 11290,
+    "recipe_was_justified_on": "2026-08-08",
+    "n_feature_rows_when_justified": 11238,
+    "blocks": [
+      "base",
+      "external",
+      "notice",
+      "trajectory",
+      "context",
+      "opponent_adjusted"
+    ]
+  },
+  "deployed_configuration": {
+    "feature_blocks": [
+      "base",
+      "external",
+      "notice",
+      "trajectory",
+      "context",
+      "opponent_adjusted"
+    ],
+    "drop_columns": [
+      "external_missing",
+      "same_country",
+      "notice_unknown",
+      "home_country_a",
+      "home_country_b"
+    ],
+    "deployed_hash": "18d1a70777ea",
+    "runs": {
+      "hybrid": {
+        "role": "the deployed scorer: the blend's winner, the simulator's shape",
+        "recipe_read_from": "models/walkforward/hybrid_e2.json",
+        "recipe_was_measured_on": "2026-08-08",
+        "budget_from": null
+      },
+      "blend_cells": {
+        "role": "SP3's paired incumbent -- the same blend read through the cell scorer",
+        "recipe_read_from": "models/walkforward/blend_b1_cells.json",
+        "recipe_was_measured_on": "2026-08-08",
+        "budget_from": null
+      },
+      "torch_A": {
+        "role": "refit rule, torch: protocol A (split, early-stopped)",
+        "recipe_read_from": "models/walkforward/torch_a1_combined.json",
+        "recipe_was_measured_on": "2026-08-08",
+        "budget_from": null
+      },
+      "torch_B": {
+        "role": "refit rule, torch: protocol B (the deployed refit recipe)",
+        "recipe_read_from": "models/walkforward/torch_a1_combined_refit.json",
+        "recipe_was_measured_on": "2026-08-08",
+        "budget_from": "torch_A"
+      },
+      "xgb_A": {
+        "role": "refit rule, xgb: protocol A (split, early-stopped)",
+        "recipe_read_from": "models/walkforward/xgb_ens5_s1.json",
+        "recipe_was_measured_on": "2026-08-08",
+        "budget_from": null
+      },
+      "xgb_B": {
+        "role": "refit rule, xgb: protocol B (the deployed refit recipe)",
+        "recipe_read_from": "models/walkforward/xgb_ens5_s1_refit.json",
+        "recipe_was_measured_on": "2026-08-08",
+        "budget_from": "xgb_A"
+      }
+    },
+    "blend": {
+      "weight": 0.5,
+      "temperature": 0.85
+    },
+    "simulator": {
+      "n_runs": 10000,
+      "alpha": 1.0,
+      "sim_seed": 0,
+      "default_rounds": 3
+    }
+  },
+  "reports": {
+    "hybrid": "models/walkforward/revalidation/revalidation_hybrid.json",
+    "blend_cells": "models/walkforward/revalidation/revalidation_blend_cells.json",
+    "torch_A": "models/walkforward/revalidation/revalidation_torch_A.json",
+    "torch_B": "models/walkforward/revalidation/revalidation_torch_B.json",
+    "xgb_A": "models/walkforward/revalidation/revalidation_xgb_A.json",
+    "xgb_B": "models/walkforward/revalidation/revalidation_xgb_B.json"
+  },
+  "measured_sigma_seed": 0.0003464101615137373,
+  "bars": {
+    "sp3_joint_bar": {
+      "bar": "SP3's simulator bar: joint beats the paired incumbent by more than joint_bar, and the winner marginal is not worse by more than sigma_seed",
+      "gated": true,
+      "thresholds": {
+        "joint_bar": 0.01,
+        "sigma_seed": 0.000346
+      },
+      "thresholds_read_from": "models/walkforward/sp3_decision.json",
+      "convention": "delta = candidate - incumbent; negative = the candidate is better",
+      "joint_bar": 0.01,
+      "sigma_seed": 0.000346,
+      "candidate_joint_log_loss": 2.148,
+      "incumbent_joint_log_loss": 2.206,
+      "joint_delta": -0.058,
+      "joint_margin_past_the_bar": 0.048,
+      "clears_joint_bar": true,
+      "candidate_winner_log_loss": 0.6459,
+      "incumbent_winner_log_loss": 0.6459,
+      "winner_delta": 0.0,
+      "winner_headroom": 0.000346,
+      "winner_clause_satisfied": true,
+      "joint_fold_deltas": {
+        "2018": -0.0593,
+        "2019": -0.0534,
+        "2020": -0.0774,
+        "2021": -0.0484,
+        "2022": -0.0329,
+        "2023": -0.0523,
+        "2024": -0.0727,
+        "2025": -0.065
+      },
+      "winner_fold_deltas": {
+        "2018": 0.0,
+        "2019": 0.0,
+        "2020": 0.0,
+        "2021": 0.0,
+        "2022": 0.0,
+        "2023": 0.0,
+        "2024": 0.0,
+        "2025": 0.0
+      },
+      "worst_joint_fold_delta": -0.0329,
+      "worst_winner_fold_delta": 0.0,
+      "fold_deltas_are_reported_not_gated": "SP3's bar has no per-fold no-regression clause; that belongs to the v3 spec section 5 winner bar (mma.walkforward.bar_check). These are here to be read, not to gate.",
+      "comparable": true,
+      "missing_folds": [],
+      "ships": true,
+      "still_clears": true
+    },
+    "refit_rule_torch": {
+      "bar": "B ships as the deployment recipe iff torch B pooled winner log-loss <= torch A + sigma_seed (spec v3 \u00a74 SP1)",
+      "member": "torch",
+      "gated": true,
+      "gated_note": "the recorded rule gates on torch; the xgb member's A/B is re-run and reported, but gating on it would be a stricter rule than the one recorded",
+      "thresholds": {
+        "sigma_seed": 0.0003464101615137373
+      },
+      "thresholds_read_from": "models/walkforward/refit_decision_b1.json",
+      "delta_B_minus_A": -0.0002,
+      "per_fold_B_minus_A": {
+        "2018": -0.0033,
+        "2019": -0.0006,
+        "2020": -0.0005,
+        "2021": -0.0008,
+        "2022": -0.0068,
+        "2023": 0.0011,
+        "2024": 0.0026,
+        "2025": 0.0034
+      },
+      "A_pooled": {
+        "n": 4856,
+        "winner_log_loss": 0.6487,
+        "accuracy": 0.6209,
+        "brier": 0.2286,
+        "ece": 0.0096,
+        "joint_log_loss": 2.3164,
+        "method_macro_f1": 0.3729,
+        "round_macro_f1": 0.3077,
+        "n_method": 4844,
+        "n_round": 2482
+      },
+      "B_pooled": {
+        "n": 4856,
+        "winner_log_loss": 0.6485,
+        "accuracy": 0.6217,
+        "brier": 0.2285,
+        "ece": 0.0157,
+        "joint_log_loss": 2.321,
+        "method_macro_f1": 0.3686,
+        "round_macro_f1": 0.3054,
+        "n_method": 4844,
+        "n_round": 2482
+      },
+      "still_clears": true
+    },
+    "refit_rule_xgb": {
+      "bar": "B ships as the deployment recipe iff torch B pooled winner log-loss <= torch A + sigma_seed (spec v3 \u00a74 SP1)",
+      "member": "xgb",
+      "gated": false,
+      "gated_note": "the recorded rule gates on torch; the xgb member's A/B is re-run and reported, but gating on it would be a stricter rule than the one recorded",
+      "thresholds": {
+        "sigma_seed": 0.0003464101615137373
+      },
+      "thresholds_read_from": "models/walkforward/refit_decision_b1.json",
+      "delta_B_minus_A": -0.0008,
+      "per_fold_B_minus_A": {
+        "2018": -0.0043,
+        "2019": 0.0027,
+        "2020": -0.0044,
+        "2021": 0.0037,
+        "2022": -0.0035,
+        "2023": -0.0007,
+        "2024": 0.0019,
+        "2025": -0.0014
+      },
+      "A_pooled": {
+        "n": 4856,
+        "winner_log_loss": 0.6488,
+        "accuracy": 0.6153,
+        "brier": 0.2285,
+        "ece": 0.0194,
+        "joint_log_loss": 2.1832,
+        "method_macro_f1": 0.331,
+        "round_macro_f1": 0.1877,
+        "n_method": 4844,
+        "n_round": 2482
+      },
+      "B_pooled": {
+        "n": 4856,
+        "winner_log_loss": 0.648,
+        "accuracy": 0.6219,
+        "brier": 0.2282,
+        "ece": 0.0154,
+        "joint_log_loss": 2.1771,
+        "method_macro_f1": 0.334,
+        "round_macro_f1": 0.1827,
+        "n_method": 4844,
+        "n_round": 2482
+      },
+      "still_clears": true
+    },
+    "blend_ece_gate": {
+      "bar": "a candidate's mean pooled ECE across three disjoint seed sets must not exceed the incumbent's mean across three disjoint seed sets by more than 2 sigma of the pooled spread",
+      "gated": true,
+      "thresholds": {
+        "threshold": 0.01724132714214616,
+        "incumbent_mean": 0.011633,
+        "tolerance_2sigma": 0.005608327142146162
+      },
+      "thresholds_read_from": "models/walkforward/sp2_2_decision.json",
+      "weaker_read_than_the_gate": "the gate averages three disjoint seed sets per arm; this re-validation measures one seed set (0-4) against the gate's own largest passing pooled ECE (incumbent_mean + tolerance_2sigma), which is the form the artifact's own sub-note used to place the shipped scorer",
+      "evaluated_on": "the HARNESS form -- one temperature fitted per fold on that fold's inner-validation year -- which is the form every pooled ECE the gate compared was measured in. The deployed scorer applies one fixed post-average temperature; see sp2_2_decision.json's deployed_form.",
+      "pooled_ece": 0.0146,
+      "headroom": 0.002641,
+      "still_clears": true
+    }
+  },
+  "margin_movement": {
+    "sp3_joint_delta": {
+      "then": -0.0581,
+      "now": -0.058,
+      "change": 0.0001,
+      "closer_to_the_bar": true,
+      "recorded_in": "models/walkforward/sp3_decision.json experiments.D2.bar_check"
+    },
+    "sp3_winner_delta": {
+      "then": 0.0,
+      "now": 0.0,
+      "change": 0.0,
+      "closer_to_the_bar": false,
+      "recorded_in": "models/walkforward/sp3_decision.json experiments.D2.bar_check"
+    },
+    "refit_torch_delta": {
+      "then": -0.0002,
+      "now": -0.0002,
+      "change": 0.0,
+      "closer_to_the_bar": false,
+      "recorded_in": "models/walkforward/refit_decision_b1.json torch"
+    },
+    "refit_xgb_delta": {
+      "then": -0.0007,
+      "now": -0.0008,
+      "change": -0.0001,
+      "closer_to_the_bar": false,
+      "recorded_in": "models/walkforward/refit_decision_b1.json xgb"
+    },
+    "blend_pooled_ece": {
+      "then": 0.0124,
+      "now": 0.0146,
+      "change": 0.0022,
+      "closer_to_the_bar": true,
+      "recorded_in": "models/walkforward/sp2_2_decision.json ece_gate.B1_pooled_ece"
+    }
+  },
+  "verdict": {
+    "still_justified": true,
+    "outcome": "The deployed recipe still clears every bar it was justified by, re-measured on the current table.",
+    "bars_no_longer_met": [],
+    "ungated_bars_not_met": [],
+    "taken_by": "the recorded bars, re-applied mechanically by this script"
+  },
+  "what_this_does_not_do": "It deploys nothing, promotes nothing and stages nothing. It does not re-derive the blend's fixed post-average temperature (that is scripts/derive_blend_temperature.py against a fresh dump), and it does not re-run the fresh-seed confirmations the original decisions required before shipping -- a re-validation asks whether what already ships still clears, not whether something new may ship."
+}
