@@ -324,6 +324,76 @@ def test_july_comparison_reports_the_direction_of_the_change():
 
 
 # --------------------------------------------------------------------------
+# Which (report, dump) pair --mode oof can score on today's table
+# --------------------------------------------------------------------------
+
+
+def _pair(tmp_path: Path, name: str, n: int, *, dump: bool = True):
+    """A (report, dump) pair on disk, of the shape the resolver reads."""
+    report = tmp_path / f"{name}.json"
+    predictions = tmp_path / "preds" / f"{name}.json"
+    report.write_text(json.dumps({"name": name, "pooled": {"n": n}}))
+    if dump:
+        predictions.parent.mkdir(parents=True, exist_ok=True)
+        predictions.write_text(json.dumps({"name": name, "n": n}))
+    return report, predictions
+
+
+def test_pooled_row_count_counts_what_pooled_frame_builds():
+    """The cheap read must agree with the expensive one, or the staleness
+    check would clear a pairing `attach_oof_predictions` then rejects."""
+    features = _features()
+    assert bob.pooled_row_count(features["date"]) == len(bob.pooled_frame(features))
+
+
+def test_oof_source_status_says_which_pair_still_matches_the_table(tmp_path):
+    stale = _pair(tmp_path, "stale", 4804)
+    fresh = _pair(tmp_path, "fresh", 4856)
+    status = bob.oof_source_status(4856, sources=(stale, fresh))
+    assert [row["pairs"] for row in status] == [False, True]
+    assert status[0]["n_dump"] == 4804
+    assert status[0]["n_pooled_walkforward_rows"] == 4856
+
+
+def test_oof_source_status_reports_a_pair_whose_dump_was_never_written(tmp_path):
+    """The re-validation writes its report whether or not the dump was asked
+    for, so 'report present, dump absent' is a real state and must not read
+    as a matching pair."""
+    status = bob.oof_source_status(
+        4856, sources=(_pair(tmp_path, "nodump", 4856, dump=False),)
+    )
+    assert status[0]["exists"] is False
+    assert status[0]["pairs"] is False
+    assert status[0]["n_dump"] is None
+
+
+def test_resolve_oof_source_takes_the_first_pair_that_matches(tmp_path):
+    stale = _pair(tmp_path, "stale", 4804)
+    fresh = _pair(tmp_path, "fresh", 4856)
+    assert bob.resolve_oof_source(4856, sources=(stale, fresh)) == fresh
+
+
+def test_resolve_oof_source_refuses_rather_than_scoring_a_stale_dump(tmp_path):
+    """The positional join is only valid against the table the dump was
+    written from. With no matching pair there is no benchmark to build, and
+    the message has to name the command that makes one."""
+    stale = _pair(tmp_path, "stale", 4804)
+    with pytest.raises(SystemExit) as excinfo:
+        bob.resolve_oof_source(4856, sources=(stale,))
+    message = str(excinfo.value)
+    assert "4804" in message and "4856" in message
+    assert "revalidate_recipe.py" in message
+
+
+def test_the_revalidation_pair_is_preferred_over_the_frozen_sp3_evidence():
+    """`hybrid_e2.json` is the report SP3's decision rests on and
+    `models/simulator.json` names as its source; it is never refreshed in
+    place, so the fresh pair has to come first."""
+    assert bob.OOF_SOURCES[0] == (bob.OOF_REVALIDATION_REPORT,
+                                  bob.OOF_REVALIDATION_PREDICTIONS)
+    assert bob.OOF_SOURCES[-1] == (bob.OOF_REPORT, bob.OOF_PREDICTIONS)
+
+# --------------------------------------------------------------------------
 # The committed artifact
 # --------------------------------------------------------------------------
 
@@ -346,8 +416,11 @@ def test_artifact_has_its_provenance(artifact):
         "comparison_with_frozen_july_artifact", "odds_coverage_by_fold_year",
     } <= set(artifact)
     provenance = artifact["provenance"]
-    assert provenance["predictions"].startswith("models/walkforward/preds/")
-    assert provenance["walkforward_report"].startswith("models/walkforward/")
+    # The named pair is one the resolver would pick, and both halves are on
+    # disk -- provenance that names a file nobody can open is not provenance.
+    named = (ROOT / provenance["walkforward_report"], ROOT / provenance["predictions"])
+    assert named in [(ROOT / report, ROOT / dump) for report, dump in bob.OOF_SOURCES]
+    assert all(path.exists() for path in named)
     assert len(provenance["deployed_model_version"]) == 12
     assert provenance["fold_years"][0] == 2018
     assert provenance["deployed_training_recipe"]["mode"] == "refit_through"

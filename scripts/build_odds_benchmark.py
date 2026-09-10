@@ -20,6 +20,13 @@ the same comparison run with the DEPLOYED refit model's own predictions --
 which is an in-sample model against an out-of-sample market, and is exactly
 the number this mode exists to avoid reporting.
 
+The dump is paired to the pooled rows POSITIONALLY, so it belongs to the
+feature table it was written from and is retired the moment the weekly refresh
+lands another event. This mode therefore resolves its own source: it takes the
+freshest committed (report, dump) pair whose row count still matches the table
+(see OOF_SOURCES), and refuses -- naming the command that writes a fresh dump
+-- rather than scoring one that does not.
+
 ``--mode deployed`` is the original path: score whatever ``BlendedPredictor``
 serves today over every odds-matched fight, restricting the headline to
 2021+. That is how models/market_benchmark.json was computed on 2026-07-15,
@@ -35,8 +42,9 @@ but its winner marginal IS the blend member's own array -- returned unchanged,
 verified element-wise over all 4,804 pooled rows in
 models/walkforward/sp3_decision.json -- and the winner probability is the only
 head this benchmark compares. So both modes read the winner probability
-through the blend, and the walk-forward dump they use is the same one
-models/blend.json names as the deployed blend's source predictions.
+through the blend, and the walk-forward dump oof mode scores is the deployed
+hybrid's own -- `hybrid_e2` as SP3 measured it, or the same recipe re-run on a
+newer table by scripts/revalidate_recipe.py.
 
   .venv/bin/python scripts/build_odds_benchmark.py                 # OOF (default)
   .venv/bin/python scripts/build_odds_benchmark.py --mode deployed --force
@@ -73,9 +81,31 @@ FROZEN_BENCHMARK = MODELS / "market_benchmark.json"
 OOF_BENCHMARK = MODELS / "market_benchmark_oof.json"
 #: The deployed hybrid's own walk-forward run, and the pooled predictions it
 #: dumped. `hybrid_e2` is the report `models/simulator.json` names as its
-#: source; the dump is row-aligned to `mma.walkforward.pool`'s order.
+#: source; the dump is row-aligned to `mma.walkforward.pool`'s order. It is
+#: SP3's evidence and is never refreshed in place -- see OOF_SOURCES.
 OOF_REPORT = WALKFORWARD / "hybrid_e2.json"
 OOF_PREDICTIONS = WALKFORWARD / "preds" / "hybrid_e2.json"
+#: The same recipe re-run on the CURRENT table by
+#: `scripts/revalidate_recipe.py`, which re-measures the deployed recipe's
+#: bars whenever the feature table has moved on. Its hybrid run dumps its
+#: predictions for exactly this reader.
+OOF_REVALIDATION_REPORT = WALKFORWARD / "revalidation" / "revalidation_hybrid.json"
+OOF_REVALIDATION_PREDICTIONS = WALKFORWARD / "revalidation" / "preds" / "revalidation_hybrid.json"
+#: The (report, dump) pairs this mode will score, in preference order.
+#:
+#: The pairing is POSITIONAL, so a dump is only joinable to the table it was
+#: written from -- and the table grows every time the weekly refresh lands a
+#: new event, which retires the previous dump. The freshest run comes first
+#: and `hybrid_e2` is the fallback for a table that has not moved since SP3.
+#: Refreshing `hybrid_e2` in place would be the shorter fix and the wrong
+#: one: `models/simulator.json` names it `source_report`,
+#: `models/walkforward/sp3_decision.json` rests on its numbers, and
+#: `scripts/revalidate_recipe.py` exists on the promise that the reports the
+#: original decisions rest on are never overwritten.
+OOF_SOURCES = (
+    (OOF_REVALIDATION_REPORT, OOF_REVALIDATION_PREDICTIONS),
+    (OOF_REPORT, OOF_PREDICTIONS),
+)
 
 # Famous fights used to sanity-check corner alignment: (name_1, name_2,
 # expected favorite's name, approximate event date). Chosen so the favorite
@@ -444,6 +474,19 @@ def pooled_frame(features: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(frames).reset_index(drop=True)
 
 
+def pooled_row_count(dates: pd.Series) -> int:
+    """How many rows `pooled_frame` would build, from the date column alone.
+
+    The same fold masks over the same table, counted rather than materialised,
+    so a caller that only needs to know whether a dump still pairs -- the
+    weekly staleness read -- does not have to load the whole feature table to
+    find out. It must agree with `len(pooled_frame(features))` exactly, or it
+    would clear a pairing `attach_oof_predictions` then rejects.
+    """
+    return int(sum(int(np.asarray(fold.eval, dtype=bool).sum())
+                   for fold in make_folds(dates)))
+
+
 def attach_oof_predictions(pooled: pd.DataFrame, dump: dict) -> pd.DataFrame:
     """`pooled` with the dump's out-of-fold winner probability as `model_p_a`.
 
@@ -476,6 +519,68 @@ def attach_oof_predictions(pooled: pd.DataFrame, dump: dict) -> pd.DataFrame:
     if not ((out["model_p_a"] > 0.0) & (out["model_p_a"] < 1.0)).all():
         raise ValueError("out-of-fold winner probabilities must lie strictly in (0, 1)")
     return out
+
+
+def _rel(path) -> str:
+    """Repo-relative when the path is in the repo, absolute otherwise."""
+    try:
+        return str(Path(path).relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def oof_source_status(pooled_rows: int, sources=OOF_SOURCES) -> list[dict]:
+    """For each candidate (report, dump) pair: is it there, and does it pair?
+
+    Reads each dump's own `n` and nothing else -- the row count is the first
+    thing `attach_oof_predictions` checks and the only one that can be read
+    without loading the predictions themselves, which is what keeps this cheap
+    enough for the weekly staleness step to call.
+    """
+    rows = []
+    for report, predictions in sources:
+        exists = Path(report).exists() and Path(predictions).exists()
+        n_dump = None
+        if exists:
+            n_dump = int(json.loads(Path(predictions).read_text())["n"])
+        rows.append({
+            "report": _rel(report),
+            "predictions": _rel(predictions),
+            "exists": bool(exists),
+            "n_dump": n_dump,
+            "n_pooled_walkforward_rows": int(pooled_rows),
+            "pairs": bool(n_dump == pooled_rows),
+        })
+    return rows
+
+
+def resolve_oof_source(pooled_rows: int, sources=OOF_SOURCES) -> tuple[Path, Path]:
+    """The first (report, dump) pair whose dump still pairs with this table.
+
+    A dump written from a different table cannot be joined to this one at all
+    -- the join is positional -- so there is no benchmark to build and the
+    only useful thing to do is say which command writes a dump that pairs.
+    Falling back to the nearest-looking dump would produce a plausible number
+    describing predictions no model made about these fights, which is the
+    failure `attach_oof_predictions` was written to make impossible.
+    """
+    status = oof_source_status(pooled_rows, sources)
+    for (report, predictions), row in zip(sources, status):
+        if row["pairs"]:
+            return Path(report), Path(predictions)
+    lines = "\n".join(
+        f"  {row['predictions']}: "
+        + ("absent" if not row["exists"] else f"{row['n_dump']} pooled rows")
+        for row in status
+    )
+    raise SystemExit(
+        f"no walk-forward prediction dump pairs with the current feature table, "
+        f"which rebuilds {pooled_rows} pooled walk-forward rows:\n{lines}\n"
+        "The join is positional, so a dump from a different table cannot be "
+        "scored against this one. Run `python scripts/revalidate_recipe.py` to "
+        "re-run the deployed recipe on the current table -- it re-measures every "
+        "bar and dumps the hybrid's predictions -- then re-run this script."
+    )
 
 
 def check_dump_reproduces_report(oof: pd.DataFrame, report: dict) -> dict:
@@ -941,10 +1046,13 @@ def parse_args(argv=None) -> argparse.Namespace:
              "'deployed' scores whatever serves today, which is in-sample for "
              "every fight in this dataset",
     )
-    parser.add_argument("--predictions", type=Path, default=OOF_PREDICTIONS,
-                        help="oof mode: the --dump-predictions JSON to score")
-    parser.add_argument("--report", type=Path, default=OOF_REPORT,
-                        help="oof mode: the walk-forward report those predictions came from")
+    parser.add_argument("--predictions", type=Path, default=None,
+                        help="oof mode: the --dump-predictions JSON to score "
+                             "(default: the freshest committed dump that pairs "
+                             "with the current feature table)")
+    parser.add_argument("--report", type=Path, default=None,
+                        help="oof mode: the walk-forward report those predictions "
+                             "came from (default: resolved alongside --predictions)")
     parser.add_argument("--out", type=Path, default=None,
                         help="output path (defaults to the mode's own artifact)")
     parser.add_argument("--force", action="store_true",
@@ -959,7 +1067,17 @@ def main(argv=None) -> None:
             raise SystemExit("--out is not supported in deployed mode")
         main_deployed(force=args.force)
         return
-    main_oof(args.predictions, args.report, args.out or OOF_BENCHMARK)
+    if (args.predictions is None) != (args.report is None):
+        raise SystemExit(
+            "--predictions and --report name one run's two halves; pass both or "
+            "neither (neither resolves the freshest pair that matches the table)"
+        )
+    if args.predictions is None:
+        dates = pd.read_parquet(PROCESSED / "features.parquet", columns=["date"])["date"]
+        report, predictions = resolve_oof_source(pooled_row_count(dates))
+    else:
+        report, predictions = args.report, args.predictions
+    main_oof(predictions, report, args.out or OOF_BENCHMARK)
 
 
 if __name__ == "__main__":
