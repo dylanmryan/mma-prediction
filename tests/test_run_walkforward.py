@@ -378,6 +378,56 @@ def test_prediction_dump_is_json_round_trippable_at_full_precision():
     assert json.loads(json.dumps(dump))["p_winner"] == [float(v) for v in p]
 
 
+def test_prediction_dump_carries_the_joint_cells_when_the_candidate_emits_them():
+    """Part B of the market-edge analysis needs an out-of-fold JOINT, not just
+    a winner probability, and the dump is the only place an out-of-fold
+    prediction is written down."""
+    frame = _dump_frame().iloc[:2].assign(y_method=["ko_tko", "decision"])
+    mask = np.array([True, True])
+    cells = np.arange(36, dtype=float).reshape(2, 18) / 36.0
+    dump = rwf.prediction_dump("d", frame, [(2018, mask, {
+        "winner": np.array([0.7, 0.2]), "method": None, "round": None,
+        "joint_cells": cells}, {})])
+    assert dump["joint_cells"] == [list(row) for row in cells]
+    assert dump["y_method"] == ["ko_tko", "decision"]
+
+
+def test_prediction_dump_omits_the_joint_cells_when_there_are_none():
+    """Candidates without a joint still dump, and their dumps keep the shape
+    every existing reader (scripts/build_odds_benchmark.py) expects."""
+    frame = _dump_frame().iloc[:2]
+    mask = np.array([True, True])
+    dump = rwf.prediction_dump("d", frame, [(2018, mask, {"winner": np.array([0.7, 0.2]),
+                                                          "method": None, "round": None}, {})])
+    assert "joint_cells" not in dump
+    assert "y_method" not in dump
+
+
+def test_prediction_dump_writes_a_missing_method_as_null_not_nan():
+    """`nan` is not JSON, and a fight whose method was never recorded has to
+    survive the round trip as something a reader can test for."""
+    frame = _dump_frame().iloc[:2].assign(y_method=["ko_tko", None])
+    mask = np.array([True, True])
+    dump = rwf.prediction_dump("d", frame, [(2018, mask, {
+        "winner": np.array([0.7, 0.2]), "method": None, "round": None,
+        "joint_cells": np.zeros((2, 18))}, {})])
+    assert json.loads(json.dumps(dump))["y_method"] == ["ko_tko", None]
+
+
+def test_prediction_dump_joint_cells_follow_the_fold_order_too():
+    frame = _dump_frame().assign(y_method=["ko_tko"] * 6)
+    m18 = np.array([True, True, True, False, False, False])
+    cells18 = np.full((3, 18), 0.25)
+    cells19 = np.full((3, 18), 0.75)
+    dump = rwf.prediction_dump("d", frame, [
+        (2019, ~m18, {"winner": np.array([0.1, 0.6, 0.55]), "method": None,
+                      "round": None, "joint_cells": cells19}, {}),
+        (2018, m18, {"winner": np.array([0.7, 0.2, 0.9]), "method": None,
+                     "round": None, "joint_cells": cells18}, {}),
+    ])
+    assert [row[0] for row in dump["joint_cells"]] == [0.75] * 3 + [0.25] * 3
+
+
 # --- the hazard (simulator) candidate ---------------------------------------
 
 

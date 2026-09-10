@@ -382,17 +382,36 @@ def prediction_dump(name: str, features: pd.DataFrame, fold_results: list) -> di
     is miscalibrated in, and whether the incumbent/candidate gap survives a
     different `n_bins` -- to be applied as anything other than two rounded
     numbers compared with no known precision.
+
+    A candidate that models the outcome CELLS jointly (the simulator, and the
+    hybrid built on it) also gets `joint_cells` and the realised `y_method`
+    written alongside, because a winner probability cannot answer anything
+    about method. `scripts/market_edge_analysis.py` compares the model's
+    six-way (corner x method) distribution against the book's prop line, and
+    that comparison has to be out of fold like every other one -- this dump is
+    the only place an out-of-fold joint is written down. Candidates with no
+    joint keep the original three-list shape exactly, so existing readers
+    (`scripts/build_odds_benchmark.py`) are untouched.
     """
     pooled_feats, pooled_pred = pool(features, [(m, p) for _, m, p, _ in fold_results])
     years = np.concatenate([np.full(int(np.asarray(m, dtype=bool).sum()), int(y))
                             for y, m, _, _ in fold_results])
-    return {
+    dump = {
         "name": name,
         "n": int(len(pooled_feats)),
         "fold_year": [int(v) for v in years],
         "y_winner": [float(v) for v in pooled_feats["y_winner"].to_numpy(dtype=float)],
         "p_winner": [float(v) for v in np.asarray(pooled_pred["winner"], dtype=float)],
     }
+    if pooled_pred.get("joint_cells") is not None:
+        cells = np.asarray(pooled_pred["joint_cells"], dtype=float)
+        dump["joint_cells"] = [[float(v) for v in row] for row in cells]
+        # None, not NaN: a fight whose method was never recorded has to survive
+        # `json.dumps` as something a reader can test for.
+        dump["y_method"] = [
+            None if pd.isna(v) else str(v) for v in pooled_feats["y_method"]
+        ]
+    return dump
 
 
 def main() -> None:
