@@ -32,7 +32,7 @@ it without ``--force``.
 
 Since SP3 the deployed scorer is the hybrid (`mma.inference.SimulatorPredictor`),
 but its winner marginal IS the blend member's own array -- returned unchanged,
-verified element-wise over all 4,804 pooled rows in
+verified element-wise over every pooled row in
 models/walkforward/sp3_decision.json -- and the winner probability is the only
 head this benchmark compares. So both modes read the winner probability
 through the blend, and the walk-forward dump they use is the same one
@@ -72,10 +72,17 @@ FROZEN_BENCHMARK = MODELS / "market_benchmark.json"
 #: The out-of-fold benchmark this script's default mode writes.
 OOF_BENCHMARK = MODELS / "market_benchmark_oof.json"
 #: The deployed hybrid's own walk-forward run, and the pooled predictions it
-#: dumped. `hybrid_e2` is the report `models/simulator.json` names as its
-#: source; the dump is row-aligned to `mma.walkforward.pool`'s order.
-OOF_REPORT = WALKFORWARD / "hybrid_e2.json"
-OOF_PREDICTIONS = WALKFORWARD / "preds" / "hybrid_e2.json"
+#: dumped. `hybrid_e2_cells` is `hybrid_e2` -- the run `models/simulator.json`
+#: names as its source -- re-run on the current feature table: same candidate,
+#: same seeds, same model matrix. (`hybrid_e2`'s `--drop-columns` named three
+#: more columns, but `mma.tensors` and `mma.models.xgb` exclude those three
+#: from the model matrix permanently, so naming them drops nothing; the two
+#: runs' out-of-fold winner probabilities agree to ZERO difference on all 4,804
+#: rows they share.) It is the dump `scripts/market_edge_analysis.py` reads, so
+#: both market artifacts now describe one set of out-of-fold predictions, and
+#: it is the one that carries `fight_id`.
+OOF_REPORT = WALKFORWARD / "hybrid_e2_cells.json"
+OOF_PREDICTIONS = WALKFORWARD / "preds" / "hybrid_e2_cells.json"
 
 # Famous fights used to sanity-check corner alignment: (name_1, name_2,
 # expected favorite's name, approximate event date). Chosen so the favorite
@@ -425,13 +432,13 @@ def load_features() -> pd.DataFrame:
 
 
 def pooled_frame(features: pd.DataFrame) -> pd.DataFrame:
-    """Rebuild `mma.walkforward.pool`'s row order, carrying `fold_year`.
+    """The current table's walk-forward evaluation rows, carrying `fold_year`.
 
-    `run_walkforward.prediction_dump` writes the pooled evaluation rows
-    positionally -- fold year, y_winner and p_winner as three parallel lists
-    with no fight id -- in the concatenation order of the folds. This walks
-    the same folds in the same order over the same table, so row i here is
-    row i there, which is what lets the dump be joined to anything at all.
+    This is the row SET the dump is paired against -- which fights the
+    walk-forward scores today, and in which fold year. Pairing is by
+    `fight_id`, so the row ORDER carries nothing; what matters is that these
+    are the same folds `run_walkforward.py` builds, over the same table, so a
+    fight's fold year here is the fold year the dump's model was fitted for.
     The fold masks are pairwise disjoint by construction (`make_folds` gives
     each year a half-open date window and the last fold absorbs the tail), so
     no fight appears twice.
@@ -445,34 +452,83 @@ def pooled_frame(features: pd.DataFrame) -> pd.DataFrame:
 
 
 def attach_oof_predictions(pooled: pd.DataFrame, dump: dict) -> pd.DataFrame:
-    """`pooled` with the dump's out-of-fold winner probability as `model_p_a`.
+    """`pooled`, restricted to the dump's fights, with `model_p_a` attached.
 
-    The dump is positional, so the pairing is only correct if the rebuilt
-    frame IS the frame the dump was written from. That is checked, not
-    assumed: the row count, the fold-year sequence and the realised outcome
-    sequence must all match element for element. A silently mis-paired join
-    would still produce a plausible-looking log-loss, which is precisely the
-    failure this benchmark must not ship, so every mismatch raises.
+    The pairing is a JOIN ON `fight_id` and nothing else -- the same key, and
+    the same reasoning, as the odds join below. It used to be positional: the
+    dump was three parallel lists in the harness's pooled row order, so pairing
+    it meant rebuilding that order from the feature table and asserting the
+    rebuild was row-for-row identical. That held only while the table stood
+    still. It does not stand still: a daily scrape took it from 11,238 to
+    11,290 fights, the unbounded last fold absorbed all 52, and a correct guard
+    then refused a correct dump because 4,804 != 4,856. The dump now names its
+    rows, so a grown table is simply a table the dump covers less of.
+
+    What is still checked, because an id alone does not make a pairing sound:
+
+    * every fight in the dump must be a walk-forward evaluation row of the
+      CURRENT table -- an id the table does not evaluate means the two describe
+      different fight sets, and no metric over the join would mean anything;
+    * ids must be unique on both sides, or the join would multiply rows;
+    * the fold year must agree, or the fight has moved between folds and is
+      being scored by a different model than the one that predicted it;
+    * the realised outcome must agree, or the table has been relabelled under
+      the dump.
+
+    Rows the current table evaluates but the dump does not cover are NOT an
+    error -- that is the ordinary state of a dump written before the last
+    scrape -- but the caller reports the count, because a dump covering ever
+    less of the table is how staleness looks before it is a failure.
     """
     n_dump = int(dump["n"])
-    if len(pooled) != n_dump:
+    if "fight_id" not in dump:
         raise ValueError(
-            f"prediction dump has {n_dump} pooled rows but the rebuilt "
-            f"walk-forward frame has {len(pooled)}; the dump was written from "
-            "a different feature table or a different fold set"
+            "prediction dump carries no fight_id, so it can only be paired by "
+            "position -- which stops being valid the moment the feature table "
+            "grows, and it has. Re-run scripts/run_walkforward.py "
+            "--dump-predictions to write a dump that names its rows"
         )
-    for column, key in (("fold_year", "fold_year"), ("y_winner", "y_winner")):
-        rebuilt = pooled[column].to_numpy(dtype=float)
-        dumped = np.asarray(dump[key], dtype=float)
-        if not np.array_equal(rebuilt, dumped):
-            n_bad = int((rebuilt != dumped).sum())
+    lengths = {key: len(dump[key]) for key in
+               ("fight_id", "fold_year", "y_winner", "p_winner")}
+    if set(lengths.values()) != {n_dump}:
+        raise ValueError(
+            f"prediction dump says n={n_dump} but its parallel lists have "
+            f"lengths {lengths}; the dump is malformed"
+        )
+    dumped = pd.DataFrame(
+        {
+            "fight_id": [str(v) for v in dump["fight_id"]],
+            "dump_fold_year": np.asarray(dump["fold_year"], dtype=float),
+            "dump_y_winner": np.asarray(dump["y_winner"], dtype=float),
+            "model_p_a": np.asarray(dump["p_winner"], dtype=float),
+        }
+    )
+    for label, frame in (("prediction dump", dumped), ("walk-forward frame", pooled)):
+        n_duplicated = int(frame["fight_id"].duplicated().sum())
+        if n_duplicated:
             raise ValueError(
-                f"rebuilt {column!r} disagrees with the prediction dump on "
-                f"{n_bad} of {len(rebuilt)} rows; the positional pairing is "
-                "not valid and no metric computed from it would be"
+                f"{label} has {n_duplicated} duplicate fight_id(s); an id-keyed "
+                "pairing would multiply rows into the comparison"
             )
-    out = pooled.copy()
-    out["model_p_a"] = np.asarray(dump["p_winner"], dtype=float)
+    unknown = sorted(set(dumped["fight_id"]) - set(pooled["fight_id"]))
+    if unknown:
+        raise ValueError(
+            f"{len(unknown)} of the dump's {n_dump} fights are not walk-forward "
+            f"evaluation rows of the current feature table (e.g. {unknown[:3]}); "
+            "the dump and the table describe different fight sets"
+        )
+    out = pooled.merge(dumped, on="fight_id", how="inner", validate="one_to_one")
+    for column in ("fold_year", "y_winner"):
+        rebuilt = out[column].to_numpy(dtype=float)
+        dumped_column = out[f"dump_{column}"].to_numpy(dtype=float)
+        if not np.array_equal(rebuilt, dumped_column):
+            n_bad = int((rebuilt != dumped_column).sum())
+            raise ValueError(
+                f"the current table's {column!r} disagrees with the prediction "
+                f"dump on {n_bad} of {len(rebuilt)} fights that pair by id; the "
+                "dump describes a table these fights no longer live in"
+            )
+    out = out.drop(columns=["dump_fold_year", "dump_y_winner"]).reset_index(drop=True)
     if not ((out["model_p_a"] > 0.0) & (out["model_p_a"] < 1.0)).all():
         raise ValueError("out-of-fold winner probabilities must lie strictly in (0, 1)")
     return out
@@ -771,12 +827,19 @@ def main_oof(predictions: Path, report: Path, out_path: Path) -> None:
     print("Validating alignment against famous fights ...")
     validate_famous_fights(fights, fighters, aligned)
 
-    print(f"Rebuilding the walk-forward pooled rows and pairing {predictions.name} ...")
+    print(f"Rebuilding the walk-forward evaluation rows and pairing {predictions.name} ...")
     dump = json.loads(predictions.read_text())
     wf_report = json.loads(report.read_text())
-    oof = attach_oof_predictions(pooled_frame(features), dump)
+    pooled = pooled_frame(features)
+    oof = attach_oof_predictions(pooled, dump)
     reproduced = check_dump_reproduces_report(oof, wf_report)
-    print(f"  {len(oof)} out-of-fold rows; dump reproduces the report's pooled metrics")
+    n_uncovered = int(len(pooled) - len(oof))
+    print(f"  {len(oof)} out-of-fold rows paired by fight id; dump reproduces "
+          "the report's pooled metrics")
+    if n_uncovered:
+        print(f"  NOTE: the current table has {n_uncovered} walk-forward row(s) "
+              "the dump does not cover -- it predates the latest data refresh. "
+              "The comparison is the dump's fights, not the table's")
 
     print("Joining out-of-fold predictions to the aligned odds by fight id ...")
     matched = to_features_convention(join_odds_by_id(oof, aligned))
@@ -832,6 +895,27 @@ def main_oof(predictions: Path, report: Path, out_path: Path) -> None:
             "fold_years": [int(y) for y in wf_report["fold_years"]],
             "n_pooled_walkforward_rows": int(dump["n"]),
             "dump_reproduces_report_pooled": reproduced,
+            "pairing": {
+                "key": "fight_id (the shared 16-hex ufcstats id), joined -- not row position",
+                "table_the_dump_was_written_on": {
+                    "n_feature_rows": wf_report["config"].get("n_feature_rows"),
+                    "features_max_date": wf_report["config"].get("features_max_date"),
+                },
+                "table_this_comparison_ran_on": {
+                    "n_feature_rows": int(len(features)),
+                    "features_max_date": str(features["date"].max().date()),
+                },
+                "n_walkforward_rows_not_covered_by_the_dump": n_uncovered,
+                "note": (
+                    "The two tables need not be the same one. Every fight in "
+                    "the dump is checked to be a walk-forward evaluation row "
+                    "of the table this ran on, with the same fold year and the "
+                    "same realised outcome; rows the table has gained since "
+                    "the dump was written are simply not in the comparison, "
+                    "and their count is above. A dump paired by row POSITION "
+                    "could not have said any of this -- it could only refuse."
+                ),
+            },
             "deployed_model_version": model_version(ROOT),
             "deployed_training_recipe": {
                 "mode": metrics.get("mode"),
@@ -849,7 +933,10 @@ def main_oof(predictions: Path, report: Path, out_path: Path) -> None:
             "n_walkforward_rows": int(len(oof)),
             "n_odds_aligned_fights": int(len(aligned)),
             "n_intersection": int(len(matched)),
-            "join_key": "fight_id (the shared 16-hex ufcstats id), and nothing else",
+            "join_key": (
+                "fight_id (the shared 16-hex ufcstats id), and nothing else -- "
+                "for the odds join AND for pairing the prediction dump"
+            ),
             "n_intersection_rows_in_deployed_training_window": int(trained_on.sum()),
             "deployed_training_window_covers_the_whole_intersection": bool(trained_on.all()),
             "odds_coverage_of_walkforward_rows": round(len(matched) / len(oof), 4),
