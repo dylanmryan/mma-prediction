@@ -148,12 +148,16 @@ def staged(tmp_path, monkeypatch):
 
 
 def _drive_execute(
-    models_dir, monkeypatch, incumbent_ll, candidate_ll, rebuild_priors=None
+    models_dir, monkeypatch, incumbent_ll, candidate_ll, remeasure=None
 ):
     """Run _execute with the retrain, both ensemble evals, and the display-
-    priors rebuild all mocked. The priors rebuild is ALWAYS patched (default
-    no-op) so a promote path never shells out to the real
-    check_display_calibration.py and touches the real models/torch."""
+    calibration re-measurement all mocked. The re-measurement is ALWAYS
+    patched (default no-op) so a promote path never shells out to the real
+    check_display_calibration.py and touches the real models/torch.
+
+    It is a re-MEASUREMENT, not a rebuild of priors: since SP3 nothing
+    recalibrates a displayed number, and models/display_calibration.json
+    records a property of the model rather than feeding one."""
     candidate_torch_dir = models_dir / roll_window.CANDIDATE_DIR_NAME / "torch"
 
     def fake_retrain(out_dir, train_end, val_start, val_end):
@@ -169,7 +173,7 @@ def _drive_execute(
     monkeypatch.setattr(roll_window, "_retrain_candidate", fake_retrain)
     monkeypatch.setattr(roll_window, "_ensemble_val_log_loss", fake_eval)
     monkeypatch.setattr(
-        roll_window, "_remeasure_display_calibration", rebuild_priors or (lambda: None)
+        roll_window, "_remeasure_display_calibration", remeasure or (lambda: None)
     )
 
     features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
@@ -179,14 +183,14 @@ def _drive_execute(
 
 def test_execute_promotes_when_candidate_beats_margin(staged, monkeypatch, capsys):
     models_dir, torch_dir = staged
-    calls = {"priors": 0}
+    calls = {"remeasured": 0}
 
-    def record_rebuild():
-        calls["priors"] += 1
+    def record_remeasure():
+        calls["remeasured"] += 1
 
     candidate_torch_dir = _drive_execute(
         models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.640,
-        rebuild_priors=record_rebuild,
+        remeasure=record_remeasure,
     )
 
     # candidate artifacts staged into models/torch
@@ -200,7 +204,7 @@ def test_execute_promotes_when_candidate_beats_margin(staged, monkeypatch, capsy
     assert _read_dir(backup_dir) == INCUMBENT_FILES
 
     # display calibration re-measured against the newly staged ensemble
-    assert calls["priors"] == 1
+    assert calls["remeasured"] == 1
 
     # temp candidate dir cleaned up
     assert not candidate_torch_dir.parent.exists()
@@ -211,7 +215,7 @@ def test_execute_promotes_when_candidate_beats_margin(staged, monkeypatch, capsy
     assert "re-measured" in out
 
 
-def test_execute_promotion_survives_priors_rebuild_failure(staged, monkeypatch, capsys):
+def test_execute_promotion_survives_a_remeasurement_failure(staged, monkeypatch, capsys):
     """A display-calibration re-measurement failure must NOT abort the
     promotion: the ensemble stays staged and a clear warning is printed
     instead of raising. Since SP3 that file is a measurement rather than an
@@ -224,10 +228,10 @@ def test_execute_promotion_survives_priors_rebuild_failure(staged, monkeypatch, 
 
     candidate_torch_dir = _drive_execute(
         models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.600,
-        rebuild_priors=boom,  # does not propagate out of _execute
+        remeasure=boom,  # does not propagate out of _execute
     )
 
-    # ensemble still staged despite the priors failure
+    # ensemble still staged despite the re-measurement failure
     staged_now = _read_dir(torch_dir)
     for name, content in CANDIDATE_FILES.items():
         assert staged_now[name] == content

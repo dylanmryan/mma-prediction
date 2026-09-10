@@ -47,12 +47,20 @@ every recorded prediction means; SP3's simulation parameters are exactly such
 numbers, which is why they live in an artifact rather than as module
 constants read at serving time.
 
-Display priors (applied only in ``app.py``, after the probability the track
-record stores) remain deliberately excluded, so regenerating them does not
-open a new track-record section for byte-identical predictions. The hash
-changes exactly when a retrain, a walk-forward promotion, or a change to the
-blend's weight or temperature or the simulator's parameters changes what gets
-scored, on any of the four members.
+``models/display_calibration.json`` is excluded, and since SP3 the reason is
+simpler than it used to be. It once held mean-matching factors ``app.py``
+multiplied the displayed method and round splits by, and the argument for
+excluding them was that they applied after the probability the track record
+stores. SP3 retired the correction -- nothing recalibrates a displayed number
+any more -- so that file is now purely a MEASUREMENT of the deployed scorer
+(``scripts/check_display_calibration.py``). It records a property of the
+model; it cannot change a prediction, so hashing it would open a new
+track-record section for byte-identical predictions every time the weekly
+measurement moved a fourth decimal.
+
+The hash changes exactly when a retrain, a walk-forward promotion, or a change
+to the blend's weight or temperature or the simulator's parameters changes
+what gets scored, on any of the four members.
 """
 from __future__ import annotations
 

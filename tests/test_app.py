@@ -126,3 +126,8 @@ def test_the_model_card_describes_the_hybrid_and_names_the_simulator_evidence():
     assert "hybrid" in text and "simulator" in text
     assert "joint-outcome log-loss of 2.1432" in text
     assert "leaves the win probability itself unchanged" in text
+    # 10,000 is the per-pass run count, not the per-matchup one: `simulate_fights`
+    # plays each fight from both corners, and `predict_symmetrized` runs the
+    # whole thing again in the mirrored corner ordering. Four passes, 40,000.
+    assert "40,000" in text
+    assert "10,000 simulated fights per matchup" not in text
