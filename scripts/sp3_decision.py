@@ -313,6 +313,23 @@ def identical_winner_arrays(candidate_dump: dict, incumbent_dump: dict) -> dict:
     }
 
 
+def fights_as_reported(report: dict) -> pd.DataFrame:
+    """The fights table as it stood when the reports below were computed.
+
+    Finding 1's evidence is a fact about the data the SP3 harness ran on,
+    and this file is a record of a decision taken on that data. The weekly
+    refresh keeps appending fights -- from the Kaggle mirror and, since the
+    daily scrape became a standing stage, from that too -- so re-deriving
+    the evidence from whatever is on disk today would quietly rewrite the
+    record. Every walk-forward report names the table it ran on.
+    """
+    fights = pd.read_parquet(FIGHTS)
+    cutoff = report.get("config", {}).get("features_max_date")
+    if cutoff is None:
+        return fights
+    return fights[fights["date"] <= pd.Timestamp(cutoff)]
+
+
 def finish_round_shares(fights: pd.DataFrame,
                         finish_methods=FINISH_METHODS) -> dict:
     """Share of finishes ending in each round, from a fights table.
@@ -500,7 +517,7 @@ def build() -> dict:
     ships = bool(fresh["bar_check"]["ships"])
 
     e2_bar, d2_bar, fresh_bar = e2["bar_check"], d2["bar_check"], fresh["bar_check"]
-    rounds = finish_round_shares(pd.read_parquet(FIGHTS))
+    rounds = finish_round_shares(fights_as_reported(incumbent_report))
     sim_round_f1 = pooled(load(E2), "round_macro_f1")
     inc_round_f1 = pooled(incumbent_report, "round_macro_f1")
 

@@ -177,14 +177,32 @@ def real():
     return features, fights
 
 
-@real_data
-def test_real_hazard_row_count(real):
-    assert len(build_hazard_rows(*real)) == 25336
+# These assert RELATIONS between the built rows and the table they came from,
+# never a row count copied out of one particular build. The weekly refresh
+# appends fights, so a hard-coded total is a test that fails on the first
+# successful data refresh -- and it fails in the Action, before the refreshed
+# data is committed, which is the worst possible place for it.
 
 
 @real_data
-def test_real_decision_row_count(real):
-    assert len(build_decision_rows(*real)) == 4925
+def test_real_hazard_rows_are_one_per_fight_and_round_fought(real):
+    frame = build_hazard_rows(*real)
+    assert not frame.duplicated(["fight_id", "round_no"]).any()
+    span = frame.groupby("fight_id")["round_no"].agg(["min", "max", "nunique"])
+    assert (span["min"] == 1).all()
+    assert (span["nunique"] == span["max"]).all()  # contiguous from round 1
+    assert set(frame["fight_id"]) <= set(real[0]["fight_id"])
+    assert len(frame) > len(set(frame["fight_id"]))  # fights last many rounds
+
+
+@real_data
+def test_real_decision_rows_are_exactly_the_fights_that_went_to_the_cards(real):
+    features, fights = real
+    frame = build_decision_rows(features, fights)
+    went_the_distance = features["y_method"].astype("string").eq("decision")
+
+    assert len(frame) == int(went_the_distance.fillna(False).sum())
+    assert set(frame["fight_id"]) == set(features.loc[went_the_distance.fillna(False), "fight_id"])
 
 
 @real_data
@@ -197,7 +215,8 @@ def test_real_label_distribution_matches_the_method_counts(real):
     n_sub = int((decisive["method"] == "submission").sum())
     assert counts["a_ko"] + counts["b_ko"] == n_ko
     assert counts["a_sub"] + counts["b_sub"] == n_sub
-    assert counts["survive"] == 25336 - n_ko - n_sub
+    # Every remaining round is one the fight survived.
+    assert counts["survive"] == len(frame) - n_ko - n_sub
 
 
 @real_data

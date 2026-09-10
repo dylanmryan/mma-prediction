@@ -39,7 +39,15 @@
       "elo_b": 1622.0646727666392,
       "skipped": false,
       "predicted_at_utc": "2026-08-10T13:24:32Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "a67d071163962af8",
+      "correct": true,
+      "log_loss_contribution": 0.5294190096904878,
+      "brier_contribution": 0.16896453360408992,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Morgan Charri\u00e8re",
@@ -66,7 +74,15 @@
       "elo_b": 1560.9313893959566,
       "skipped": false,
       "predicted_at_utc": "2026-08-10T13:24:32Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "9256f591b30c073e",
+      "correct": true,
+      "log_loss_contribution": 0.552965911552761,
+      "brier_contribution": 0.18042006929272802,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "M\u00e1rio Pinto",
@@ -93,7 +109,15 @@
       "elo_b": 1580.6854117207008,
       "skipped": false,
       "predicted_at_utc": "2026-08-10T13:24:32Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "39d309957c5c210d",
+      "correct": true,
+      "log_loss_contribution": 0.6609125579751578,
+      "brier_contribution": 0.23388840806291356,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Kurtis Campbell",
@@ -165,7 +189,15 @@
       "elo_b": 1537.5247551489463,
       "skipped": false,
       "predicted_at_utc": "2026-08-17T12:57:01Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "1d2d98ddd05b38fb",
+      "correct": false,
+      "log_loss_contribution": 1.0195311175850548,
+      "brier_contribution": 0.4086225915337147,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Losene Keita",
@@ -201,7 +233,15 @@
       "elo_b": 1592.8116483372305,
       "skipped": false,
       "predicted_at_utc": "2026-08-17T12:57:01Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "476fe566d2df676e",
+      "correct": false,
+      "log_loss_contribution": 1.066796814891815,
+      "brier_contribution": 0.43019300548730044,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Nora Cornolle",
