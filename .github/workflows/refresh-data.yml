@@ -29,7 +29,11 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cpu
 
-      - name: Refresh Kaggle data
+      # Asks BOTH sources whether anything happened: the Kaggle mirror it
+      # downloads, compared against the primary-sourced processed rows, and
+      # the daily ufcstats scrape's event list, compared against the whole
+      # processed table. Either one running ahead sets refresh=true.
+      - name: Check both sources for new fights
         id: refresh
         # Uncomment these two lines and add KAGGLE_USERNAME / KAGGLE_KEY as
         # repo secrets if anonymous Kaggle access fails in CI.
@@ -41,22 +45,20 @@ jobs:
           python scripts/refresh_data.py | tee "$RUNNER_TEMP/refresh_output.txt"
           grep '^REFRESH_NEEDED=' "$RUNNER_TEMP/refresh_output.txt" | sed 's/REFRESH_NEEDED=/refresh=/' >> "$GITHUB_OUTPUT"
 
-      # Reports how far the daily ufcstats scrape (Greco1899/scrape_ufc_stats,
-      # GPL-3.0, used as data only) runs ahead of the irregularly refreshed
-      # Kaggle primary. Deliberately REPORT-ONLY and continue-on-error: a
-      # fetch failure or an upstream schema change must never break the
-      # weekly refresh. Promoting this to a writing step (--enable) is a
-      # human decision deferred to SP4 -- it also needs fighters.parquet
-      # extended with UFC debutants, which this script does not do.
-      - name: Report secondary-source gap (report only)
-        continue-on-error: true
-        env:
-          OMP_NUM_THREADS: "1"
-        run: |
-          set -o pipefail
-          python scripts/refresh_secondary.py --dry-run | tail -30
-
-      - name: Rebuild processed dataset
+      # Builds from the UNION of the two sources. The daily ufcstats scrape
+      # (Greco1899/scrape_ufc_stats, GPL-3.0, used as data only -- its
+      # published CSVs are fetched over HTTPS, no GPL code is vendored) is a
+      # standing stage inside this script, not a separate writing step: every
+      # rebuild fetches both and merges, so no rebuild can drop what a
+      # previous one added and the script's own regression guard keeps its
+      # meaning. The primary wins on any fight both sources have.
+      #
+      # No continue-on-error, and none is wanted: the merge is fail-soft in
+      # the script itself. An unreachable host, a renamed column or a source
+      # that disagrees with ours degrades to a primary-only build with a
+      # warning on stderr, so this step going red means a genuine data
+      # problem rather than someone else's outage.
+      - name: Rebuild processed dataset (Kaggle + daily scrape)
         if: steps.refresh.outputs.refresh == 'true'
         env:
           OMP_NUM_THREADS: "1"
@@ -135,11 +137,14 @@ jobs:
             echo "no changes to commit"
           fi
 
-      # Everything below runs EVERY week regardless of whether Kaggle had
-      # new data -- prospective predictions and grading don't depend on a
+      # Everything below runs EVERY week regardless of whether either source
+      # had new data -- prospective predictions and grading don't depend on a
       # data refresh happening, and this is the project's flagship
       # credibility feature (timestamped predictions, committed before
-      # events, graded automatically after).
+      # events, graded automatically after). Grading is the step the daily
+      # scrape most directly serves: it can only grade a fight the tables
+      # already have, and the tables now reach within days of the card
+      # instead of within weeks.
       - name: Predict upcoming events
         env:
           OMP_NUM_THREADS: "1"
