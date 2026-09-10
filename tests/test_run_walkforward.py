@@ -331,6 +331,7 @@ def test_build_candidate_passes_the_calibrator_through_to_the_blend():
 
 def _dump_frame():
     return pd.DataFrame({
+        "fight_id": [f"{i:016x}" for i in range(6)],
         "y_winner": [1.0, 0.0, 1.0, 0.0, 1.0, 1.0],
         "date": pd.to_datetime(["2018-01-01"] * 3 + ["2019-01-01"] * 3),
     })
@@ -350,6 +351,7 @@ def test_prediction_dump_is_row_aligned_with_the_pooled_metrics():
     dump = rwf.prediction_dump("d", frame, fold_results)
     assert dump == {
         "name": "d", "n": 6,
+        "fight_id": [f"{i:016x}" for i in range(6)],
         "fold_year": [2018, 2018, 2018, 2019, 2019, 2019],
         "y_winner": [1.0, 0.0, 1.0, 0.0, 1.0, 1.0],
         "p_winner": [0.7, 0.2, 0.9, 0.1, 0.6, 0.55],
@@ -367,6 +369,7 @@ def test_prediction_dump_follows_the_fold_order_it_is_given_not_the_table_order(
     assert dump["fold_year"] == [2019, 2019, 2019, 2018, 2018, 2018]
     assert dump["y_winner"] == [0.0, 1.0, 1.0, 1.0, 0.0, 1.0]
     assert dump["p_winner"] == [0.1, 0.6, 0.55, 0.7, 0.2, 0.9]
+    assert dump["fight_id"] == [f"{i:016x}" for i in (3, 4, 5, 0, 1, 2)]
 
 
 def test_prediction_dump_is_json_round_trippable_at_full_precision():
@@ -426,6 +429,33 @@ def test_prediction_dump_joint_cells_follow_the_fold_order_too():
                      "round": None, "joint_cells": cells18}, {}),
     ])
     assert [row[0] for row in dump["joint_cells"]] == [0.75] * 3 + [0.25] * 3
+
+
+def test_prediction_dump_names_the_fight_each_row_scores():
+    """Without an id the dump can only be paired by position, which makes the
+    pairing depend on the feature table never moving underneath it -- and the
+    table grows every time the scraper runs. The id makes it a join."""
+    frame = _dump_frame()
+    m18 = np.array([True, True, True, False, False, False])
+    dump = rwf.prediction_dump("d", frame, [
+        (2018, m18, {"winner": np.array([0.7, 0.2, 0.9]), "method": None, "round": None}, {}),
+        (2019, ~m18, {"winner": np.array([0.1, 0.6, 0.55]), "method": None, "round": None}, {}),
+    ])
+    assert dump["fight_id"] == list(frame["fight_id"])
+    assert len(dump["fight_id"]) == dump["n"]
+    assert json.loads(json.dumps(dump))["fight_id"] == dump["fight_id"]
+
+
+def test_prediction_dump_refuses_a_frame_with_no_fight_id():
+    """A dump that cannot name its rows is the bug, not a lesser dump: it would
+    be written, committed, and then be unpairable the next time the table grew."""
+    frame = _dump_frame().drop(columns=["fight_id"])
+    m18 = np.array([True, True, True, False, False, False])
+    with pytest.raises(ValueError, match="fight_id"):
+        rwf.prediction_dump("d", frame, [
+            (2018, m18, {"winner": np.array([0.7, 0.2, 0.9]), "method": None,
+                         "round": None}, {}),
+        ])
 
 
 # --- the hazard (simulator) candidate ---------------------------------------

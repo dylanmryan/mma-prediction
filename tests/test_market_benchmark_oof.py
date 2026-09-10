@@ -50,6 +50,7 @@ def _dump(pooled: pd.DataFrame, p=None) -> dict:
     return {
         "name": "synthetic",
         "n": n,
+        "fight_id": [str(v) for v in pooled["fight_id"]],
         "fold_year": [int(v) for v in pooled["fold_year"]],
         "y_winner": [float(v) for v in pooled["y_winner"]],
         "p_winner": [float(v) for v in p],
@@ -72,10 +73,11 @@ def test_pooled_frame_holds_only_fold_year_rows():
 
 
 def test_pooled_frame_row_order_is_walkforward_pools():
-    """Row i of the rebuilt frame must be row i of what the harness pooled.
+    """The rebuilt frame must be the rows the harness pooled.
 
-    The prediction dump carries no fight id, only three parallel lists, so
-    the pairing is positional and this equality is the whole basis for it.
+    The dump is paired by fight id, so the row ORDER no longer carries the
+    pairing -- but the rebuilt frame still has to be the same row SET, or the
+    join would silently drop fights the harness did in fact evaluate.
     """
     features = _features()
     folds = make_folds(features["date"])
@@ -96,42 +98,92 @@ def test_pooled_frame_scores_no_fight_twice():
 # --------------------------------------------------------------------------
 
 
-def test_attach_oof_predictions_pairs_by_position():
+def test_attach_oof_predictions_pairs_by_fight_id():
     pooled = bob.pooled_frame(_features())
     dump = _dump(pooled)
     out = bob.attach_oof_predictions(pooled, dump)
-    assert list(out["model_p_a"]) == dump["p_winner"]
     assert list(out["fight_id"]) == list(pooled["fight_id"])
+    assert list(out["model_p_a"]) == dump["p_winner"]
 
 
-def test_attach_oof_predictions_rejects_a_different_row_count():
+def test_attach_oof_predictions_ignores_the_dump_row_order():
+    """An id-keyed pairing is a join, so a reordered dump is the same dump."""
+    pooled = bob.pooled_frame(_features())
+    straight = bob.attach_oof_predictions(pooled, _dump(pooled))
+    dump = _dump(pooled)
+    order = list(reversed(range(dump["n"])))
+    for key in ("fight_id", "fold_year", "y_winner", "p_winner"):
+        dump[key] = [dump[key][i] for i in order]
+    reversed_dump = bob.attach_oof_predictions(pooled, dump)
+    pd.testing.assert_frame_equal(straight, reversed_dump)
+
+
+def test_attach_oof_predictions_pairs_through_a_table_that_has_since_grown():
+    """The bug this pairing exists to kill: a daily scrape added 52 fights to
+    the feature table and the committed dump -- positional, and 52 rows short
+    -- became unpairable. Keyed on the id, a grown table just means the dump
+    covers fewer of its rows."""
+    grown = _features(n_per_year=4)
+    small = grown[grown["date"] < pd.Timestamp("2026-01-01")].reset_index(drop=True)
+    dump = _dump(bob.pooled_frame(small))
+    out = bob.attach_oof_predictions(bob.pooled_frame(grown), dump)
+    assert len(out) == dump["n"] < len(bob.pooled_frame(grown))
+    assert list(out["fight_id"]) == dump["fight_id"]
+
+
+def test_attach_oof_predictions_rejects_a_fight_the_table_does_not_evaluate():
+    """The pairing failure that IS a failure: the dump names a fight the
+    current table's walk-forward never scores, so the two describe different
+    fight sets and no metric over the join would mean anything."""
     pooled = bob.pooled_frame(_features())
     dump = _dump(pooled)
-    dump["n"] = dump["n"] - 1
-    dump["fold_year"] = dump["fold_year"][:-1]
-    dump["y_winner"] = dump["y_winner"][:-1]
-    dump["p_winner"] = dump["p_winner"][:-1]
-    with pytest.raises(ValueError, match="pooled rows"):
+    dump["fight_id"][0] = "ffffffffffffffff"
+    with pytest.raises(ValueError, match="not walk-forward evaluation rows"):
         bob.attach_oof_predictions(pooled, dump)
 
 
-def test_attach_oof_predictions_rejects_a_misaligned_outcome_sequence():
-    """A shuffled dump still has the right n and the right multiset of
-    outcomes; only an element-wise check catches it, and a mis-paired join
-    would produce a plausible-looking log-loss for the wrong fights."""
+def test_attach_oof_predictions_rejects_a_dump_with_no_fight_id():
+    """The legacy positional shape is refused outright rather than paired by
+    position, which is the fragility being removed."""
     pooled = bob.pooled_frame(_features())
     dump = _dump(pooled)
-    ys = dump["y_winner"]
-    swap = next(i for i, y in enumerate(ys) if y != ys[0])
-    ys[0], ys[swap] = ys[swap], ys[0]
+    del dump["fight_id"]
+    with pytest.raises(ValueError, match="fight_id"):
+        bob.attach_oof_predictions(pooled, dump)
+
+
+def test_attach_oof_predictions_rejects_ragged_lists():
+    pooled = bob.pooled_frame(_features())
+    dump = _dump(pooled)
+    dump["p_winner"] = dump["p_winner"][:-1]
+    with pytest.raises(ValueError, match="n"):
+        bob.attach_oof_predictions(pooled, dump)
+
+
+def test_attach_oof_predictions_rejects_a_duplicated_fight_in_the_dump():
+    pooled = bob.pooled_frame(_features())
+    dump = _dump(pooled)
+    dump["fight_id"][1] = dump["fight_id"][0]
+    with pytest.raises(ValueError, match="duplicate"):
+        bob.attach_oof_predictions(pooled, dump)
+
+
+def test_attach_oof_predictions_rejects_a_disagreeing_outcome():
+    """The id says which fight; this says the table still records the same
+    result for it. A relabelled outcome would silently rescore the model."""
+    pooled = bob.pooled_frame(_features())
+    dump = _dump(pooled)
+    dump["y_winner"][0] = 1.0 - dump["y_winner"][0]
     with pytest.raises(ValueError, match="y_winner"):
         bob.attach_oof_predictions(pooled, dump)
 
 
-def test_attach_oof_predictions_rejects_a_misaligned_fold_year_sequence():
+def test_attach_oof_predictions_rejects_a_disagreeing_fold_year():
+    """A fight that has moved between folds is being scored by a different
+    model than the dump's, even though the id still matches."""
     pooled = bob.pooled_frame(_features())
     dump = _dump(pooled)
-    dump["fold_year"] = list(reversed(dump["fold_year"]))
+    dump["fold_year"][0] = 2019 if dump["fold_year"][0] != 2019 else 2020
     with pytest.raises(ValueError, match="fold_year"):
         bob.attach_oof_predictions(pooled, dump)
 
@@ -489,3 +541,47 @@ def test_artifact_july_comparison_is_like_for_like(artifact):
         comparison["out_of_fold_2021_plus"]["n_fights"]
         == artifact["out_of_fold_2021_plus"]["n_fights"]
     )
+
+
+# --------------------------------------------------------------------------
+# The committed dump, against the table as it stands today
+# --------------------------------------------------------------------------
+
+FEATURES = ROOT / "data" / "processed" / "features.parquet"
+
+needs_table = pytest.mark.skipif(
+    not FEATURES.exists() or not bob.OOF_PREDICTIONS.exists(),
+    reason="feature table or committed prediction dump not built yet",
+)
+
+
+@needs_table
+def test_the_committed_dump_still_pairs_with_the_current_feature_table():
+    """The regression this whole path was rewritten for.
+
+    A daily scrape grew `features.parquet` from 11,238 to 11,290 fights; the
+    unbounded last fold absorbed all 52; and the committed dump -- paired by
+    position back then -- could no longer be read against the table at all, so
+    `models/market_benchmark_oof.json` stopped being regenerable. Nothing in
+    the suite noticed, because every pairing test ran on synthetic frames.
+    This one runs on the artifacts that actually ship: it fails the moment the
+    committed dump and the committed table stop describing the same fights.
+    """
+    features = bob.load_features()
+    dump = json.loads(bob.OOF_PREDICTIONS.read_text())
+    oof = bob.attach_oof_predictions(bob.pooled_frame(features), dump)
+    assert len(oof) == dump["n"]
+    assert not oof["fight_id"].duplicated().any()
+    assert ((oof["model_p_a"] > 0.0) & (oof["model_p_a"] < 1.0)).all()
+
+
+@needs_table
+def test_the_committed_dump_reproduces_the_report_it_is_named_with():
+    """Pairing is necessary and not sufficient: the dump also has to be the
+    run its report describes, or the benchmark quotes a model nothing vouches
+    for."""
+    features = bob.load_features()
+    dump = json.loads(bob.OOF_PREDICTIONS.read_text())
+    report = json.loads(bob.OOF_REPORT.read_text())
+    oof = bob.attach_oof_predictions(bob.pooled_frame(features), dump)
+    assert bob.check_dump_reproduces_report(oof, report)["n"] == report["pooled"]["n"]
