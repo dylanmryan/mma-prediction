@@ -1100,6 +1100,44 @@ is a real improvement and it is a small one, and it does not change the
 finding: **the model still loses to the market on every metric, on every
 cut, in both the 2021+ comparison and the full 2018–2025 out-of-fold set.**
 
+### Is there anywhere it wins? Ten pre-registered looks, ten losses
+
+A model that loses on average can still win somewhere, so
+`scripts/market_edge_analysis.py` went looking — out of fold, with the slice
+list and the markets fixed in
+[the plan doc](docs/superpowers/plans/2026-09-09-market-edge-analysis.md)
+before the first number existed. **Eight moneyline slices and two prop
+markets: ten looks, Bonferroni α = 0.005.** The correction never had to do any
+work. **No look came in below a nominal p of 0.05 in the model's favour.**
+
+The prop market is the substantive one, because it is the market SP3's
+simulator was built for: the book prices each corner by KO/TKO, submission and
+decision (overrounding around 1.22 to do it), and the simulator emits a
+coherent joint over exactly those outcomes. On 2,890 out-of-fold fights it
+loses the six-way comparison by **+0.094** log-loss — in all seven years, with
+accuracy and Brier agreeing. The three-way test is what settles it: collapse
+the winner axis away and score **method alone**, isolating whatever method
+skill the joint has from the winner deficit already known, and the book is
+still ahead by **+0.0426** (in six of the seven years; 2024 is a −0.004 wash).
+The hope was that the six-way loss would decompose into "loses the winner half,
+wins the method half". It does not. **A coherent joint does not out-price a
+crude prop book.** On the moneyline it is the same story, **seven slices of
+eight to the market** — including both slices chosen because the 2026 economics
+literature flags them as residually mispriced, a five-year-plus age gap
+(+0.0336) and one corner travelling while the other is home (+0.0327), each
+losing by roughly the pooled +0.0364. Whatever the model knows about youth and
+travel is already in the line. The one slice where it leads on log-loss is
+`external_missing`: **54 fights at p = 0.69**, which is not an edge.
+
+All of it is retrospective — these fights have been reused across five
+experiments, so the slice list was pre-registered but the *fights* were not
+fresh, and a positive here would have needed prospective confirmation before it
+meant anything. There was no positive, and that is the direction in which
+reuse is harmless: mining biases towards spurious findings, not spurious nulls.
+Full numbers — every slice and market, paired tests, ROI with intervals, and
+the multiple-comparisons arithmetic — are in
+[`models/market_edge_analysis.json`](models/market_edge_analysis.json).
+
 ### Caveats and the rest of the numbers
 
 **Odds coverage is not uniform.** 68.2% of the walk-forward rows have
