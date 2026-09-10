@@ -418,3 +418,74 @@ def test_artifact_coverage_check_accounts_for_every_walkforward_row(artifact):
     assert sum(row["n_odds_matched"] for row in coverage.values()) == (
         artifact["intersection"]["n_intersection"]
     )
+
+
+def test_july_comparison_declares_the_cuts_the_same_when_the_market_agrees():
+    """The market block depends on the fights and the lines, not on the
+    model, so identical n plus identical market metrics is what licenses
+    subtracting one gap from the other."""
+    july = json.loads(bob.FROZEN_BENCHMARK.read_text())["headline_2021_plus"]
+    same = bob.july_comparison(
+        {
+            "n_fights": july["n_fights"],
+            "model": {"log_loss": 0.60},
+            "market": dict(july["market"]),
+            "delta_model_minus_market": {
+                "log_loss": july["delta_model_minus_market"]["log_loss"] - 0.005
+            },
+        }
+    )
+    assert same["same_fight_set"] is True
+    assert "same fights" in same["same_fight_set_evidence"]
+
+    different = bob.july_comparison(
+        {
+            "n_fights": july["n_fights"] - 100,
+            "model": {"log_loss": 0.60},
+            "market": dict(july["market"]),
+            "delta_model_minus_market": {"log_loss": 0.03},
+        }
+    )
+    assert different["same_fight_set"] is False
+    assert "do NOT cover the same fights" in different["same_fight_set_evidence"]
+
+
+@oof_only
+def test_artifact_records_the_odds_coverage_of_the_walkforward_rows(artifact):
+    intersection = artifact["intersection"]
+    coverage = intersection["odds_coverage_of_walkforward_rows"]
+    assert 0.0 < coverage <= 1.0
+    assert coverage == round(
+        intersection["n_intersection"] / intersection["n_walkforward_rows"], 4
+    )
+    thinnest = intersection["thinnest_fold_year"]
+    by_year = artifact["odds_coverage_by_fold_year"]
+    assert thinnest["odds_coverage"] == min(
+        row["odds_coverage"] for row in by_year.values()
+    )
+
+
+@oof_only
+def test_artifact_records_that_the_honesty_gate_misses_the_in_sample_run(artifact):
+    """A gate that fires on an implausibly large edge cannot catch a model
+    that trained on the evaluation set, and the artifact must say so rather
+    than leave the gate looking sufficient."""
+    diagnostic = artifact["in_sample_diagnostic"]
+    gap = diagnostic["delta_model_minus_market"]["log_loss"]
+    assert diagnostic["beats_the_market"] is (gap < 0)
+    assert diagnostic["honesty_gate_would_have_caught_it"] is (gap < -0.02)
+
+
+@oof_only
+def test_artifact_july_comparison_is_like_for_like(artifact):
+    comparison = artifact["comparison_with_frozen_july_artifact"]
+    assert comparison["direction"] in {"narrowed", "widened", "unchanged"}
+    assert comparison["change_in_gap"] == round(
+        comparison["out_of_fold_2021_plus"]["gap_market_favour"]
+        - comparison["july_2026_artifact"]["gap_market_favour"],
+        4,
+    )
+    assert (
+        comparison["out_of_fold_2021_plus"]["n_fights"]
+        == artifact["out_of_fold_2021_plus"]["n_fights"]
+    )
