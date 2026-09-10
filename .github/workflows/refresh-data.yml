@@ -13,7 +13,10 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 until SP3: the simulator adds a fifth and sixth model to retrain and
+    # a Monte Carlo pass over every training row to measure the displayed
+    # splits' calibration, together a few minutes more.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -83,11 +86,21 @@ jobs:
           OMP_NUM_THREADS: "1"
         run: python scripts/train_torch.py
 
-      - name: Rebuild display priors
+      - name: Retrain the simulator's hazard and decision models
         if: steps.refresh.outputs.refresh == 'true'
         env:
           OMP_NUM_THREADS: "1"
-        run: python scripts/build_display_priors.py
+        run: python scripts/train_hazard.py
+
+      # Measurement, not a correction: the app shows the simulator's raw
+      # marginals, and this records how far they sit from the historical base
+      # rates on the model's own training rows. A retrain that broke that
+      # calibration would show up in a committed diff.
+      - name: Measure display calibration
+        if: steps.refresh.outputs.refresh == 'true'
+        env:
+          OMP_NUM_THREADS: "1"
+        run: python scripts/check_display_calibration.py
 
       - name: Run test suite
         if: steps.refresh.outputs.refresh == 'true'

@@ -63,7 +63,7 @@ def test_promotion_protocol_text_mentions_threshold_and_margin():
     assert "mma.versioning.model_version" in text
     assert "git sha" not in text
     assert "IN-SAMPLE" in text and "models/walkforward/" in text
-    assert "scripts/build_display_priors.py" in text
+    assert "scripts/check_display_calibration.py" in text
 
 
 def test_incumbent_in_sample_refit_reaching_into_slice():
@@ -114,6 +114,8 @@ INCUMBENT_FILES = {
     "net_seed0.pt": b"INCUMBENT_NET_0",
     "net_seed1.pt": b"INCUMBENT_NET_1",
     "preprocess.json": b"INCUMBENT_PREP",
+    # any third file in models/torch: this fixture is about backup/restore
+    # covering the whole directory, not about this file's contents
     "display_priors.json": b"INCUMBENT_PRIORS",
     "metrics_val.json": b'{"winner_ensemble": {"log_loss": 0.65}}',
 }
@@ -146,12 +148,16 @@ def staged(tmp_path, monkeypatch):
 
 
 def _drive_execute(
-    models_dir, monkeypatch, incumbent_ll, candidate_ll, rebuild_priors=None
+    models_dir, monkeypatch, incumbent_ll, candidate_ll, remeasure=None
 ):
     """Run _execute with the retrain, both ensemble evals, and the display-
-    priors rebuild all mocked. The priors rebuild is ALWAYS patched (default
-    no-op) so a promote path never shells out to the real
-    build_display_priors.py and touches the real models/torch."""
+    calibration re-measurement all mocked. The re-measurement is ALWAYS
+    patched (default no-op) so a promote path never shells out to the real
+    check_display_calibration.py and touches the real models/torch.
+
+    It is a re-MEASUREMENT, not a rebuild of priors: since SP3 nothing
+    recalibrates a displayed number, and models/display_calibration.json
+    records a property of the model rather than feeding one."""
     candidate_torch_dir = models_dir / roll_window.CANDIDATE_DIR_NAME / "torch"
 
     def fake_retrain(out_dir, train_end, val_start, val_end):
@@ -167,7 +173,7 @@ def _drive_execute(
     monkeypatch.setattr(roll_window, "_retrain_candidate", fake_retrain)
     monkeypatch.setattr(roll_window, "_ensemble_val_log_loss", fake_eval)
     monkeypatch.setattr(
-        roll_window, "_rebuild_display_priors", rebuild_priors or (lambda: None)
+        roll_window, "_remeasure_display_calibration", remeasure or (lambda: None)
     )
 
     features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
@@ -177,14 +183,14 @@ def _drive_execute(
 
 def test_execute_promotes_when_candidate_beats_margin(staged, monkeypatch, capsys):
     models_dir, torch_dir = staged
-    calls = {"priors": 0}
+    calls = {"remeasured": 0}
 
-    def record_rebuild():
-        calls["priors"] += 1
+    def record_remeasure():
+        calls["remeasured"] += 1
 
     candidate_torch_dir = _drive_execute(
         models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.640,
-        rebuild_priors=record_rebuild,
+        remeasure=record_remeasure,
     )
 
     # candidate artifacts staged into models/torch
@@ -197,8 +203,8 @@ def test_execute_promotes_when_candidate_beats_margin(staged, monkeypatch, capsy
     assert backup_dir.exists()
     assert _read_dir(backup_dir) == INCUMBENT_FILES
 
-    # display priors regenerated for the newly staged ensemble
-    assert calls["priors"] == 1
+    # display calibration re-measured against the newly staged ensemble
+    assert calls["remeasured"] == 1
 
     # temp candidate dir cleaned up
     assert not candidate_torch_dir.parent.exists()
@@ -206,12 +212,15 @@ def test_execute_promotes_when_candidate_beats_margin(staged, monkeypatch, capsy
     out = capsys.readouterr().out
     assert "PROMOTED" in out
     assert "STAGED" in out or "staged" in out
-    assert "regenerated" in out
+    assert "re-measured" in out
 
 
-def test_execute_promotion_survives_priors_rebuild_failure(staged, monkeypatch, capsys):
-    """A display-priors rebuild failure must NOT abort the promotion: the
-    ensemble stays staged and a clear warning is printed instead of raising."""
+def test_execute_promotion_survives_a_remeasurement_failure(staged, monkeypatch, capsys):
+    """A display-calibration re-measurement failure must NOT abort the
+    promotion: the ensemble stays staged and a clear warning is printed
+    instead of raising. Since SP3 that file is a measurement rather than an
+    input to serving, so a stale one misleads a reader rather than changing a
+    prediction."""
     models_dir, torch_dir = staged
 
     def boom():
@@ -219,10 +228,10 @@ def test_execute_promotion_survives_priors_rebuild_failure(staged, monkeypatch, 
 
     candidate_torch_dir = _drive_execute(
         models_dir, monkeypatch, incumbent_ll=0.650, candidate_ll=0.600,
-        rebuild_priors=boom,  # does not propagate out of _execute
+        remeasure=boom,  # does not propagate out of _execute
     )
 
-    # ensemble still staged despite the priors failure
+    # ensemble still staged despite the re-measurement failure
     staged_now = _read_dir(torch_dir)
     for name, content in CANDIDATE_FILES.items():
         assert staged_now[name] == content
@@ -308,9 +317,56 @@ def test_execute_aborts_on_a_blended_incumbent_before_touching_anything(staged, 
     assert not (models_dir / roll_window.CANDIDATE_DIR_NAME).exists()
 
 
-def test_the_dry_run_protocol_text_says_the_gate_covers_half_the_model():
-    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"))
-    assert "BLEND" in text and "HALF the served model" in text
+def test_the_dry_run_protocol_text_describes_the_incumbent_on_disk(tmp_path):
+    """CAVEAT 1 has to be true of whatever is deployed, not of whatever was
+    deployed when the sentence was written."""
+    models = tmp_path / "models"
+    (models / "torch").mkdir(parents=True)
+    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"), models)
+    assert "torch ensemble this gate retrains" in text
+
+    (models / "xgb_winner_seed0.json").write_text("{}")
+    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"), models)
+    assert "BLEND" in text and "half the served model" in text
+
+    (models / "xgb_hazard_seed0.json").write_text("{}")
+    (models / "xgb_decision_seed0.json").write_text("{}")
+    text = roll_window.promotion_protocol_text(200, pd.Timestamp("2026-06-01"), models)
+    assert "HYBRID" in text
+    assert "none of the method, round or joint distribution" in text
+
+
+def test_hybrid_incumbent_needs_both_simulator_members(tmp_path):
+    models = tmp_path / "models"
+    (models / "torch").mkdir(parents=True)
+    assert roll_window.hybrid_incumbent(models) is False
+    (models / "xgb_hazard_seed0.json").write_text("{}")
+    assert roll_window.hybrid_incumbent(models) is False  # half a simulator is not one
+    (models / "xgb_decision_seed0.json").write_text("{}")
+    assert roll_window.hybrid_incumbent(models) is True
+
+
+def test_execute_aborts_on_a_hybrid_incumbent_naming_what_it_does_not_cover(
+        staged, monkeypatch):
+    """The abort has to say what the gate actually misses. Against a hybrid
+    that is more than half a winner probability: the whole joint distribution
+    the app and the prediction records show comes from members this gate never
+    touches."""
+    models_dir, torch_dir = staged
+    (models_dir / "xgb_winner_seed0.json").write_text("{}")
+    (models_dir / "xgb_hazard_seed0.json").write_text("{}")
+    (models_dir / "xgb_decision_seed0.json").write_text("{}")
+    called = {"retrain": False, "eval": False}
+    monkeypatch.setattr(roll_window, "_retrain_candidate",
+                        lambda *a, **k: called.__setitem__("retrain", True))
+    monkeypatch.setattr(roll_window, "_ensemble_val_log_loss",
+                        lambda *a, **k: called.__setitem__("eval", True) or 0.65)
+    features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-06-01"])})
+    with pytest.raises(SystemExit, match="HYBRID"):
+        roll_window._execute(features, cutoff=pd.Timestamp("2024-06-01"))
+
+    assert called == {"retrain": False, "eval": False}
+    assert (torch_dir / "net_seed0.pt").read_bytes() == INCUMBENT_FILES["net_seed0.pt"]
 
 
 def test_execute_aborts_when_incumbent_is_refit_in_sample(staged, monkeypatch):

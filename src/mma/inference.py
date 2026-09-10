@@ -1,10 +1,22 @@
 """Load the committed scorer and predict hypothetical matchups.
 
-Since SP2.2 the deployed scorer is a BLEND (`BlendedPredictor`): the
-equal-weight average of the five-seed XGBoost ensemble and the five-seed torch
-ensemble, temperature-scaled after averaging. `Ensemble` is still here and is
-still the torch member -- `BlendedPredictor` holds one -- but on its own it is
-no longer what serves.
+Since SP3 the deployed scorer is the HYBRID (`SimulatorPredictor`): the blend
+supplies P(A wins) and the Monte Carlo fight simulator supplies
+P(method, round | winner), composed into one joint distribution over outcome
+cells. `BlendedPredictor` is still here and is still where the winner
+probability comes from -- `SimulatorPredictor` holds one and returns its
+`winner_prob` untouched -- but the method and finish-round heads it carries
+are no longer what the app or the prediction records show.
+
+Since SP2.2 that blend is itself the equal-weight average of the five-seed
+XGBoost ensemble and the five-seed torch ensemble, temperature-scaled after
+averaging; `Ensemble` is the torch member alone.
+
+The three predictors nest, and each one's `predict` returns a superset of the
+one below it, so every caller written against `Ensemble.predict`'s contract
+keeps working:
+
+    Ensemble  ->  BlendedPredictor  ->  SimulatorPredictor
 """
 from __future__ import annotations
 
@@ -25,9 +37,12 @@ from mma.feature_blocks import (
     CONTEXT_BLOCK, EXTERNAL_BLOCK, NOTICE_BLOCK, TRAJECTORY_BLOCK,
     resolve_blocks, state_key_blocks, state_keys, table_blocks,
 )
+from mma.hazard import mirror_corners, round_frame
+from mma.joint import impose_winner_marginal, marginals_from_cells, swap_corners
 from mma.models.net import MultiTaskNet
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES
 from mma.models.xgb import align_to_booster, feature_frame
+from mma.simulator import mean_over_seeds, normalise_rows, simulate_fights
 from mma.tensors import Preprocessor
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -71,6 +86,44 @@ def load_blend_config(path: Path = BLEND_CONFIG) -> dict:
     return json.loads(path.read_text())
 
 
+# --- the deployed simulator (SP3) ------------------------------------------
+# The four simulation parameters `SimulatorPredictor` plays a fight out with.
+# They are hashed by `mma.versioning.MODEL_ARTIFACT_GLOBS` for exactly the
+# reason `models/blend.json` is: every one of them moves a probability, and a
+# number that moves a probability while living outside the hash silently
+# changes what a recorded prediction means. `mma.simulator`'s DEFAULT_*
+# constants are the HARNESS's values -- what `HazardCandidate` ran with when
+# the hybrid was measured; this file is the DEPLOYED values, and
+# `tests/test_versioning.py` pins the two together so a deployment cannot
+# quietly serve a simulation the harness never scored.
+SIMULATOR_CONFIG = ROOT / "models" / "simulator.json"
+#: The keys `load_simulator_config` requires. Anything that changes a
+#: simulated probability belongs here, or the track record's premise breaks.
+SIMULATOR_PARAMETERS = ("n_runs", "alpha", "sim_seed", "default_rounds")
+
+
+def load_simulator_config(path: Path = SIMULATOR_CONFIG) -> dict:
+    """The committed simulation parameters, validated.
+
+    Raises if the artifact is missing or incomplete rather than falling back
+    to the module defaults: serving a guessed `n_runs` or `alpha` would
+    produce a prediction no report describes, which is the same failure the
+    artifact hash exists to prevent one level up (see SIMULATOR_CONFIG).
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found; it carries the simulation parameters the hybrid "
+            "was measured with (n_runs, alpha, sim_seed, default_rounds) and "
+            "there is deliberately no in-code fallback"
+        )
+    config = json.loads(path.read_text())
+    missing = [key for key in SIMULATOR_PARAMETERS if key not in config]
+    if missing:
+        raise ValueError(f"{path} is missing simulation parameter(s) {missing}")
+    return config
+
+
 def load_deployed_metrics(path: Path = TORCH_METRICS) -> dict:
     """models/torch/metrics_val.json as a dict, or {} when it does not exist."""
     path = Path(path)
@@ -105,9 +158,10 @@ def compute_display_priors(features: pd.DataFrame, metrics: dict | None = None) 
     vs an empirical rate of 0.182 (~3.8x overstated), and 3-round fights'
     P(round 3) is roughly doubled.
 
-    These empirical priors are the numerators of the mean-matching
-    correction factors built by scripts/build_display_priors.py (see
-    `compute_correction_factors`). The row set is `deployed_training_mask`
+    These empirical priors are one side of the comparison
+    scripts/check_display_calibration.py makes (see
+    `compute_correction_factors` for the other). The row set is
+    `deployed_training_mask`
     -- the rows the committed ensemble actually trained on, read from
     models/torch/metrics_val.json (pass `metrics` to override): all rows
     through `train_through` for a refit_through model, date < TRAIN_END
@@ -152,6 +206,16 @@ def compute_display_priors(features: pd.DataFrame, metrics: dict | None = None) 
 def compute_correction_factors(empirical: dict, mean_predicted: dict) -> dict:
     """Mean-matching factors: factor(c) = empirical_prior(c) / mean_model_predicted(c).
 
+    **No longer applied to anything.** Until SP3 these multiplied every
+    displayed method and round probability, because the class-weighted heads
+    below were miscalibrated in aggregate. The deployed scorer's method and
+    round splits are now marginals of the simulator's joint distribution, and
+    `scripts/check_display_calibration.py` measured them as landing within a
+    few points of the base rates unaided -- so the correction is retired, and
+    this function survives as the measurement's own arithmetic: a factor near
+    1 IS the statement that no correction is needed. Applying it now would move
+    each marginal off the joint the app's outcome table is read from.
+
     A plain multiply-by-prior (Saerens) correction was too weak here because
     the class-weighted heads' likelihood *ratios* are themselves miscalibrated
     (e.g. mean predicted P(rounds 4-5) on train 5-round finishes is ~0.7 vs an
@@ -161,9 +225,9 @@ def compute_correction_factors(empirical: dict, mean_predicted: dict) -> dict:
     empirical base rates exactly (before per-row renormalization) while
     preserving each fight's relative signal.
 
-    `mean_predicted` is the ensemble's mean predicted distribution over the
-    matching deployed-training rows (`deployed_training_mask`; built by
-    scripts/build_display_priors.py).
+    `mean_predicted` is the scorer's mean predicted distribution over the
+    matching deployed-training rows (`deployed_training_mask`; computed by
+    scripts/check_display_calibration.py).
     Guard: if mean_predicted(c) < 1e-6 (e.g. the "45" class for 3-round
     fights, which the model masks to ~0), the factor is set to 0.0 rather
     than exploding.
@@ -176,23 +240,6 @@ def compute_correction_factors(empirical: dict, mean_predicted: dict) -> dict:
         )
         for cls in empirical
     }
-
-
-def apply_prior_correction(probs: dict, factors: dict) -> dict:
-    """Elementwise correction: p_display(c) ∝ p_model(c) * factor(c).
-
-    `probs` and `factors` are both {class_label: value} dicts over the same
-    class set. `factors` are the mean-matching correction factors from
-    `compute_correction_factors` (models/torch/display_priors.json).
-    Renormalizes so the output sums to 1. If the weighted sum is zero
-    (e.g. all overlapping factors are zero), returns `probs` unchanged
-    rather than dividing by zero.
-    """
-    corrected = {cls: p * factors.get(cls, 0.0) for cls, p in probs.items()}
-    total = sum(corrected.values())
-    if total <= 0:
-        return dict(probs)
-    return {cls: v / total for cls, v in corrected.items()}
 
 
 class Ensemble:
@@ -439,6 +486,228 @@ class BlendedPredictor:
         return self.ensemble.mc_dropout(features, passes=passes, seed=seed)
 
 
+class SimulatorPredictor:
+    """The deployed scorer since SP3: the blend's winner, the simulator's shape.
+
+    SP3's shipped candidate, the pre-registered hybrid
+    (`mma.candidates.HybridCandidate`, `models/walkforward/sp3_decision.json`):
+
+        P(winner, method, round) = P_blend(winner) x P_sim(method, round | winner)
+
+    A `BlendedPredictor` supplies the first factor and the five-seed hazard and
+    decision models supply the second, played out `n_runs` times per fight per
+    corner orientation by `mma.simulator.simulate`. What comes back is one
+    joint distribution over the outcome cells `mma.evaluate` defines, from
+    which the method and finish-round marginals and P(goes the distance) are
+    read off -- so they cannot contradict each other or the winner the way
+    three independent heads could.
+
+    **The winner is the blend's, untouched.** `predict` returns the blend's
+    `winner_prob` array itself, and `mma.joint.impose_winner_marginal` scales
+    each corner's block of simulated cells so the joint's winner marginal is
+    exactly that number. Deploying the hybrid therefore cannot move a single
+    winner probability -- that is the whole point of the spec's fallback
+    design, and `tests/test_inference.py` pins it rather than assuming it.
+
+    **The arithmetic is the harness's, not a re-implementation.**
+    `mma.simulator.simulate_fights` (the per-fight simulation and the
+    corner-averaging that composes two orientations into one joint),
+    `mma.simulator.mean_over_seeds` / `normalise_rows` (the seed ensemble),
+    `mma.hazard.round_frame` / `mirror_corners` (the two frames the hazard
+    member is fed) and `mma.joint.impose_winner_marginal` /
+    `marginals_from_cells` are the same functions `HazardCandidate` and
+    `HybridCandidate` call. `tests/test_serving_parity.py` serves the very
+    models a harness fold fitted and asserts the cells come back identical,
+    which is the prediction-level form of the feature-row parity this project
+    already enforces.
+
+    Two things necessarily differ from the harness, both because deployment
+    has no held-out year -- the same two that already differ for the blend:
+    the members are the refit-through-latest fits (fixed budgets, all data)
+    rather than per-fold early-stopped ones, and the simulation parameters are
+    the committed `models/simulator.json` rather than the module defaults
+    (they are equal today, and a test keeps them so).
+    """
+
+    def __init__(self, blend: "BlendedPredictor", hazard_models: list,
+                 decision_models: list, config: dict):
+        self.blend = blend
+        self.hazard_models = hazard_models
+        self.decision_models = decision_models
+        self.n_runs = int(config["n_runs"])
+        self.alpha = float(config["alpha"])
+        self.sim_seed = int(config["sim_seed"])
+        self.default_rounds = int(config["default_rounds"])
+        # Introspection the app and the display-priors build already do
+        # against the blend; the hybrid IS the blend plus the simulator, so it
+        # forwards them rather than making callers reach through `.blend`.
+        self.ensemble = blend.ensemble
+        self.preprocessor = blend.preprocessor
+        self.weight = blend.weight
+        self.temperature = blend.temperature
+
+    @classmethod
+    def load(cls, root: Path = ROOT, blend: "BlendedPredictor | None" = None,
+             config: dict | None = None) -> "SimulatorPredictor":
+        """Load the blend plus the two simulator members from the committed
+        artifacts (`models/xgb_{hazard,decision}_seed*.json`).
+
+        A member with no artifacts is a loud error for the same reason a
+        missing booster is in `BlendedPredictor.load`: serving a
+        three-seed simulator, or falling back to the blend's own method and
+        round heads, would be a scorer no report describes.
+
+        A *torn* pair is the same error wearing a disguise, so `_check_seeds`
+        rejects it too -- see there for what that is and what it can and
+        cannot catch.
+        """
+        root = Path(root)
+        blend = BlendedPredictor.load(root) if blend is None else blend
+        config = load_simulator_config(root / "models" / "simulator.json") if config is None else config
+        members, seeds = {}, {}
+        for member in ("hazard", "decision"):
+            paths = sorted((root / "models").glob(f"xgb_{member}_seed*.json"),
+                           key=lambda q: int(q.stem.rsplit("seed", 1)[1]))
+            if not paths:
+                raise FileNotFoundError(
+                    f"no XGBoost {member} models under {root / 'models'} "
+                    f"(expected xgb_{member}_seed*.json); run scripts/train_hazard.py"
+                )
+            seeds[member] = [int(path.stem.rsplit("seed", 1)[1]) for path in paths]
+            models = []
+            for path in paths:
+                model = xgb.XGBClassifier(enable_categorical=True)
+                model.load_model(path)
+                models.append(model)
+            members[member] = models
+        cls._check_seeds(root, seeds["hazard"], seeds["decision"])
+        return cls(blend, members["hazard"], members["decision"], config)
+
+    @staticmethod
+    def _check_seeds(root: Path, hazard_seeds: list[int], decision_seeds: list[int]) -> None:
+        """Refuse a simulator whose two members are not the same fit.
+
+        `scripts/train_hazard.py` writes interleaved -- hazard seed *n*, then
+        decision seed *n*, then the next seed -- in place and non-atomically,
+        and writes `models/hazard_metrics.json` only after the whole loop. An
+        interrupted local run therefore leaves per-seed artifacts on disk that
+        load perfectly well and are not a single fit. Until this check that
+        was invisible: the filenames are the same, the glob is non-empty, and
+        the ensemble serves.
+
+        Two shapes are rejected:
+
+        * the members disagree about which seeds exist, which is what an
+          interruption between a hazard save and the decision save beside it
+          leaves;
+        * the seeds on disk are not the seeds `hazard_metrics.json` says were
+          fitted, which is what a run at a different ``SEEDS`` leaves --
+          the previous fit's extra seed files keep their filenames and load
+          beside the new ones, so the count alone proves nothing.
+
+        What it does NOT catch, and no load-time check could: an interruption
+        at a loop boundary, which leaves both members with the same seed set
+        and the same count, some seeds from the new fit and some from the old.
+        Detecting that needs the writes to be atomic (fit into a temp dir,
+        rename over) rather than a reader that can only see filenames.
+
+        The metrics comparison runs only when the file is present, because a
+        root holding a fold's models and nothing else is a legitimate caller
+        (`tests/test_serving_parity.py`) and that file is not part of
+        `mma.versioning.MODEL_ARTIFACT_GLOBS`. The deployed root always has
+        one, and a test pins it against the committed artifacts.
+        """
+        if sorted(hazard_seeds) != sorted(decision_seeds):
+            raise ValueError(
+                f"the simulator's two members are not the same fit: hazard seeds "
+                f"{sorted(hazard_seeds)} but decision seeds {sorted(decision_seeds)} "
+                f"under {root / 'models'}; re-run scripts/train_hazard.py"
+            )
+        metrics_path = root / "models" / "hazard_metrics.json"
+        if not metrics_path.exists():
+            return
+        expected = json.loads(metrics_path.read_text()).get("seeds")
+        if expected is not None and sorted(hazard_seeds) != sorted(int(s) for s in expected):
+            raise ValueError(
+                f"the simulator's seeds on disk ({sorted(hazard_seeds)}) are not the "
+                f"seeds {metrics_path.name} says were fitted ({sorted(expected)}); "
+                f"the artifacts and hazard_metrics.json describe different fits -- "
+                f"re-run scripts/train_hazard.py"
+            )
+
+    def _rounds(self, features: pd.DataFrame) -> np.ndarray:
+        """Rounds simulated per fight: `scheduled_rounds`, or the committed
+        default for the fights that have none (45 of them in the training
+        table), which is what `HazardCandidate` bounds them by too."""
+        return (features["scheduled_rounds"].fillna(self.default_rounds)
+                .to_numpy(dtype=int))
+
+    def _mean_proba(self, models: list, x: pd.DataFrame) -> np.ndarray:
+        """The seed ensemble's prediction, each member aligned to its own
+        trained columns and categories (`align_to_booster`, as the blend's
+        XGB member does, so an unseen weight class degrades to a missing
+        value rather than raising)."""
+        return mean_over_seeds(
+            [model.predict_proba(align_to_booster(x, model.get_booster()))
+             for model in models]
+        )
+
+    def predict(self, features: pd.DataFrame) -> dict:
+        """`BlendedPredictor.predict`'s dict, with the method and round heads
+        replaced by the simulator's and the joint distribution added.
+
+        The extra keys are `joint_cells` (the `mma.evaluate` cell layout),
+        `joint_zero_mass` (which of those cells no simulated fight landed in,
+        before smoothing) and `p_distance`.
+
+        A fight's RNG stream is `[sim_seed, its row position]`, so the same
+        fight predicted at a different position in a batch comes back with the
+        same distribution plus a different Monte Carlo draw -- of order the
+        `p_a_wins` standard error, ~0.005 at the deployed `n_runs`. Serving
+        goes through `predict_symmetrized` one matchup at a time, where the
+        position is always 0, so a served prediction is reproducible exactly;
+        the variation only shows up when the same row is scored inside
+        different batches (`scripts/check_display_calibration.py`).
+        """
+        blended = self.blend.predict(features)
+        n_rounds = self._rounds(features)
+        mirror = mirror_corners(features)
+
+        hazard = normalise_rows(self._mean_proba(
+            self.hazard_models, feature_frame(round_frame(features, n_rounds))))
+        mirrored = normalise_rows(self._mean_proba(
+            self.hazard_models, feature_frame(round_frame(mirror, n_rounds))))
+        decision = self._mean_proba(self.decision_models, feature_frame(features))[:, 1]
+        mirror_decision = self._mean_proba(
+            self.decision_models, feature_frame(mirror))[:, 1]
+
+        simulated = simulate_fights(
+            hazard, mirrored, decision, mirror_decision, n_rounds,
+            n_runs=self.n_runs, alpha=self.alpha, sim_seed=self.sim_seed,
+            n_round_classes=len(ROUND_CLASSES),
+        )
+        # The hybrid composition: the blend's winner imposed on the simulated
+        # cells, which rescales each corner's block by one scalar and leaves
+        # P(method, round | that corner wins) exactly as simulated.
+        cells = impose_winner_marginal(
+            simulated["cells"], blended["winner_prob"], METHOD_CLASSES, ROUND_CLASSES)
+        marginals = marginals_from_cells(cells, METHOD_CLASSES, ROUND_CLASSES)
+        return {
+            **blended,
+            "method_probs": marginals["method"],
+            "round_probs": marginals["round"],
+            "joint_cells": cells,
+            "joint_zero_mass": simulated["zero_mass"],
+            "p_distance": marginals["method"][:, METHOD_CLASSES.index("decision")],
+        }
+
+    def mc_dropout(self, features: pd.DataFrame, passes: int = 100, seed: int = 0):
+        """MC dropout from the blend's torch member -- see
+        `BlendedPredictor.mc_dropout`. The simulator has no dropout and this
+        describes the winner probability, which is the blend's."""
+        return self.blend.mc_dropout(features, passes=passes, seed=seed)
+
+
 def predict_symmetrized(
     ensemble, matchup_ab: pd.DataFrame, matchup_ba: pd.DataFrame
 ) -> dict:
@@ -461,6 +730,11 @@ def predict_symmetrized(
     same pair with fighters swapped (A-vs-B and B-vs-A respectively).
     Method and finish-round distributions describe the fight, not a corner,
     so they are averaged elementwise across orientations rather than flipped.
+    A `SimulatorPredictor` additionally returns a joint distribution, which DOES
+    name a corner: `_symmetrize_joint` maps the mirrored orientation back with
+    `mma.joint.swap_corners` before averaging, and re-reads the method and round
+    marginals off the averaged joint so every number reported comes from the one
+    distribution reported.
     Ensemble spread is reported as the max of the two orientations' spreads
     (a conservative uncertainty estimate). The `mc_dropout_shift` field is
     the correction needed to re-center A-orientation-only MC dropout samples
@@ -475,7 +749,7 @@ def predict_symmetrized(
     spread = max(float(result_ab["winner_spread"][0]), float(result_ba["winner_spread"][0]))
     method = 0.5 * (result_ab["method_probs"][0] + result_ba["method_probs"][0])
     rounds = 0.5 * (result_ab["round_probs"][0] + result_ba["round_probs"][0])
-    return {
+    out = {
         "winner_prob": p,
         "winner_spread": spread,
         "method_probs": method,
@@ -485,6 +759,60 @@ def predict_symmetrized(
         "orientation_ab_prob": p_ab,
         "orientation_ba_prob": p_ba,
         "mc_dropout_shift": p - p_ab,
+    }
+    if "joint_cells" in result_ab:
+        out.update(_symmetrize_joint(result_ab, result_ba, p))
+    return out
+
+
+def _symmetrize_joint(result_ab: dict, result_ba: dict, p: float) -> dict:
+    """The joint half of `predict_symmetrized`, for a `SimulatorPredictor`.
+
+    A joint names a corner on its winner axis, so the mirrored orientation is
+    mapped back with `mma.joint.swap_corners` before averaging -- averaging
+    the two elementwise would add corner A's KO distribution to corner B's.
+
+    The winner marginal survives this exactly. Each orientation's joint
+    already carries its own blend probability as its winner marginal
+    (`impose_winner_marginal` makes it exact), so the average of `p_ab` and
+    the swapped `1 - p_ba` is `p`, the symmetrized probability the rest of
+    this function reports -- which is why the method and round marginals are
+    RE-READ from the averaged joint rather than averaged separately: everything
+    reported then comes from the one distribution that is also reported.
+
+    `impose_winner_marginal` is applied once more to the average, which is a
+    no-op to floating point (the drift it removes is ~1e-16, the rounding of
+    an average of two numbers that were each already exact) and makes "the
+    hybrid does not move a winner probability" true BY CONSTRUCTION rather
+    than by an arithmetic argument this function would otherwise have to
+    check at serving time. It replaces a runtime `raise`: a serving-path
+    assertion whose only failure mode was a floating-point tail would have
+    surfaced as a raw Streamlit traceback in the app and, worse, would have
+    killed `mma.prospective.predict_event` for one matchup and every event
+    after it in the weekly run. The invariant is asserted in
+    `tests/test_inference.py` instead, where a real regression is caught in
+    CI rather than in production.
+    """
+    method_classes = list(result_ab["method_classes"])
+    round_classes = list(result_ab["round_classes"])
+    cells = 0.5 * (
+        np.asarray(result_ab["joint_cells"])[:1]
+        + swap_corners(result_ba["joint_cells"], method_classes, round_classes)[:1]
+    )
+    cells = impose_winner_marginal(cells, np.array([p]), method_classes, round_classes)
+    marginals = marginals_from_cells(cells, method_classes, round_classes)
+    # A cell is only empty for the matchup if it was empty in BOTH orientations.
+    zero_mass = (
+        np.asarray(result_ab["joint_zero_mass"], dtype=bool)[0]
+        & swap_corners(np.asarray(result_ba["joint_zero_mass"], dtype=float),
+                       method_classes, round_classes)[0].astype(bool)
+    )
+    return {
+        "method_probs": marginals["method"][0],
+        "round_probs": marginals["round"][0],
+        "joint_cells": cells[0],
+        "joint_zero_mass": zero_mass,
+        "p_distance": float(marginals["method"][0][method_classes.index("decision")]),
     }
 
 

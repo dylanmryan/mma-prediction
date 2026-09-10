@@ -479,3 +479,68 @@ def test_noise_floor_named_arms_and_positional_reports_are_exclusive(tmp_path):
         nf.main(["--out", str(out)])
     with pytest.raises(SystemExit, match="used twice"):
         nf.main(["--arm", "a", paths[0], "--arm", "a", paths[1], "--out", str(out)])
+
+
+# --------------------------------------------------------------------------
+# joint-cell scoring path (SP3 Task 3)
+# --------------------------------------------------------------------------
+
+def _independent_cells(pred, y_winner):
+    """`pred`'s three marginals written out as the equivalent joint."""
+    p_w = np.asarray(pred["winner"], dtype=float)
+    method, rounds = np.asarray(pred["method"]), np.asarray(pred["round"])
+    cells = np.zeros((len(p_w), 18))
+    for i in range(len(p_w)):
+        for w, p_corner in enumerate((p_w[i], 1.0 - p_w[i])):
+            for m in range(2):
+                for r in range(4):
+                    cells[i, w * 8 + m * 4 + r] = p_corner * method[i, m] * rounds[i, r]
+            cells[i, 16 + w] = p_corner * method[i, 2]
+    return cells
+
+
+def test_joint_cells_reproduce_the_composed_joint_exactly():
+    """The equivalence the SP3 scoring decision rests on: both paths are
+    -log P(realised cell) over the same cells, so a joint that IS the
+    composition must score what the composition scores."""
+    feats, pred = _rows()
+    composed = score_rows(feats, pred, METHOD, ROUND)
+    joint = dict(pred, joint_cells=_independent_cells(pred, feats["y_winner"]))
+    assert score_rows(feats, joint, METHOD, ROUND)["joint_log_loss"] == composed["joint_log_loss"]
+
+
+def test_composed_path_is_untouched_when_no_joint_is_supplied():
+    feats, pred = _rows()
+    out = score_rows(feats, pred, METHOD, ROUND)
+    assert "zero_mass_cell_fraction" not in out
+    assert out["joint_log_loss"] is not None
+
+
+def test_joint_path_reports_the_realised_zero_mass_fraction():
+    feats, pred = _rows()
+    cells = _independent_cells(pred, feats["y_winner"])
+    zero = np.zeros_like(cells, dtype=bool)
+    zero[0] = True  # row 0 is an a_ko in round 1, so its realised cell is empty
+    out = score_rows(feats, dict(pred, joint_cells=cells, joint_zero_mass=zero), METHOD, ROUND)
+    assert out["zero_mass_cell_fraction"] == pytest.approx(1 / 8, abs=1e-9)
+
+
+def test_pool_carries_the_joint_cells_through():
+    feats, pred = _rows()
+    cells = _independent_cells(pred, feats["y_winner"])
+    zero = np.zeros_like(cells, dtype=bool)
+    full = dict(pred, joint_cells=cells, joint_zero_mass=zero)
+    a = np.array([True] * 4 + [False] * 4)
+    sub = lambda m: {k: (v[m] if v is not None else None) for k, v in full.items()}  # noqa: E731
+    _, pooled = pool(feats, [(a, sub(a)), (~a, sub(~a))])
+    assert pooled["joint_cells"].shape == (8, 18)
+    assert np.array_equal(pooled["joint_cells"], cells)
+    assert pooled["joint_zero_mass"].shape == (8, 18)
+
+
+def test_pool_leaves_joint_cells_none_when_a_candidate_has_none():
+    feats, pred = _rows()
+    a = np.array([True] * 4 + [False] * 4)
+    sub = lambda m: {k: (v[m] if v is not None else None) for k, v in pred.items()}  # noqa: E731
+    _, pooled = pool(feats, [(a, sub(a)), (~a, sub(~a))])
+    assert pooled["joint_cells"] is None and pooled["joint_zero_mass"] is None
