@@ -156,13 +156,35 @@ def test_scored_rows_are_neither_the_fold_n_nor_n_method():
 def test_scored_rows_reproduce_the_committed_reports_fold_row_counts():
     """The winner weights are the fold `n` the harness itself recorded, which
     is the check that make_folds is being replayed correctly here."""
-    features = pd.read_parquet(d.FEATURES)
-    weights = d.scored_rows_per_fold(features)
     report = d.load(d.INCUMBENT)
+    features = d.features_as_reported(pd.read_parquet(d.FEATURES), report)
+    weights = d.scored_rows_per_fold(features)
     for year, block in report["folds"].items():
         assert weights["winner"][year] == block["n"], year
         # And the joint weight is strictly smaller, since unscorable rows exist.
         assert 0 < weights["joint"][year] <= block["n_method"]
+
+
+def test_the_fold_weights_do_not_move_when_the_feature_table_grows():
+    """The last fold is unbounded above, so every fight the weekly refresh
+    appends lands in it. Weighing a recorded fold by a count taken from a
+    table the harness never saw would silently reweight the comparison."""
+    report = d.load(d.INCUMBENT)
+    features = pd.read_parquet(d.FEATURES)
+    before = d.scored_rows_per_fold(d.features_as_reported(features, report))
+
+    grown = pd.concat([features, features.tail(20).assign(
+        date=pd.Timestamp("2026-12-31"))], ignore_index=True)
+    after = d.scored_rows_per_fold(d.features_as_reported(grown, report))
+
+    assert before == after
+
+
+def test_a_feature_table_that_no_longer_contains_the_reported_one_is_loud():
+    report = d.load(d.INCUMBENT)
+    features = pd.read_parquet(d.FEATURES)
+    with pytest.raises(SystemExit, match="was computed on"):
+        d.features_as_reported(features.iloc[:-100], report)
 
 
 # --- the decision routes both seed sets, not just the first ---------------
