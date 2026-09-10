@@ -117,14 +117,33 @@ Let, for a removal candidate R against K:
 - `d_recent_joint  = recent(R.joint_log_loss) − recent(K.joint_log_loss)`
 - `d_pooled_winner = R.pooled.winner_log_loss − K.pooled.winner_log_loss`
 
-The **contribution of keeping** the columns on the recent folds is
-`keep_recent = −d_recent_joint` (positive = keeping them helps the recent folds).
+The **contribution of keeping** the columns on the recent folds is stated in
+the direction English states it — how much worse the removed model is —
+
+```
+keep_gain_recent = recent(R.joint_log_loss) − recent(K.joint_log_loss) = d_recent_joint
+```
+
+so it is **positive when keeping them helps** the recent folds. Note that this
+is the same number as `d_recent_joint` and therefore reads in the *opposite*
+direction to the other two deltas, which are negative-is-better: those are
+about the removal, this one is about keeping.
+
+> **Sign correction, made 2026-09-09 before any candidate report existed.**
+> As first committed this line read `keep_recent = −d_recent_joint`, which is
+> the wrong sign: negating `removed − kept` makes "keeping helps" come out
+> negative and would have inverted clause 2. The error was found while writing
+> `tests/test_decay.py`, with all four walk-forward runs still in flight and
+> no candidate number read — the correcting commit precedes the first report
+> in the log. Nothing else in the rule changed. Both directions are now pinned
+> by `tests/test_decay.py::test_a_candidate_that_is_worse_recently_means_keeping_pays_and_keeps`
+> and `::test_a_candidate_that_is_better_recently_removes`.
 
 > **REMOVE the columns iff all three hold:**
 >
 > 1. `d_pooled_joint < 0.01` — removing them does not worsen pooled joint
 >    log-loss by more than the 0.01 bar; **and**
-> 2. `keep_recent < 0.001` — the recent-fold (2024–2025) contribution of
+> 2. `keep_gain_recent < 0.001` — the recent-fold (2024–2025) contribution of
 >    keeping them is not better than the bar's tenth; **and**
 > 3. `d_pooled_winner <= 0.000346` — the winner marginal does not regress by
 >    more than σ_seed.
@@ -159,7 +178,7 @@ pooled log-loss by more than the bar". This is not an addition; it is a
   need — because they are already here and removal has its own cost.
 
 **Ambiguity.** If the three clauses do not agree, or if a candidate's
-`d_pooled_joint` or `keep_recent` lands within 1e-4 of its threshold, the
+`d_pooled_joint` or `keep_gain_recent` lands within 1e-4 of its threshold, the
 result is recorded as **AMBIGUOUS** and reported rather than resolved. No
 tiebreak is invented after the fact.
 
