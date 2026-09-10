@@ -326,9 +326,10 @@ through `scripts/refit_decision.py --reports <set>`.
 **Carried forward from SP2** (full list in the plan's Completion notes): the
 external snapshot is static and its coverage decays (0.534 of 2026 rows
 already unmapped), so SP4 needs a refreshable source or the only shipped
-block drifts to neutral; the secondary daily source has four prerequisites
-before its writes can be enabled (fighter-table adaptation, the
-`make_dataset.py` rebuild collision, a provenance column, `round_stats`);
+block drifts to neutral; the secondary daily source had four prerequisites
+before its writes could be enabled (fighter-table adaptation, the
+`make_dataset.py` rebuild collision, a provenance column, `round_stats`) --
+**all four resolved 2026-09-09, see SP4 below**;
 `mma.wiki_cards.parse_background` is built and fixture-tested but deliberately
 unwired from `prospective.predict_event`; three rankings name-match misses
 would close by extending `mma.prospective.fold_accents`; and one row carries a
@@ -607,6 +608,82 @@ re-weighting simulated runs. This is a defined branch, not an ad-hoc patch.
 
 Goal: the winning predictor is what the app shows, the weekly Action runs,
 and the track record grades.
+
+#### The secondary daily source is a standing pipeline stage (done, 2026-09-09)
+
+The four prerequisites SP2 recorded are resolved, and the resolution of the
+second one dictated the shape of the other three.
+
+**(b) The `make_dataset.py` collision — dissolved by the design, not patched.**
+Enabling the source as a one-off `--enable` write would have put 44 fights
+into the committed tables that the next Kaggle-only rebuild then dropped,
+firing the regression guard on `n_dropped_by_new: 44` and reddening the
+weekly Action until Kaggle caught up. So the merge is a STANDING STAGE of
+`make_dataset.py` instead: every rebuild fetches primary, fetches secondary,
+merges, and runs every integrity check on the union. No rebuild can drop what
+a previous one added, the guard keeps its meaning, and there is no special
+state to reason about. Verified by rebuilding twice: `n_dropped_by_new: 0`,
+and the six processed parquet files byte-identical.
+
+Two consequences the plan had not anticipated. The guard needed a second
+distinction — a week when the daily scrape is merely unreachable produces a
+primary-only build that drops every row the scrape had supplied, which is a
+freshness loss and not an upstream regression; drops are now split by
+provenance, and only a dropped PRIMARY fight fails the build. And
+`refresh_data.py` needed rewriting in both directions: the processed tables
+now run ahead of the Kaggle mirror by design, so its "is there anything new"
+comparison is made against the primary-sourced rows only, and the scrape's
+own event list is probed so a week where only the scrape has moved still
+rebuilds. Without that second change the tables would have frozen.
+
+**(a) The debutant gap — closed.** `ufc_fighter_tott.csv` and
+`ufc_fighter_details.csv` are adapted into the `fighters` schema through
+`mma.dataset.build_fighters`, for the ids a candidate fight names and the
+primary lacks. All 9 debutants resolved, so all 8 previously-rejected fights
+merged: **52 added, not 44**. A fighter the source cannot describe either is
+still rejected loudly rather than fabricated — though note that path is
+structurally unreachable while the name index and the fighter adaptation read
+the same two files, since a bout name can only resolve to an id those files
+carry. It is kept, and tested, so a future source change fails loudly.
+
+**(c) Provenance — a sidecar, not a column.** `data/processed/provenance.parquet`
+carries `table` / `row_id` / `source` for every `fights` and `fighters` row;
+`fight_stats` and `round_stats` inherit by `fight_id`. A column was rejected
+for three reasons: the `mma.dataset` builders have a fixed column contract the
+feature builder, the serving-parity check and several tests assert on;
+provenance is not a property of a fight; and it is a near-perfect proxy for
+recency, so keeping it out of the tables `build_features.py` reads means no
+future block can pick it up by iterating columns. It has since earned itself
+twice over, as the input to both the split regression guard and the
+primary-only freshness comparison.
+
+**(d) `round_stats` — adapted, and it turned out not to be optional.** The
+survey the plan asked for is confirmed: nothing shipped reads
+`round_stats.parquet`. `build_features.py` reads fights, fight_stats,
+fighters and ratings; the `in_fight` block that would have used per-round data
+was rejected in SP2; the hazard model derives its rounds from `finish_round` /
+`scheduled_rounds` via `mma.hazard._rounds_fought`, not from `round_stats`.
+The only consumers are `make_dataset.py`, which writes it, and two test
+modules. **But** `make_dataset.py`'s own integrity check requires per-round
+coverage of ≥ 99.5% of fights dated 2014 or later, and 44 uncovered fights
+would have taken that to 99.36% and failed the build. Adapting it was
+therefore the cheaper option than relaxing a real guard, and it generalises:
+the merge now refuses any fight that does not bring the whole shape of record
+the primary provides, which is what let every other check stand unrelaxed.
+
+**Measured on the first live run.** 8,820 adapted fights; 8,768-fight overlap
+at 0.9999 winner agreement (floor 0.99); 52 fights and 9 fighters added; 0
+rejected for any reason; tables 11,441 → 11,493 fights and 2026-08-08 →
+2026-09-05. Fail-soft tested live against an unreachable host, a renamed
+upstream column and a truncated CSV: each degrades to a primary-only build
+with a warning and exit 0. **24 pending prospective predictions became
+gradeable** (21 → 45 graded), which was the point.
+
+**Left for the rest of SP4:** the feature table gained those 52 rows (11,238 →
+11,290) and not one column, so no model matrix changed shape, but the deployed
+blend has not seen them. A retrain changes the model hash and opens a new
+`track_record.json` section, so it stays a deliberate decision rather than a
+side effect of a data refresh.
 
 - The deployed model is refit on all data through the latest event with the
   recipe SP1 selected; the weekly Action does the same on every refresh.

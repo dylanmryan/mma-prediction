@@ -3,12 +3,12 @@
   "threshold": 0.4,
   "window_months": 12,
   "trailing": {
-    "window_start": "2025-08-08",
-    "window_end": "2026-08-08",
+    "window_start": "2025-09-05",
+    "window_end": "2026-09-05",
     "months": 12,
-    "n": 604,
-    "missing": 308,
-    "share": 0.5099
+    "n": 589,
+    "missing": 296,
+    "share": 0.5025
   },
   "breached": true,
   "standing_decision": {
@@ -27,7 +27,7 @@
       "share": 0.4225
     }
   },
-  "drift_since_decision": 0.0,
+  "drift_since_decision": -0.0074,
   "by_year": {
     "1993": {
       "n": 8,
@@ -195,15 +195,15 @@
       "share": 0.3586
     },
     "2026": {
-      "n": 341,
-      "missing": 182,
-      "share": 0.5337
+      "n": 393,
+      "missing": 209,
+      "share": 0.5318
     }
   },
   "overall": {
-    "n": 11238,
-    "missing": 2262,
-    "share": 0.2013
+    "n": 11290,
+    "missing": 2289,
+    "share": 0.2027
   },
   "source": {
     "snapshot": "ehan03/jds-mma-data",

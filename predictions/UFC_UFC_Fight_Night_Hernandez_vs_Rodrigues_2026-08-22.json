@@ -30,7 +30,15 @@
       "elo_b": 1665.2300177659897,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "d1c65d2cf2925ddd",
+      "correct": false,
+      "log_loss_contribution": 1.2655021936236088,
+      "brier_contribution": 0.5153838660483745,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Roman Dolidze",
@@ -57,7 +65,15 @@
       "elo_b": 1701.9300255883506,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "d549cefc7c54ab78",
+      "correct": true,
+      "log_loss_contribution": 0.3395813343650316,
+      "brier_contribution": 0.0829046184146911,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Serghei Spivac",
@@ -84,7 +100,15 @@
       "elo_b": 1572.3442840951209,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "71171fc96445bf65",
+      "correct": false,
+      "log_loss_contribution": 0.7409602122272392,
+      "brier_contribution": 0.2738889373260369,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Kennedy Nzechukwu",
@@ -111,7 +135,15 @@
       "elo_b": 1593.485475911326,
       "skipped": false,
       "predicted_at_utc": "2026-07-27T14:52:21Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "6747ccd6d1acd266",
+      "correct": true,
+      "log_loss_contribution": 0.6655009388847191,
+      "brier_contribution": 0.23618047487403615,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Kody Steele",
@@ -192,7 +224,15 @@
       "elo_b": 1554.5170307116475,
       "skipped": false,
       "predicted_at_utc": "2026-08-17T12:56:59Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "e2be0c1a9b886d92",
+      "correct": false,
+      "log_loss_contribution": 0.8996272928039112,
+      "brier_contribution": 0.35197971148597795,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Terrance Chatman",
@@ -237,7 +277,15 @@
       "elo_b": 1655.8127896218045,
       "skipped": false,
       "predicted_at_utc": "2026-08-17T12:56:59Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "06626b6287e1ae1e",
+      "correct": false,
+      "log_loss_contribution": 0.7980179586970528,
+      "brier_contribution": 0.3022575691484173,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "M\u00e1rcio Barbosa",
