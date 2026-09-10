@@ -11,6 +11,23 @@
     "share": 0.5099
   },
   "breached": true,
+  "standing_decision": {
+    "artifact": "external_decay_decision.json",
+    "verdict": "keep every snapshot-dependent column; CONTEXT is AMBIGUOUS after the fresh-seed confirmation, so nothing is deployed",
+    "per_group": {
+      "EXTERNAL": "KEEP",
+      "NOTICE": "KEEP",
+      "CONTEXT": "AMBIGUOUS"
+    },
+    "trailing_12m_at_decision": 0.5099,
+    "most_recent_fold_at_decision": {
+      "year": "2025",
+      "n": 935,
+      "missing": 395,
+      "share": 0.4225
+    }
+  },
+  "drift_since_decision": 0.0,
   "by_year": {
     "1993": {
       "n": 8,
