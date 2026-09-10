@@ -726,6 +726,14 @@ side effect of a data refresh.
   `--check-staleness` mode instead of the retired dry run — the full
   re-validation is several minutes of fitting and writes a decision artifact,
   so making it weekly would turn a human's call into a cron job's side effect.
+  **First run 2026-09-09, on the 11,290-row table through 2026-09-05: every
+  bar still clears.** Joint −0.0580 against a 0.01 bar and negative in every
+  fold year, winner delta exactly 0.000000, refit rule −0.0002 on torch
+  against σ_seed 0.000346, blend ECE 0.0146 against a 0.017241 threshold. The
+  one margin that moved materially is the calibration one — the blend's
+  harness-form pooled ECE 0.0124 → 0.0146 on 52 new fights, more than halving
+  its headroom (0.0056 → 0.0026). It passes; it is what the next re-validation
+  should be read for first.
   The weekly Action rebuilds `round_stats` and the derived external table.
 - README rewritten around the new ladder (v1 heads → simulator), the
   walk-forward results, and the honest "market still wins / market gap"
