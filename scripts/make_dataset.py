@@ -4,7 +4,22 @@ Inputs (data/raw/): master.csv (one row per fight incl. fight-total stats),
 fighter.csv (one row per fighter), round.csv (per-round stats),
 fighter_bonus.csv (post-fight bonus awards).
 Outputs (data/processed/): fighters.parquet, fights.parquet,
-fight_stats.parquet, round_stats.parquet, bonuses.parquet.
+fight_stats.parquet, round_stats.parquet, bonuses.parquet,
+provenance.parquet.
+
+TWO SOURCES, ONE UNION. The Kaggle mirror in data/raw/ is the primary; the
+daily ufcstats scrape adapted by `scripts/refresh_secondary.py` is a
+STANDING STAGE of every rebuild, not a one-off write. That ordering is the
+whole design: because every rebuild fetches both and builds from the union,
+no rebuild can drop what a previous one added, so the regression guard below
+keeps its meaning and there is no special state to reason about. The primary
+always wins on any fight both sources have. `--no-secondary` builds from
+data/raw/ alone; the stage is fail-soft either way, so an unreachable source
+costs freshness and nothing else.
+
+Every integrity check below runs on the MERGED tables. None of them was
+relaxed to accommodate the secondary source -- instead the merge refuses any
+fight that cannot satisfy them.
 """
 from __future__ import annotations
 
@@ -20,6 +35,9 @@ from mma.dataset import (
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from reconcile_sources import reconcile  # noqa: E402
+from refresh_secondary import (  # noqa: E402
+    SecondaryResult, build_provenance, merge_into, print_report,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "raw"
@@ -31,6 +49,27 @@ def check(condition: bool, message: str) -> None:
         raise AssertionError(f"integrity check failed: {message}")
 
 
+def secondary_stage(
+    fighters: pd.DataFrame,
+    fights: pd.DataFrame,
+    stats: pd.DataFrame,
+    rounds: pd.DataFrame,
+    enabled: bool,
+) -> SecondaryResult:
+    """The standing merge, or an honest no-op when it is switched off.
+
+    Switched off means switched off: no fetch is attempted, so `--no-secondary`
+    is also how an offline rebuild and every test builds the primary tables.
+    """
+    if not enabled:
+        return SecondaryResult(
+            fighters=fighters, fights=fights, stats=stats, rounds=rounds,
+            secondary_fight_ids=frozenset(), secondary_fighter_ids=frozenset(),
+            report={"applied": False, "error": "disabled by --no-secondary"},
+        )
+    return merge_into(fighters, fights, stats, rounds)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -38,6 +77,12 @@ def main() -> None:
         action="store_true",
         help="print the reconciliation report but do not fail on dropped fights "
         "or winner relabels (use after a human review of a legitimate upstream change)",
+    )
+    parser.add_argument(
+        "--no-secondary",
+        action="store_true",
+        help="build from data/raw/ alone, skipping the daily-scrape merge "
+        "(the tables are then only as fresh as the Kaggle mirror)",
     )
     args = parser.parse_args()
 
@@ -51,6 +96,17 @@ def main() -> None:
     stats = build_fight_stats(raw_master)
     rounds = build_round_stats(raw_rounds)
     bonuses = build_bonuses(raw_bonuses)
+
+    secondary = secondary_stage(
+        fighters, fights, stats, rounds, enabled=not args.no_secondary
+    )
+    fighters, fights = secondary.fighters, secondary.fights
+    stats, rounds = secondary.stats, secondary.rounds
+    print_report(secondary.report)
+    provenance = build_provenance(
+        fights, fighters,
+        secondary.secondary_fight_ids, secondary.secondary_fighter_ids,
+    )
 
     check(fights["date"].notna().all(), "unparseable fight dates")
     check(len(stats) == 2 * len(fights), "stats rows != 2x fights")
@@ -146,6 +202,7 @@ def main() -> None:
     stats.to_parquet(PROCESSED / "fight_stats.parquet", index=False)
     rounds.to_parquet(PROCESSED / "round_stats.parquet", index=False)
     bonuses.to_parquet(PROCESSED / "bonuses.parquet", index=False)
+    provenance.to_parquet(PROCESSED / "provenance.parquet", index=False)
 
     print(f"fighters:    {len(fighters)} rows")
     print(
@@ -155,6 +212,11 @@ def main() -> None:
     print(f"stats:       {len(stats)} rows")
     print(f"round_stats: {len(rounds)} rows covering {len(round_fights)} fights")
     print(f"bonuses:     {len(bonuses)} rows")
+    from_secondary = provenance["source"] == "secondary"
+    print(
+        f"provenance:  {len(provenance)} rows, "
+        f"{int(from_secondary.sum())} of them from the secondary source"
+    )
     print("\nwinner distribution:")
     print(fights["winner"].value_counts().to_string())
     print("\nmethod distribution:")
