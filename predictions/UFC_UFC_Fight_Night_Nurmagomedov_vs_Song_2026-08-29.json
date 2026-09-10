@@ -30,7 +30,15 @@
       "elo_b": 1731.5485134411413,
       "skipped": false,
       "predicted_at_utc": "2026-08-03T14:56:12Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "efb96bf3e9ada36f",
+      "correct": false,
+      "log_loss_contribution": 0.7308506884513503,
+      "brier_contribution": 0.26884306923058454,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Yan Xiaonan",
@@ -57,7 +65,15 @@
       "elo_b": 1607.5070676515536,
       "skipped": false,
       "predicted_at_utc": "2026-08-03T14:56:12Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "cffb87059e645bd1",
+      "correct": true,
+      "log_loss_contribution": 0.5681163756859493,
+      "brier_contribution": 0.1878427718019715,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Aori Qileng",
@@ -102,7 +118,15 @@
       "elo_b": 1439.9427360986385,
       "skipped": false,
       "predicted_at_utc": "2026-08-03T14:56:12Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "2f43a3e82661fa99",
+      "correct": true,
+      "log_loss_contribution": 0.3447244813448972,
+      "brier_contribution": 0.08502151581728867,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Liu Ce",
@@ -147,7 +171,15 @@
       "elo_b": 1603.4499524061737,
       "skipped": false,
       "predicted_at_utc": "2026-08-10T13:24:31Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "4682bc59d5f55145",
+      "correct": true,
+      "log_loss_contribution": 0.41822668504141086,
+      "brier_contribution": 0.11681835031351206,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Xiong Jingnan",
