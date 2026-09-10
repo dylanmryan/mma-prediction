@@ -44,7 +44,10 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mma.decay import RECENT_YEARS, coverage_by_year, removal_verdict, trailing_coverage  # noqa: E402
+from mma.decay import (  # noqa: E402
+    RECENT_YEARS, confirmed_verdict, coverage_by_fold, coverage_by_year, removal_verdict,
+    trailing_coverage,
+)
 from mma.walkforward import make_folds  # noqa: E402
 
 WF = ROOT / "models" / "walkforward"
@@ -231,10 +234,8 @@ def build(*, print_it: bool = False) -> dict:
     per_group = {group: results[cid]["verdict"]
                  for cid, (_, groups) in CANDIDATES.items()
                  if len(groups) == 1 for group in groups}
-    to_remove = sorted(g for g, v in per_group.items() if v == "REMOVE")
-    ambiguous = sorted(g for g, v in per_group.items() if v == "AMBIGUOUS")
-
     fresh = fresh_seed_block(thresholds, weights)
+    decision = decision_block(per_group, results, fresh)
 
     return {
         "experiment": "external snapshot decay -- does the block still earn its place?",
@@ -256,21 +257,31 @@ def build(*, print_it: bool = False) -> dict:
             "pooled": incumbent["pooled"],
         },
         "candidates": results,
-        "per_group_verdict": per_group,
-        "groups_to_remove": to_remove,
-        "ambiguous_groups": ambiguous,
+        "per_group_verdict_seeds_0_4": per_group,
         "consolidated_verdict": results["R_all"]["verdict"],
         "fresh_seed_confirmation": fresh,
         "decided": bool(fresh.get("decided")),
-        "decision": decision_block(per_group, to_remove, ambiguous, results, fresh),
+        "decision": decision,
     }
 
 
 def coverage_block(features: pd.DataFrame) -> dict:
+    """The decay, on the three axes that matter.
+
+    `by_fold` is the one the decision rests on: every recent-fold delta was
+    earned on those rows. It is NOT `by_year` -- the last fold is unbounded
+    above, so the 2025 fold spans 2025 and 2026 and is much less covered than
+    the 2025 calendar year, which is exactly the sort of gap that makes a
+    coverage claim quietly wrong.
+    """
     dates, missing = features["date"], features["external_missing"]
+    by_fold = coverage_by_fold(make_folds(dates), missing)
     return {
         "flag": "external_missing",
         "by_year": coverage_by_year(dates, missing),
+        "by_fold": by_fold,
+        "most_recent_fold": {"year": max(by_fold, key=int),
+                             **by_fold[max(by_fold, key=int)]},
         "trailing_12m": trailing_coverage(dates, missing, months=12),
         "overall_share": round(float(missing.astype(bool).mean()), 4),
         "weekly_check": "scripts/check_snapshot_coverage.py",
@@ -316,32 +327,49 @@ def fresh_seed_block(thresholds: dict, weights: dict) -> dict:
     return out
 
 
-def decision_block(per_group, to_remove, ambiguous, results, fresh) -> dict:
-    if ambiguous:
-        outcome = "AMBIGUOUS -- stop and report"
-    elif not to_remove:
-        outcome = "keep every snapshot-dependent column"
-    else:
+def decision_block(per_group, results, fresh) -> dict:
+    """The verdict per group AFTER the mandatory fresh-seed confirmation.
+
+    The seeds 0-4 verdict is a proposal, never the decision: plan §6 requires
+    both seed sets to say REMOVE, and a disagreement is AMBIGUOUS rather than a
+    majority. `mma.decay.confirmed_verdict` is that conjunction; this function
+    only routes each group's two verdicts into it and phrases the outcome.
+    """
+    fresh_by_group = {}
+    for cid, block in (fresh.get("candidates") or {}).items():
+        groups = CANDIDATES[cid][1]
+        if len(groups) == 1:
+            fresh_by_group[groups[0]] = block["verdict"]
+
+    confirmed = {group: confirmed_verdict(verdict, fresh_by_group.get(group))
+                 for group, verdict in per_group.items()}
+    to_remove = sorted(g for g, v in confirmed.items() if v == "REMOVE")
+    ambiguous = sorted(g for g, v in confirmed.items() if v == "AMBIGUOUS")
+
+    if ambiguous and not to_remove:
+        outcome = (f"keep every snapshot-dependent column; {', '.join(ambiguous)} is "
+                   "AMBIGUOUS after the fresh-seed confirmation, so nothing is deployed")
+    elif ambiguous:
+        outcome = (f"remove {', '.join(to_remove)}; {', '.join(ambiguous)} is AMBIGUOUS "
+                   "after the fresh-seed confirmation and is not deployed")
+    elif to_remove:
         outcome = f"remove {', '.join(to_remove)}"
-    confirmed = None
-    if fresh.get("decided"):
-        seeds05 = {g: per_group[g] for g in per_group}
-        fresh_by_group = {}
-        for cid, block in fresh["candidates"].items():
-            for group in CANDIDATES[cid][1]:
-                if len(CANDIDATES[cid][1]) == 1:
-                    fresh_by_group[group] = block["verdict"]
-        confirmed = {
-            "seeds_0_4": seeds05,
-            "seeds_5_9": fresh_by_group,
-            "agree": all(fresh_by_group.get(g) == v for g, v in seeds05.items()
-                         if g in fresh_by_group),
-        }
+    else:
+        outcome = "keep every snapshot-dependent column"
+
     return {
         "outcome": outcome,
-        "per_group": per_group,
-        "consolidated": results["R_all"]["verdict"],
-        "fresh_seed_agreement": confirmed,
+        "confirmed_per_group": confirmed,
+        "groups_to_remove": to_remove,
+        "ambiguous_groups": ambiguous,
+        "seeds_0_4": dict(per_group),
+        "seeds_5_9": fresh_by_group,
+        "fresh_seed_agreement": {
+            "run": bool(fresh.get("decided")),
+            "agree": all(fresh_by_group.get(g) == v for g, v in per_group.items()
+                         if g in fresh_by_group),
+        },
+        "consolidated_R_all": results["R_all"]["verdict"],
         "taken_by": "the pre-registered rule, applied mechanically by this script",
     }
 
@@ -364,7 +392,9 @@ def main(argv=None) -> None:
         print(f"  {cid:<22} {block['pooled']['d_joint']:>+9.6f} "
               f"{block['recent']['keep_gain_recent']:>+15.6f} "
               f"{block['pooled']['d_winner']:>+11.6f}   {block['verdict']}")
-    print(f"\nper-group verdict: {artifact['per_group_verdict']}")
+    print(f"\nper-group, seeds 0-4: {artifact['decision']['seeds_0_4']}")
+    print(f"per-group, seeds 5-9: {artifact['decision']['seeds_5_9']}")
+    print(f"confirmed:            {artifact['decision']['confirmed_per_group']}")
     print(f"decision: {artifact['decision']['outcome']}")
     if not artifact["decided"]:
         print(f"NOT YET DECIDED: {artifact['fresh_seed_confirmation']['reason']}")
