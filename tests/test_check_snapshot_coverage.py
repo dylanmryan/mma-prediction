@@ -10,7 +10,11 @@ part that has to hold for the check to be worth wiring into the Action at all:
   of well-covered history and would never breach;
 * that a missing `external_missing` column is a loud failure rather than a
   silently skipped check, since that column is kept in the table (and out of
-  both model matrices) for exactly this purpose.
+  both model matrices) for exactly this purpose;
+* that the warning names the STANDING DECISION. This threshold fires on the
+  current data and will keep firing, so the difference between a useful weekly
+  line and one people learn to scroll past is whether it carries the answer
+  that was last given and the coverage it was given at.
 """
 from __future__ import annotations
 
@@ -51,6 +55,38 @@ def test_a_decayed_recent_year_breaches_and_names_what_to_do():
     assert "0.550" in warning
     assert "external-decay-decision" in warning
     assert "build_external.py" in warning
+
+
+def test_the_warning_quotes_the_standing_decision_and_the_drift_since_it(tmp_path):
+    decision = tmp_path / "decision.json"
+    decision.write_text(json.dumps({
+        "decision": {"outcome": "keep every snapshot-dependent column",
+                     "confirmed_per_group": {"EXTERNAL": "KEEP"}},
+        "coverage": {"trailing_12m": {"share": 0.50},
+                     "most_recent_fold": {"year": "2025", "share": 0.4225}},
+    }))
+    report = check.measure(steady(0.60), decision=decision)
+    assert report["drift_since_decision"] == pytest.approx(0.10)
+    warning = check.warning_text(report)
+    assert "keep every snapshot-dependent column" in warning
+    assert "taken at 0.500 trailing coverage" in warning
+    assert "+0.1000 since then" in warning
+
+
+def test_without_an_artifact_the_warning_says_to_take_the_decision(tmp_path):
+    report = check.measure(steady(0.60), decision=tmp_path / "absent.json")
+    assert report["standing_decision"] is None
+    assert report["drift_since_decision"] is None
+    assert "No decision artifact on disk" in check.warning_text(report)
+
+
+def test_the_committed_artifact_is_what_the_weekly_warning_quotes():
+    """It fires today, and this is the reason that is acceptable: the line it
+    prints carries the standing answer rather than only the alarm."""
+    standing = check.standing_decision()
+    assert standing["per_group"] == {"EXTERNAL": "KEEP", "NOTICE": "KEEP",
+                                     "CONTEXT": "AMBIGUOUS"}
+    assert standing["most_recent_fold_at_decision"]["share"] > check.THRESHOLD
 
 
 def test_the_threshold_is_exclusive_so_sitting_on_it_is_not_a_breach():
@@ -113,9 +149,12 @@ def test_main_writes_the_artifact_and_exits_zero_even_when_breached(tmp_path, ca
     assert "WARNING:" in capsys.readouterr().err
 
 
-def test_the_committed_threshold_sits_above_the_2025_fold_it_was_set_from():
-    """0.359 is the 2025 fold's external_missing, the worst fold the decay
-    decision was measured on; a threshold at or below it would fire on the
-    state that decision already accounts for."""
-    assert check.THRESHOLD > 0.359
-    assert check.THRESHOLD < 0.534  # and below 2026's, so it can still fire
+def test_the_threshold_is_the_pre_registered_one_and_has_not_been_moved():
+    """It was fixed in the decay plan §8 before any candidate was run, and it
+    fires on the current data. Raising it to stop it firing is exactly what a
+    pre-registration exists to prevent, so this pins it at the value the plan
+    states -- read from the plan, not retyped."""
+    plan = Path(__file__).resolve().parents[1] / "docs" / "superpowers" / "plans" \
+        / "2026-09-09-external-decay-decision.md"
+    assert "**Threshold: 0.40.**" in plan.read_text()
+    assert check.THRESHOLD == 0.40
