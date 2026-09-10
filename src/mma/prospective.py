@@ -113,6 +113,17 @@ def event_filename(event_name: str, event_date: str) -> str:
     return f"UFC_{slug}_{event_date}.json"
 
 
+def _base_record(wiki_fight: dict) -> dict:
+    """The identifying half of a fight record: what a skipped stub carries and
+    what a real prediction is built on top of. Read straight off the card
+    entry, so it is available even when nothing else about the fight is."""
+    return {
+        "fighter_a_name": wiki_fight["fighter_a_name"],
+        "fighter_b_name": wiki_fight["fighter_b_name"],
+        "weight_class": wiki_fight.get("weight_class"),
+    }
+
+
 def predict_fight(
     wiki_fight: dict,
     name_index: dict[str, dict[str, list[str]]],
@@ -134,11 +145,7 @@ def predict_fight(
     """
     name_a = wiki_fight["fighter_a_name"]
     name_b = wiki_fight["fighter_b_name"]
-    base = {
-        "fighter_a_name": name_a,
-        "fighter_b_name": name_b,
-        "weight_class": wiki_fight.get("weight_class"),
-    }
+    base = _base_record(wiki_fight)
 
     id_a, tier_a, reason_a = match_fighter_id(name_a, name_index)
     id_b, tier_b, reason_b = match_fighter_id(name_b, name_index)
@@ -218,12 +225,33 @@ def predict_event(
     ensemble,
 ) -> list[dict]:
     """Predict every fight on a card. `event['date']` is an ISO date string
-    used as the as-of date for age / days-since-last-fight features."""
+    used as the as-of date for age / days-since-last-fight features.
+
+    A fight whose prediction RAISES degrades to the same `skipped: True` stub
+    an unmatched name produces, with the exception as its reason, rather than
+    taking the card down with it. `predict_fight` is written not to raise on
+    bad input, but the scorer it calls is a whole model stack, and the blast
+    radius of one unexpected exception here is the entire weekly run:
+    `scripts/predict_upcoming.py` has no try/except between this call and
+    `main`, so one bad matchup would drop every remaining fight and every
+    later event -- and the workflow's `if: always()` commit step would then
+    commit the truncated week as though it were complete. A skip is
+    re-attemptable by a later run (see `write_event_prediction`'s re-attempt
+    policy); a missing fight looks like a card that never had it.
+    """
     as_of = pd.Timestamp(event["date"])
-    return [
-        predict_fight(fight, name_index, snapshots, fighters, ensemble, as_of)
-        for fight in wiki_fights
-    ]
+    out = []
+    for fight in wiki_fights:
+        try:
+            out.append(
+                predict_fight(fight, name_index, snapshots, fighters, ensemble, as_of))
+        except Exception as error:  # noqa: BLE001 -- one fight must not kill the card
+            out.append({
+                **_base_record(fight),
+                "skipped": True,
+                "reason": f"prediction failed: {type(error).__name__}: {error}",
+            })
+    return out
 
 
 def load_event_record(path: Path) -> dict | None:
