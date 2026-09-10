@@ -351,6 +351,6 @@ throws away) carries skill the method marginal does not. That would need a
 market that prices rounds, and it would need to be pre-registered before it is
 measured.
 
-**Test counts:** 1,135 passed / 1 skipped, up from 1,082 / 1 (53 new: 9 for
-`devig_multiway`, 4 for the extended prediction dump, 40 for the analysis
+**Test counts:** 1,139 passed / 1 skipped, up from 1,082 / 1 (57 new: 9 for
+`devig_multiway`, 4 for the extended prediction dump, 44 for the analysis
 helpers).
