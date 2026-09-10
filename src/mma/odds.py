@@ -49,6 +49,39 @@ def devig_pair(p1_raw: float, p2_raw: float) -> tuple[float, float]:
     return p1_raw / total, p2_raw / total
 
 
+def devig_multiway(raw_probs: Iterable[float]) -> tuple[float, ...]:
+    """Proportional devig over an N-way market: normalize the raw probs to sum to 1.
+
+    `devig_pair` handles the two-way moneyline; a method-prop market is
+    six-way (each corner x KO/TKO / submission / decision) and overrounds far
+    harder -- the UFC prop book in `scripts/market_edge_analysis.py` sits
+    around 1.22 against the moneyline's ~1.05 -- so it needs its own devig.
+
+    Same family as `devig_pair`: the overround is split across the outcomes in
+    proportion to their raw implied probabilities ("multiplicative" devig).
+    That choice matters and is pinned by a test -- on a two-way market this
+    reduces to `devig_pair` exactly, which a power or Shin devig would not.
+    Proportional devig is the standard baseline and the only family already in
+    this repo; using a different one for the props alone would be an
+    unregistered degree of freedom in the comparison.
+
+    Raises ValueError on fewer than two outcomes, or on any non-finite or
+    non-positive raw probability (an outcome the book priced at "impossible"
+    cannot be normalised, and silently dropping it would change the market).
+    """
+    values = [float(p) for p in raw_probs]
+    if len(values) < 2:
+        raise ValueError(
+            f"a market needs at least two outcomes to devig; got {len(values)}"
+        )
+    if not all(math.isfinite(p) and p > 0.0 for p in values):
+        raise ValueError(
+            f"every raw implied probability must be finite and strictly positive; got {values}"
+        )
+    total = math.fsum(values)
+    return tuple(p / total for p in values)
+
+
 def extract_fight_id(fight_url: str | None) -> str | None:
     """Pull the 16-hex ufcstats fight id from a fight-details URL.
 

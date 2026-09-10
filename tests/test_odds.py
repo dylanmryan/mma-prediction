@@ -9,6 +9,7 @@ from mma.odds import (
     american_to_implied,
     consensus_odds,
     decimal_to_implied,
+    devig_multiway,
     devig_pair,
     extract_fight_id,
 )
@@ -146,3 +147,65 @@ def test_consensus_odds_empty_raises():
 def test_consensus_odds_all_nan_raises():
     with pytest.raises(ValueError):
         consensus_odds([{"odds_1": float("nan"), "odds_2": float("nan")}])
+
+
+# --------------------------------------------------------------------------
+# multi-way devig (the six-way fighter x method prop market)
+# --------------------------------------------------------------------------
+
+
+def test_devig_multiway_sums_to_one():
+    out = devig_multiway([0.30, 0.25, 0.20, 0.18, 0.15, 0.12])
+    assert math.isclose(sum(out), 1.0, rel_tol=0, abs_tol=1e-12)
+
+
+def test_devig_multiway_reduces_to_devig_pair_on_a_two_way_market():
+    """The whole point of the family choice: two outcomes must give devig_pair.
+
+    A different devig family (power, Shin) would NOT agree with devig_pair
+    here, so this is the test that pins which family was used.
+    """
+    for p1, p2 in ((0.6552, 0.3774), (0.5, 0.5), (0.91, 0.14), (0.2, 0.85)):
+        assert devig_multiway([p1, p2]) == pytest.approx(devig_pair(p1, p2))
+
+
+def test_devig_multiway_preserves_ratios():
+    """Proportional devig scales every outcome by the same factor."""
+    raw = [0.44, 0.22, 0.11, 0.33, 0.10, 0.05]
+    out = devig_multiway(raw)
+    ratios = [o / r for o, r in zip(out, raw)]
+    assert ratios == pytest.approx([ratios[0]] * len(raw))
+
+
+def test_devig_multiway_already_fair_unchanged():
+    raw = [0.5, 0.25, 0.25]
+    assert devig_multiway(raw) == pytest.approx(raw)
+
+
+def test_devig_multiway_hand_computed():
+    raw = [0.5, 0.4, 0.3]  # overround 1.2
+    assert devig_multiway(raw) == pytest.approx([0.5 / 1.2, 0.4 / 1.2, 0.3 / 1.2])
+
+
+def test_devig_multiway_rejects_fewer_than_two_outcomes():
+    with pytest.raises(ValueError, match="at least two"):
+        devig_multiway([1.0])
+
+
+def test_devig_multiway_rejects_non_positive_probability():
+    with pytest.raises(ValueError, match="strictly positive"):
+        devig_multiway([0.5, 0.0, 0.4])
+
+
+def test_devig_multiway_rejects_non_finite():
+    with pytest.raises(ValueError, match="strictly positive"):
+        devig_multiway([0.5, float("nan"), 0.4])
+
+
+def test_decimal_odds_to_devigged_six_way_end_to_end():
+    """Decimal prop odds in, a six-way distribution out."""
+    decimals = [3.0, 6.0, 8.0, 12.0, 4.0, 5.0]
+    raw = [decimal_to_implied(d) for d in decimals]
+    out = devig_multiway(raw)
+    assert math.isclose(sum(out), 1.0, abs_tol=1e-12)
+    assert out[0] > out[1] > out[2]  # ordering survives the normalisation
