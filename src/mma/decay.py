@@ -211,6 +211,28 @@ def removal_verdict(
     }
 
 
+def confirmed_verdict(primary: str, fresh: str | None) -> str:
+    """The verdict after the mandatory fresh-seed confirmation.
+
+    Nothing reaches the deployed model on one seed set. SP2.1 shipped a false
+    positive that way and the fresh-seed rule exists because of it, so this is
+    a conjunction and not a vote: REMOVE only when BOTH seed sets say REMOVE.
+    A missing fresh-seed result is not a pass -- it is the confirmation not
+    having been run, which is `AMBIGUOUS` for the same reason a disagreement
+    is: the honest answer is "stop", not "probably fine".
+    """
+    if primary == "REMOVE" and fresh == "REMOVE":
+        return "REMOVE"
+    if primary == "KEEP" and fresh in ("KEEP", None):
+        # Two seed sets agreeing to leave the model alone, or one seed set
+        # saying so with no change proposed, both mean the same thing: the
+        # columns stay, and no confirmation run is owed for a non-change.
+        return "KEEP"
+    if primary == "KEEP" and fresh == "REMOVE":
+        return "AMBIGUOUS"
+    return "AMBIGUOUS"
+
+
 # --------------------------------------------------------------------------
 # coverage decay
 # --------------------------------------------------------------------------
@@ -238,6 +260,28 @@ def coverage_by_year(dates, missing) -> dict[str, dict]:
             "n": int(len(rows)),
             "missing": int(rows.sum()),
             "share": round(float(rows.mean()), 4),
+        }
+    return out
+
+
+def coverage_by_fold(folds, missing) -> dict[str, dict]:
+    """`missing` share over each fold's EVALUATION rows.
+
+    Not the same thing as `coverage_by_year`, and the difference is the point:
+    the last fold is unbounded above (it absorbs every later fight), so the
+    2025 fold spans 2025 AND 2026 and is materially less covered than the 2025
+    calendar year. Every recent-fold delta in the decay decision was earned on
+    these rows, so this is the honest statement of how much of the evidence
+    the snapshot had actually seen.
+    """
+    m = np.asarray(missing, dtype=bool)
+    out = {}
+    for fold in folds:
+        rows = m[fold.eval]
+        out[str(fold.year)] = {
+            "n": int(len(rows)),
+            "missing": int(rows.sum()),
+            "share": round(float(rows.mean()), 4) if len(rows) else float("nan"),
         }
     return out
 

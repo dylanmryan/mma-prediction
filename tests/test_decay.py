@@ -245,3 +245,63 @@ def test_trailing_coverage_of_an_empty_window_is_nan_not_zero():
 def test_trailing_coverage_rejects_a_non_positive_window():
     with pytest.raises(ValueError, match="months must be positive"):
         decay.trailing_coverage(_dates("2025-01-01"), [True], months=0)
+
+
+# --- the fresh-seed conjunction -------------------------------------------
+
+def test_both_seed_sets_must_say_remove():
+    """SP2.1 shipped a false positive on one seed set; this is why the rule
+    is a conjunction and not a vote."""
+    assert decay.confirmed_verdict("REMOVE", "REMOVE") == "REMOVE"
+
+
+@pytest.mark.parametrize("fresh", ["KEEP", "AMBIGUOUS", None])
+def test_a_removal_that_the_fresh_seeds_do_not_confirm_is_ambiguous(fresh):
+    assert decay.confirmed_verdict("REMOVE", fresh) == "AMBIGUOUS"
+
+
+def test_a_fresh_seed_removal_does_not_override_a_primary_keep():
+    """Neither direction gets to win on one seed set."""
+    assert decay.confirmed_verdict("KEEP", "REMOVE") == "AMBIGUOUS"
+
+
+@pytest.mark.parametrize("fresh", ["KEEP", None])
+def test_keeping_needs_no_confirmation_run(fresh):
+    """Leaving the model alone is not a change, so there is nothing to confirm
+    -- and an unrun confirmation must not turn a KEEP into a stop."""
+    assert decay.confirmed_verdict("KEEP", fresh) == "KEEP"
+
+
+def test_an_ambiguous_primary_stays_ambiguous_however_the_fresh_seeds_land():
+    for fresh in ("REMOVE", "KEEP", "AMBIGUOUS", None):
+        assert decay.confirmed_verdict("AMBIGUOUS", fresh) == "AMBIGUOUS"
+
+
+# --- fold coverage is not year coverage -----------------------------------
+
+def test_coverage_by_fold_is_not_coverage_by_year_for_the_unbounded_last_fold():
+    """The last fold absorbs every later fight, so quoting the calendar year
+    understates how uncovered the evidence for that fold's delta was -- the
+    exact slip the decay plan's threshold justification made."""
+    from mma.walkforward import make_folds
+
+    dates = pd.Series(pd.to_datetime(
+        ["2024-06-01"] * 4 + ["2025-06-01"] * 4 + ["2026-06-01"] * 4
+    ))
+    missing = [False] * 4 + [False] * 4 + [True] * 4
+    folds = make_folds(dates, fold_years=(2024, 2025))
+    by_fold = decay.coverage_by_fold(folds, missing)
+    by_year = decay.coverage_by_year(dates, missing)
+    assert by_year["2025"]["share"] == 0.0
+    assert by_fold["2025"]["n"] == 8 and by_fold["2025"]["share"] == 0.5
+    assert by_fold["2024"] == {"n": 4, "missing": 0, "share": 0.0}
+
+
+def test_coverage_by_fold_of_an_empty_fold_is_nan():
+    from mma.walkforward import make_folds
+
+    dates = pd.Series(pd.to_datetime(["2025-06-01"] * 3))
+    folds = make_folds(dates, fold_years=(2024, 2025))
+    by_fold = decay.coverage_by_fold(folds, [True] * 3)
+    assert by_fold["2024"]["n"] == 0
+    assert np.isnan(by_fold["2024"]["share"])

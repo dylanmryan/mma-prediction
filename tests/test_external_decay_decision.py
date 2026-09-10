@@ -15,6 +15,8 @@ and apply another, or compare two things that are not comparable:
 """
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -161,3 +163,60 @@ def test_scored_rows_reproduce_the_committed_reports_fold_row_counts():
         assert weights["winner"][year] == block["n"], year
         # And the joint weight is strictly smaller, since unscorable rows exist.
         assert 0 < weights["joint"][year] <= block["n_method"]
+
+
+# --- the decision routes both seed sets, not just the first ---------------
+
+def results_stub(consolidated="KEEP") -> dict:
+    return {"R_all": {"verdict": consolidated}}
+
+
+def fresh_stub(**verdicts) -> dict:
+    ids = {group: cid for cid, (_, groups) in d.CANDIDATES.items()
+           if len(groups) == 1 for group in groups}
+    return {"decided": True,
+            "candidates": {ids[g]: {"verdict": v} for g, v in verdicts.items()}}
+
+
+def test_a_removal_confirmed_at_both_seed_sets_is_deployed():
+    out = d.decision_block({"CONTEXT": "REMOVE"}, results_stub(),
+                           fresh_stub(CONTEXT="REMOVE"))
+    assert out["groups_to_remove"] == ["CONTEXT"]
+    assert out["outcome"] == "remove CONTEXT"
+
+
+def test_a_removal_the_fresh_seeds_do_not_confirm_deploys_nothing():
+    """The seeds 0-4 verdict is a proposal; the artifact must not read as a
+    decision to change the model when the confirmation did not agree."""
+    out = d.decision_block({"CONTEXT": "REMOVE"}, results_stub(),
+                           fresh_stub(CONTEXT="AMBIGUOUS"))
+    assert out["confirmed_per_group"] == {"CONTEXT": "AMBIGUOUS"}
+    assert out["groups_to_remove"] == []
+    assert "nothing is deployed" in out["outcome"]
+    assert out["fresh_seed_agreement"]["agree"] is False
+
+
+def test_a_keep_needs_no_fresh_seed_run_to_stand():
+    out = d.decision_block({"EXTERNAL": "KEEP", "NOTICE": "KEEP"}, results_stub(),
+                           {"decided": False, "reason": "not run"})
+    assert out["confirmed_per_group"] == {"EXTERNAL": "KEEP", "NOTICE": "KEEP"}
+    assert out["outcome"] == "keep every snapshot-dependent column"
+
+
+def test_a_mixed_outcome_names_both_halves():
+    out = d.decision_block({"EXTERNAL": "KEEP", "NOTICE": "REMOVE", "CONTEXT": "REMOVE"},
+                           results_stub(), fresh_stub(NOTICE="REMOVE", CONTEXT="KEEP"))
+    assert out["groups_to_remove"] == ["NOTICE"]
+    assert out["ambiguous_groups"] == ["CONTEXT"]
+    assert out["outcome"].startswith("remove NOTICE; CONTEXT is AMBIGUOUS")
+
+
+def test_the_committed_artifact_deploys_nothing_and_says_why():
+    """The result of this experiment, pinned so a later edit that turns it
+    back into a deployment has to be deliberate."""
+    artifact = json.loads((d.OUT).read_text())
+    assert artifact["decision"]["confirmed_per_group"] == {
+        "EXTERNAL": "KEEP", "NOTICE": "KEEP", "CONTEXT": "AMBIGUOUS",
+    }
+    assert artifact["decision"]["groups_to_remove"] == []
+    assert artifact["decision"]["fresh_seed_agreement"]["run"] is True
