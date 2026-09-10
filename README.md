@@ -998,7 +998,7 @@ The July 2026 version of this benchmark restricted to fights from 2021 on
 because the model of that date trained on pre-2021 data only, so 2021+ was
 genuinely held out. That is no longer true. The deployed model is refit on
 every decisive fight through the latest event (`models/torch/metrics_val.json`
-records `mode: refit_through`, `train_through: 2026-08-08`, `n_train: 11238`
+records `mode: refit_through`, `train_through: 2026-09-05`, `n_train: 11290`
 — the whole feature table), so those fights are now *in its training set*.
 
 Re-running the old comparison against the deployed model would therefore
@@ -1008,30 +1008,35 @@ odds-matched fights, scored with the deployed model's own predictions:
 
 | Scored in-sample (**not a real result**) | Accuracy | Log-loss | Brier |
 |---|---|---|---|
-| Model (deployed, trained on these fights) | **0.681** | **0.601** | **0.207** |
+| Model (deployed, trained on these fights) | **0.677** | **0.602** | **0.207** |
 | Market (devigged consensus odds) | 0.660 | 0.610 | 0.211 |
 
 That reads as *the model beats the market on every metric*, and the
-flat-stake backtest that goes with it returns **+17.8%** at the 10%
+flat-stake backtest that goes with it returns **+16.9%** at the 10%
 edge threshold. Both numbers are worthless. All 3,310 of those fights are
 inside the model's training window (the artifact records the count), so
 this is a model being asked about answers it was fitted on.
 
 Two things are worth pulling out of that. The script's honesty gate — which
 refuses to report clean numbers if the model beats the market by more than
-0.02 log-loss — **does not catch it**: the in-sample edge is 0.0088, well
+0.02 log-loss — **does not catch it**: the in-sample edge is 0.0082, well
 inside tolerance. A gate calibrated on "is this edge implausibly large"
 cannot detect "this model trained on the evaluation set." And a
-+17.8% ROI is exactly the kind of number a project like this exists not to
++16.9% ROI is exactly the kind of number a project like this exists not to
 publish.
 
 So the honest comparison uses the **walk-forward out-of-fold predictions**
 (`scripts/run_walkforward.py --dump-predictions`, dumped to
-[`models/walkforward/preds/hybrid_e2.json`](models/walkforward/preds/hybrid_e2.json)):
+[`models/walkforward/preds/hybrid_e2_cells.json`](models/walkforward/preds/hybrid_e2_cells.json)):
 fold year *Y*'s probabilities come from a model fitted on fights before
 *Y−1* and early-stopped on *Y−1*, so **no fight is scored by a model that
-saw it**. Those 4,804 rows are joined to the aligned odds on the shared
-fight id alone.
+saw it**. Those 4,856 rows are joined to the aligned odds on the shared
+fight id alone. (`hybrid_e2_cells` is the walk-forward reported above,
+re-run on the current feature table — same candidate, same seeds, same model
+matrix, and the same out-of-fold probabilities to *zero* difference on the
+4,804 rows the two runs share. It carries 52 fights more because the table
+has grown since, and it is the dump the market-edge analysis below reads
+too, so both market artifacts describe one set of predictions.)
 
 ### The result
 
@@ -1047,11 +1052,16 @@ favorite *lost* (Holly Holm over Ronda Rousey, Chris Weidman over Anderson
 Silva) and one rematch where the odds file lists the same two fighters in
 reversed column order (proving this isn't a "column 1 is always the
 favorite" bug) — before any aggregate numbers are trusted. The prediction
-dump carries no fight id of its own (it is three parallel lists in the
-harness's pooled row order), so the pooled rows are rebuilt from the same
-folds over the same table and the pairing is verified element-wise — row
-count, fold-year sequence and realised-outcome sequence — before a single
-probability is read.
+dump names the fight each row scores, so pairing it to the feature table is
+that same id join, and a table that has grown under a committed dump is a
+smaller intersection rather than a failure. (It used to be three parallel
+lists in the harness's pooled row order, paired by position — which meant a
+routine data refresh, 52 fights, left the benchmark unable to regenerate at
+all.) What is still checked before a single probability is read: every fight
+in the dump must be a walk-forward evaluation row of the *current* table,
+with the same fold year and the same realised outcome. The artifact records
+both tables' fingerprints and how many of today's walk-forward rows the dump
+does not cover.
 
 On the **3,310 fights** that are both walk-forward evaluation rows and
 odds-matched (fold years 2018–2025):
@@ -1092,15 +1102,15 @@ cut, in both the 2021+ comparison and the full 2018–2025 out-of-fold set.**
 
 ### Caveats and the rest of the numbers
 
-**Odds coverage is not uniform.** 68.9% of the walk-forward rows have
-matched odds, but that falls to 22.7% in the 2025 fold because the odds
+**Odds coverage is not uniform.** 68.2% of the walk-forward rows have
+matched odds, but that falls to 21.5% in the 2025 fold because the odds
 dataset lags — so the pooled cut is weighted toward the earlier fold years.
 The artifact reports, for every fold year, the model's out-of-fold log-loss
 on the covered rows *and* on the uncovered ones, so the covered subset can
 be checked for being an easier sample rather than assumed neutral. It is
 mostly close (2019: 0.662 covered vs 0.695 uncovered; 2022: 0.645 vs
 0.647), with 2025 the notable exception in the other direction (0.587
-covered vs 0.632 uncovered).
+covered vs 0.647 uncovered).
 
 **Calibration**: both are well-behaved across probability deciles — mean
 predicted probability tracks the empirical win rate bin-by-bin for both

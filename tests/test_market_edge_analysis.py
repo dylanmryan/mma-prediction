@@ -403,3 +403,89 @@ def test_prop_roi_of_a_break_even_book_is_not_significant():
     out = mea.prop_roi(probs, decimals, realised, threshold=0.0)
     assert out["roi_pct"] == pytest.approx(0.0)
     assert out["p_value"] == pytest.approx(1.0)
+
+
+# --- pairing the joint dump to the table ------------------------------------
+
+
+def _joint_pooled(n: int = 6) -> pd.DataFrame:
+    """A stand-in for the walk-forward evaluation rows, with a method label."""
+    return pd.DataFrame(
+        {
+            "fight_id": [f"{i:016x}" for i in range(n)],
+            "fold_year": [2018 + i % 2 for i in range(n)],
+            "y_winner": [float(i % 2) for i in range(n)],
+            "y_method": [["ko_tko", "submission", "decision"][i % 3] for i in range(n)],
+            "swapped": [bool(i % 2) for i in range(n)],
+            "date": pd.date_range("2018-01-01", periods=n, freq="400D"),
+        }
+    )
+
+
+def _joint_dump(pooled: pd.DataFrame) -> dict:
+    n = len(pooled)
+    n_cells = n_joint_cells(METHOD_CLASSES, ROUND_CLASSES)
+    cells = np.tile(np.arange(1, n + 1, dtype=float)[:, None], (1, n_cells))
+    cells /= cells.sum(axis=1, keepdims=True)
+    return {
+        "name": "synthetic",
+        "n": n,
+        "fight_id": [str(v) for v in pooled["fight_id"]],
+        "fold_year": [int(v) for v in pooled["fold_year"]],
+        "y_winner": [float(v) for v in pooled["y_winner"]],
+        "p_winner": list(np.linspace(0.2, 0.8, n)),
+        "y_method": [str(v) for v in pooled["y_method"]],
+        "joint_cells": [list(row) for row in cells],
+    }
+
+
+def test_attach_oof_joint_returns_cells_aligned_to_the_rows_it_returns():
+    pooled = _joint_pooled()
+    dump = _joint_dump(pooled)
+    out, cells = mea.attach_oof_joint(pooled, dump)
+    assert list(out["fight_id"]) == dump["fight_id"]
+    assert cells.shape == (len(out), n_joint_cells(METHOD_CLASSES, ROUND_CLASSES))
+    assert cells == pytest.approx(np.asarray(dump["joint_cells"], dtype=float))
+
+
+def test_attach_oof_joint_keeps_each_fights_own_cells_when_the_table_grows():
+    """The row a fight's cells sit on is the dump's, not the table's. A table
+    that has gained fights since the dump would shift every later row by one
+    under a positional read, and the six-way log-loss would still look
+    plausible -- so the cells travel with the fight id."""
+    pooled = _joint_pooled(6)
+    dump = _joint_dump(pooled)
+    grown = pd.concat(
+        [pooled.iloc[:2],
+         pooled.iloc[:1].assign(fight_id=["ffffffffffffffff"]),
+         pooled.iloc[2:]]
+    ).reset_index(drop=True)
+    out, cells = mea.attach_oof_joint(grown, dump)
+    assert list(out["fight_id"]) == dump["fight_id"]
+    by_id = dict(zip(dump["fight_id"], np.asarray(dump["joint_cells"], dtype=float)))
+    for row, fight_id in enumerate(out["fight_id"]):
+        assert cells[row] == pytest.approx(by_id[fight_id])
+
+
+def test_attach_oof_joint_rejects_a_relabelled_method():
+    pooled = _joint_pooled()
+    dump = _joint_dump(pooled)
+    dump["y_method"][0] = "submission" if dump["y_method"][0] != "submission" else "decision"
+    with pytest.raises(ValueError, match="y_method"):
+        mea.attach_oof_joint(pooled, dump)
+
+
+def test_attach_oof_joint_rejects_a_dump_with_no_cells():
+    pooled = _joint_pooled()
+    dump = _joint_dump(pooled)
+    del dump["joint_cells"]
+    with pytest.raises(ValueError, match="joint_cells"):
+        mea.attach_oof_joint(pooled, dump)
+
+
+def test_attach_oof_joint_rejects_cells_that_are_not_a_distribution():
+    pooled = _joint_pooled()
+    dump = _joint_dump(pooled)
+    dump["joint_cells"][0] = [v * 2 for v in dump["joint_cells"][0]]
+    with pytest.raises(ValueError, match="sum to 1"):
+        mea.attach_oof_joint(pooled, dump)

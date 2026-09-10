@@ -70,13 +70,16 @@ MODELS = ROOT / "models"
 #: anything about method).
 OOF_PREDICTIONS = MODELS / "walkforward" / "preds" / "hybrid_e2_cells.json"
 #: The walk-forward report those predictions came from -- the same candidate,
-#: same seeds and same dropped columns as `hybrid_e2.json`, re-run only because
-#: that run's dump carried no cells. The re-run reproduces `hybrid_e2.json`'s
-#: out-of-fold winner probabilities to ZERO difference on all 4,804 rows the two
-#: share, and every metric of folds 2018-2024 exactly; it differs only in
-#: carrying 52 more fights, which a data refresh added to the (unbounded) 2025
-#: fold between the two runs. That is what licenses reading this dump as the
-#: same out-of-fold predictions `models/market_benchmark_oof.json` is built on.
+#: same seeds and the same model matrix as `hybrid_e2.json`, re-run only
+#: because that run's dump carried no cells. (`hybrid_e2`'s `--drop-columns`
+#: named three more columns, but `mma.tensors` and `mma.models.xgb` exclude
+#: those three permanently, so naming them drops nothing.) The re-run
+#: reproduces `hybrid_e2.json`'s out-of-fold winner probabilities to ZERO
+#: difference on all 4,804 rows the two share, and every metric of folds
+#: 2018-2024 exactly; it differs only in carrying 52 more fights, which a data
+#: refresh added to the (unbounded) 2025 fold between the two runs. Since that
+#: refresh it is also the dump `models/market_benchmark_oof.json` is built on,
+#: so both market artifacts describe one set of out-of-fold predictions.
 OOF_REPORT = MODELS / "walkforward" / "hybrid_e2_cells.json"
 OUT_PATH = MODELS / "market_edge_analysis.json"
 
@@ -629,37 +632,53 @@ def props_to_features_convention(merged: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def attach_oof_joint(pooled: pd.DataFrame, dump: dict) -> pd.DataFrame:
-    """`pooled` with the dump's out-of-fold winner probability AND joint cells.
+def attach_oof_joint(pooled: pd.DataFrame, dump: dict) -> tuple[pd.DataFrame, np.ndarray]:
+    """The dump's out-of-fold rows, with its winner probability AND its cells.
 
-    The dump is positional, so every check
-    `scripts.build_odds_benchmark.attach_oof_predictions` makes is made here
-    too -- and one more, because this dump carries the realised method: the
-    rebuilt frame's `y_method` must match the dump's element for element. A
-    silently mis-paired join would still produce a plausible-looking six-way
-    log-loss, which is exactly the failure this analysis must not ship.
+    Returns `(rows, cells)` where `cells[i]` is the joint the dump predicted
+    for `rows.iloc[i]`'s fight -- reordered onto the returned rows rather than
+    handed back in the dump's own order, so the caller cannot pair them
+    positionally by accident.
+
+    Every check `scripts.build_odds_benchmark.attach_oof_predictions` makes is
+    made there, including the id-keyed pairing itself. This adds the two the
+    cells need: the realised METHOD the dump recorded must still be the method
+    the table records for that same fight, and each row's cells must be a
+    distribution. Both matter because a mis-paired six-way log-loss looks
+    perfectly plausible -- it is not a number anyone could eyeball as wrong.
     """
     import scripts.build_odds_benchmark as bob
 
     out = bob.attach_oof_predictions(pooled, dump)
-    if "joint_cells" not in dump:
+    for key in ("joint_cells", "y_method"):
+        if key not in dump:
+            raise ValueError(
+                f"prediction dump {dump.get('name')!r} carries no {key}; re-run "
+                "scripts/run_walkforward.py --candidate hybrid --dump-predictions "
+                "to produce one (see the plan doc)"
+            )
+    dump_row = {str(fight_id): row for row, fight_id in enumerate(dump["fight_id"])}
+    rows = np.array([dump_row[str(fight_id)] for fight_id in out["fight_id"]])
+
+    dumped_method = [None if v is None else str(v) for v in dump["y_method"]]
+    rebuilt = [None if pd.isna(v) else str(v) for v in out["y_method"]]
+    n_bad = sum(1 for row, method in zip(rows, rebuilt) if dumped_method[row] != method)
+    if n_bad:
         raise ValueError(
-            f"prediction dump {dump.get('name')!r} carries no joint_cells; re-run "
-            "scripts/run_walkforward.py --candidate hybrid --dump-predictions "
-            "to produce one (see the plan doc)"
-        )
-    rebuilt = [None if pd.isna(v) else str(v) for v in pooled["y_method"]]
-    if rebuilt != list(dump["y_method"]):
-        n_bad = sum(1 for a, b in zip(rebuilt, dump["y_method"]) if a != b)
-        raise ValueError(
-            f"rebuilt 'y_method' disagrees with the prediction dump on {n_bad} of "
-            f"{len(rebuilt)} rows; the positional pairing is not valid and no "
-            "six-way metric computed from it would be"
+            f"the current table's 'y_method' disagrees with the prediction dump on "
+            f"{n_bad} of {len(rebuilt)} fights that pair by id; the dump describes "
+            "outcomes these fights no longer have and no six-way metric computed "
+            "from it would mean anything"
         )
     cells = np.asarray(dump["joint_cells"], dtype=float)
+    if cells.shape[0] != int(dump["n"]):
+        raise ValueError(
+            f"prediction dump says n={dump['n']} but carries {cells.shape[0]} "
+            "rows of joint_cells; the dump is malformed"
+        )
+    cells = cells[rows]
     if not np.allclose(cells.sum(axis=1), 1.0, atol=1e-8):
         raise ValueError("out-of-fold joint cells must sum to 1 for every fight")
-    out["_cells_row"] = np.arange(len(out))
     return out, cells
 
 
