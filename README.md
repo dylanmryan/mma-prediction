@@ -953,6 +953,19 @@ because a budget derived on a smaller table is a budget for a different table.
 It writes `models/walkforward/recipe_revalidation.json` and exits non-zero
 only when a gated bar is no longer met.
 
+**First run, 2026-09-09** (`models/walkforward/recipe_revalidation.json`), on
+the 11,290-row table through 2026-09-05 against evidence computed on 11,238
+rows through 2026-08-08: **every bar still clears.** SP3's joint bar by
+−0.0580 against a required 0.01 — 5.8x the margin, negative in every fold
+year — with the winner delta exactly 0.000000, so the clause that holds by
+construction still does. The refit rule by −0.0002 against σ_seed 0.000346 on
+torch (−0.0008 on the XGB member, reported but not gated: the recorded rule
+gates on torch). The blend's ECE gate at 0.0146 against a threshold of
+0.017241. One margin moved materially, and it is the calibration one: the
+blend's harness-form pooled ECE went 0.0124 → 0.0146 on 52 new fights, more
+than halving its headroom (0.0056 → 0.0026). Nothing to act on — the gate
+passes — but it is the number to read first next time.
+
 Like the gate it replaces, it promotes nothing: it deploys no model, stages no
 artifact and makes no git write. A bar that no longer clears is a finding for
 a human. The weekly Action runs only its cheap `--check-staleness` mode, which
