@@ -3,25 +3,25 @@
   "reason": "The displayed method and round splits are marginals of ONE joint distribution (mma.inference.SimulatorPredictor). Mean-matching them separately is unnecessary -- the factors below are near 1 -- and would move each marginal off the joint the app's outcome table is drawn from, reintroducing the contradiction between displayed numbers that SP3 removed. See this script's docstring.",
   "tolerance": 0.05,
   "within_tolerance": true,
-  "max_deviation_points": 0.0433,
+  "max_deviation_points": 0.0427,
   "measured_on": {
-    "rows": 11238,
-    "of": 11238,
-    "train_through": "2026-08-08",
+    "rows": 11290,
+    "of": 11290,
+    "train_through": "2026-09-05",
     "mode": "refit_through"
   },
   "method": {
-    "n": 11201,
+    "n": 11253,
     "deployed_simulator": {
       "empirical": {
-        "ko_tko": 0.3451,
-        "submission": 0.2152,
-        "decision": 0.4397
+        "ko_tko": 0.3459,
+        "submission": 0.2151,
+        "decision": 0.4391
       },
       "mean_predicted": {
-        "ko_tko": 0.3506,
-        "submission": 0.2181,
-        "decision": 0.4314
+        "ko_tko": 0.3514,
+        "submission": 0.2179,
+        "decision": 0.4307
       },
       "factor_needed": {
         "ko_tko": 0.984,
@@ -31,118 +31,118 @@
     },
     "retired_blend_heads": {
       "empirical": {
-        "ko_tko": 0.3451,
-        "submission": 0.2152,
-        "decision": 0.4397
+        "ko_tko": 0.3459,
+        "submission": 0.2151,
+        "decision": 0.4391
       },
       "mean_predicted": {
-        "ko_tko": 0.3379,
-        "submission": 0.2764,
-        "decision": 0.3857
+        "ko_tko": 0.3387,
+        "submission": 0.2744,
+        "decision": 0.3869
       },
       "factor_needed": {
         "ko_tko": 1.021,
-        "submission": 0.779,
-        "decision": 1.14
+        "submission": 0.784,
+        "decision": 1.135
       }
     },
     "max_deviation_points": {
-      "deployed_simulator": 0.0083,
-      "retired_blend_heads": 0.0612
+      "deployed_simulator": 0.0084,
+      "retired_blend_heads": 0.0593
     }
   },
   "round_3": {
-    "n": 5719,
+    "n": 5753,
     "deployed_simulator": {
       "empirical": {
-        "1": 0.5895,
-        "2": 0.2807,
-        "3": 0.1298,
+        "1": 0.5889,
+        "2": 0.2808,
+        "3": 0.1302,
         "45": 0.0
       },
       "mean_predicted": {
-        "1": 0.5694,
+        "1": 0.5691,
         "2": 0.2876,
-        "3": 0.143,
+        "3": 0.1433,
         "45": 0.0
       },
       "factor_needed": {
         "1": 1.035,
-        "2": 0.976,
-        "3": 0.908,
+        "2": 0.977,
+        "3": 0.909,
         "45": 0.0
       }
     },
     "retired_blend_heads": {
       "empirical": {
-        "1": 0.5895,
-        "2": 0.2807,
-        "3": 0.1298,
+        "1": 0.5889,
+        "2": 0.2808,
+        "3": 0.1302,
         "45": 0.0
       },
       "mean_predicted": {
-        "1": 0.4732,
-        "2": 0.306,
-        "3": 0.2208,
+        "1": 0.4723,
+        "2": 0.304,
+        "3": 0.2237,
         "45": 0.0
       },
       "factor_needed": {
-        "1": 1.246,
-        "2": 0.918,
-        "3": 0.588,
+        "1": 1.247,
+        "2": 0.924,
+        "3": 0.582,
         "45": 0.0
       }
     },
     "max_deviation_points": {
-      "deployed_simulator": 0.0201,
-      "retired_blend_heads": 0.1163
+      "deployed_simulator": 0.0198,
+      "retired_blend_heads": 0.1166
     }
   },
   "round_5": {
-    "n": 557,
+    "n": 559,
     "deployed_simulator": {
       "empirical": {
-        "1": 0.3914,
-        "2": 0.2711,
-        "3": 0.1759,
-        "45": 0.1616
+        "1": 0.3918,
+        "2": 0.2719,
+        "3": 0.1753,
+        "45": 0.161
       },
       "mean_predicted": {
-        "1": 0.4198,
+        "1": 0.4201,
         "2": 0.2503,
         "3": 0.1326,
-        "45": 0.1973
+        "45": 0.1969
       },
       "factor_needed": {
         "1": 0.932,
-        "2": 1.083,
-        "3": 1.327,
-        "45": 0.819
+        "2": 1.086,
+        "3": 1.322,
+        "45": 0.818
       }
     },
     "retired_blend_heads": {
       "empirical": {
-        "1": 0.3914,
-        "2": 0.2711,
-        "3": 0.1759,
-        "45": 0.1616
+        "1": 0.3918,
+        "2": 0.2719,
+        "3": 0.1753,
+        "45": 0.161
       },
       "mean_predicted": {
-        "1": 0.2582,
-        "2": 0.1979,
-        "3": 0.1361,
-        "45": 0.4078
+        "1": 0.2585,
+        "2": 0.1977,
+        "3": 0.1375,
+        "45": 0.4063
       },
       "factor_needed": {
         "1": 1.516,
-        "2": 1.37,
-        "3": 1.293,
+        "2": 1.376,
+        "3": 1.275,
         "45": 0.396
       }
     },
     "max_deviation_points": {
-      "deployed_simulator": 0.0433,
-      "retired_blend_heads": 0.2462
+      "deployed_simulator": 0.0427,
+      "retired_blend_heads": 0.2453
     }
   }
 }
