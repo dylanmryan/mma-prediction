@@ -131,3 +131,34 @@ def test_the_model_card_describes_the_hybrid_and_names_the_simulator_evidence():
     # whole thing again in the mirrored corner ordering. Four passes, 40,000.
     assert "40,000" in text
     assert "10,000 simulated fights per matchup" not in text
+
+
+def test_the_market_section_reads_the_out_of_fold_benchmark():
+    """The app's market panel must quote OUT-OF-FOLD numbers.
+
+    The deployed model is refit through the latest event, so it trained on
+    every fight in the odds dataset; scoring them with its own predictions
+    makes it look like it beats the market. The artifact the app reads is
+    therefore the out-of-fold one, and this pins both the file it reads and
+    the keys it reads out of it -- a rename that silently fell back to the
+    frozen July artifact would put a different model's numbers under a
+    caption describing this one.
+    """
+    import json
+
+    source = (ROOT / "app.py").read_text()
+    assert 'models" / "market_benchmark_oof.json"' in source
+    assert '"headline_out_of_fold"' in source
+
+    artifact = ROOT / "models" / "market_benchmark_oof.json"
+    if not artifact.exists():
+        pytest.skip("out-of-fold benchmark not built")
+    benchmark = json.loads(artifact.read_text())
+    head = benchmark["headline_out_of_fold"]
+    assert {"n_fights", "model", "market", "calibration", "roi"} <= set(head)
+    assert benchmark["provenance"]["fold_years"]
+    for threshold in ("0.00", "0.10"):
+        assert "roi_pct" in head["roi"][threshold]["favorite_edge_on_a"]
+    july = benchmark["comparison_with_frozen_july_artifact"]
+    assert {"direction", "same_fight_set", "july_2026_artifact",
+            "out_of_fold_2021_plus"} <= set(july)

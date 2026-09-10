@@ -512,8 +512,11 @@ fight through the latest event** — there is no longer a historical year held
 out from the model the app serves. The [prospective track record](#prospective-track-record) —
 predictions committed to git before the fights happen — is the only true
 holdout. The [Final held-out test results](#final-held-out-test-results-2024)
-and the market benchmark are one-time artifacts from July 2026 and are left
-as recorded.
+are a one-time artifact from July 2026 and are left as recorded. The
+[market benchmark](#model-vs-the-betting-market) has been recomputed
+against the deployed model using its walk-forward out-of-fold predictions;
+the July 2026 market artifact is kept, frozen, as the historical record of
+the model it described.
 
 ### Walk-forward evaluation (2018–2026)
 
@@ -876,13 +879,53 @@ efficient forecasts that exist for a sporting event, built from liquid
 money and constant correction, and closing lines in particular are
 close to the ceiling of what's knowable pre-fight. So `scripts/build_odds_benchmark.py`
 pulls historical UFC moneylines ([`jerzyszocik/ufc-betting-odds-daily-dataset`](https://www.kaggle.com/datasets/jerzyszocik/ufc-betting-odds-daily-dataset),
-CC0, via kagglehub) and scores the committed scorer against the devigged
-market-implied probability on the same fights. (The script loads whatever
-serves today, so a re-run would score the blend; the committed numbers below
-are the frozen July 2026 artifact, computed against the neural ensemble of
-that date, and are not recomputed.) **The odds are
-used only as an evaluation comparator — they are never a model feature**;
-nothing in this benchmark touches training, tuning, or inference.
+CC0, via kagglehub) and scores the model against the devigged
+market-implied probability on the same fights. **The odds are used only as
+an evaluation comparator — they are never a model feature**; nothing in
+this benchmark touches training, tuning, or inference.
+
+### Which predictions get compared, and why it matters
+
+The July 2026 version of this benchmark restricted to fights from 2021 on
+because the model of that date trained on pre-2021 data only, so 2021+ was
+genuinely held out. That is no longer true. The deployed model is refit on
+every decisive fight through the latest event (`models/torch/metrics_val.json`
+records `mode: refit_through`, `train_through: 2026-08-08`, `n_train: 11238`
+— the whole feature table), so those fights are now *in its training set*.
+
+Re-running the old comparison against the deployed model would therefore
+put an in-sample model against an out-of-sample market. It is worth seeing
+exactly what that buys, because the answer is not subtle. On the 3,310
+odds-matched fights, scored with the deployed model's own predictions:
+
+| Scored in-sample (**not a real result**) | Accuracy | Log-loss | Brier |
+|---|---|---|---|
+| Model (deployed, trained on these fights) | **0.681** | **0.601** | **0.207** |
+| Market (devigged consensus odds) | 0.660 | 0.610 | 0.211 |
+
+That reads as *the model beats the market on every metric*, and the
+flat-stake backtest that goes with it returns **+17.8%** at the 10%
+edge threshold. Both numbers are worthless. All 3,310 of those fights are
+inside the model's training window (the artifact records the count), so
+this is a model being asked about answers it was fitted on.
+
+Two things are worth pulling out of that. The script's honesty gate — which
+refuses to report clean numbers if the model beats the market by more than
+0.02 log-loss — **does not catch it**: the in-sample edge is 0.0088, well
+inside tolerance. A gate calibrated on "is this edge implausibly large"
+cannot detect "this model trained on the evaluation set." And a
++17.8% ROI is exactly the kind of number a project like this exists not to
+publish.
+
+So the honest comparison uses the **walk-forward out-of-fold predictions**
+(`scripts/run_walkforward.py --dump-predictions`, dumped to
+[`models/walkforward/preds/hybrid_e2.json`](models/walkforward/preds/hybrid_e2.json)):
+fold year *Y*'s probabilities come from a model fitted on fights before
+*Y−1* and early-stopped on *Y−1*, so **no fight is scored by a model that
+saw it**. Those 4,804 rows are joined to the aligned odds on the shared
+fight id alone.
+
+### The result
 
 Alignment uses the shared 16-hex ufcstats fight id embedded in both
 datasets' URLs, with each fight's two bookmaker-quoted fighters matched to
@@ -895,58 +938,91 @@ independently-verifiable betting favorites — including two where the
 favorite *lost* (Holly Holm over Ronda Rousey, Chris Weidman over Anderson
 Silva) and one rematch where the odds file lists the same two fighters in
 reversed column order (proving this isn't a "column 1 is always the
-favorite" bug) — before any aggregate numbers are trusted.
+favorite" bug) — before any aggregate numbers are trusted. The prediction
+dump carries no fight id of its own (it is three parallel lists in the
+harness's pooled row order), so the pooled rows are rebuilt from the same
+folds over the same table and the pairing is verified element-wise — row
+count, fold-year sequence and realised-outcome sequence — before a single
+probability is read.
 
-The **headline comparison** restricts to fights on or after 2021-01-01 —
-the validation+test era of the July 2026 model this benchmark was computed
-against, which that model never trained on — so the model isn't credited
-for fights it already knows the answer to. (The currently deployed model is
-refit through the latest event, so those years are in-sample for it and the
-benchmark is left as the one-time July 2026 artifact rather than recomputed.)
-Odds coverage isn't total, but on the matched, 2021+, odds-available set
-(**1,956 fights**):
+On the **3,310 fights** that are both walk-forward evaluation rows and
+odds-matched (fold years 2018–2025):
 
 | | Accuracy | Log-loss | Brier |
 |---|---|---|---|
-| **Model** (neural ensemble) | 0.619 | 0.644 | 0.227 |
-| **Market** (devigged consensus odds) | **0.671** | **0.606** | **0.209** |
+| **Model** (deployed hybrid, out of fold) | 0.621 | 0.646 | 0.228 |
+| **Market** (devigged consensus odds) | **0.660** | **0.610** | **0.211** |
 
 The market wins on every metric, by a comfortable but not suspicious
-margin (Δlog-loss = +0.038 in the market's favor). **This is the expected,
-correct outcome, not a disappointing one** — a model built from
+margin (Δlog-loss = **+0.036** in the market's favor). **This is the
+expected, correct outcome, not a disappointing one** — a model built from
 box-score-derived features losing to a market that also prices in
 injuries, weight cuts, camp changes, and everything else the betting
 public knows the morning of the fight is exactly what a well-behaved
-evaluation should show. The honesty gate in `build_odds_benchmark.py`
-would have stopped the pipeline and refused to report clean numbers if the
-model had implausibly *beaten* the market instead (a >0.02 log-loss edge
-in the model's favor almost always means a leakage or alignment bug, not a
-real edge). A secondary cut over all 6,273 matched fights (including
-pre-2021 fights the model trained on, so treat this as a looser sanity
-check rather than an honest comparison) shows the same ordering: market
-0.610 log-loss vs. model 0.641.
+evaluation should show.
+
+### Has the gap moved since July 2026?
+
+Yes, slightly, in the model's favor — and the comparison is exactly
+like-for-like rather than approximately so. The walk-forward's fold years
+start in 2018, so every odds-matched 2021+ fight is also an evaluation row:
+the 2021+ cut is **the same 1,956 fights** the July artifact used. The
+script checks this rather than assuming it — the market's accuracy,
+log-loss and Brier on that cut reproduce the July artifact's to four
+decimals, which they can only do if the row set is identical, since the
+market block doesn't depend on the model.
+
+| On the same 1,956 fights from 2021 on | Model log-loss | Market log-loss | Market's edge |
+|---|---|---|---|
+| July 2026: pre-refit neural ensemble, out of sample | 0.644 | 0.606 | +0.0379 |
+| Now: deployed hybrid, out of fold | 0.638 | 0.606 | **+0.0321** |
+
+The market's log-loss edge **narrowed by 0.0058** — about 15% of it. That
+is a real improvement and it is a small one, and it does not change the
+finding: **the model still loses to the market on every metric, on every
+cut, in both the 2021+ comparison and the full 2018–2025 out-of-fold set.**
+
+### Caveats and the rest of the numbers
+
+**Odds coverage is not uniform.** 68.9% of the walk-forward rows have
+matched odds, but that falls to 22.7% in the 2025 fold because the odds
+dataset lags — so the pooled cut is weighted toward the earlier fold years.
+The artifact reports, for every fold year, the model's out-of-fold log-loss
+on the covered rows *and* on the uncovered ones, so the covered subset can
+be checked for being an easier sample rather than assumed neutral. It is
+mostly close (2019: 0.662 covered vs 0.695 uncovered; 2022: 0.645 vs
+0.647), with 2025 the notable exception in the other direction (0.587
+covered vs 0.632 uncovered).
 
 **Calibration**: both are well-behaved across probability deciles — mean
 predicted probability tracks the empirical win rate bin-by-bin for both
 the model and the market — but the market's predictions spread further
-into the confident tails (more fights called at >70% or <20%), while the
-model stays comparatively conservative in the middle of the range. That
-extra confidence, where warranted, is a big part of where the market's
-sharper log-loss comes from.
+into the confident tails (480 fights priced above 0.7, against the model's
+319), while the model stays comparatively conservative in the middle of
+the range. That extra confidence, where warranted, is a big part of where
+the market's sharper log-loss comes from.
 
 **Simulated ROI** (flat 1-unit stake, betting whenever the model's
 probability exceeds the market's devigged implied probability by a
 threshold, settled at that fighter's actual decimal odds) is negative at
-every threshold tested, for both the favorite-edge and underdog-edge
-variants — consistent with a sharp market and a model that doesn't beat
-it. This is an **in-sample-of-the-market backtest, not a strategy
-claim**: no bankroll management, no line-shopping or timing realism, no
-transaction costs, and it's evaluated on the same historical lines used
-for the log-loss comparison above.
+every threshold tested out of fold, for both the favorite-edge and
+underdog-edge variants (−6.5% to −10.0% on favorite edges,
+−3.7% to −5.8% on underdog edges) — consistent
+with a sharp market and a model that doesn't beat it. This is an
+**in-sample-of-the-market backtest, not a strategy claim**: no bankroll
+management, no line-shopping or timing realism, no transaction costs, and
+it's evaluated on the same historical lines used for the log-loss
+comparison above.
 
-Full numbers (n_fights, per-metric breakdowns, 10-bin calibration tables,
-and the full ROI sweep at 0%/5%/10% thresholds) are in the committed
-[`models/market_benchmark.json`](models/market_benchmark.json).
+Full numbers — n_fights, per-metric breakdowns, 10-bin calibration tables,
+the ROI sweep at 0%/5%/10% thresholds, the labelled in-sample diagnostic,
+the per-fold-year coverage table, and the provenance (which prediction dump,
+which walk-forward report, the deployed model hash) — are in
+[`models/market_benchmark_oof.json`](models/market_benchmark_oof.json).
+[`models/market_benchmark.json`](models/market_benchmark.json) is kept
+**frozen** as the July 2026 record: it describes the pre-refit neural
+ensemble, a model that no longer exists, and `build_odds_benchmark.py`
+refuses to overwrite it without `--force`.
 
 ## Development notes
 
