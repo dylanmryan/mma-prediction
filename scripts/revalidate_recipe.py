@@ -46,7 +46,15 @@ longer clears is reported, and what to do about it is a human call.
 
 `--check-staleness` is the cheap mode the weekly Action runs: it reads the
 committed metrics files and the table, reports how far the deployed models'
-training data has run ahead of the harness evidence, and fits nothing. It also
+training data has run ahead of the harness evidence, and fits nothing. It
+reads THIS SCRIPT'S OWN last artifact too, because that is what answers the
+question it asks: a member whose harness report is older than its training
+data is not unjustified if the recipe was re-validated on a table that reaches
+that training cutoff and every bar cleared. The gap is still reported (it is a
+true fact about that member's committed report) but it stops being actionable.
+A re-validation that FOUND a bar no longer met never clears it -- that is
+worse news than an unmeasured recipe -- and is warned about in its own right.
+It also
 reports whether `models/market_benchmark_oof.json` can still be regenerated --
 that benchmark is rebuilt from a walk-forward prediction dump joined to the
 pooled rows POSITIONALLY, so every refresh that grows the table retires the
@@ -550,7 +558,34 @@ def exit_code(verdict_block: dict) -> int:
 # --- staleness: the cheap weekly read ---------------------------------------
 
 
-def staleness(table_max_date: str, n_table_rows: int, members: dict) -> dict:
+def revalidation_cover(artifact: dict | None) -> dict | None:
+    """What the committed re-validation covers, and whether it passed.
+
+    `recipe_revalidation.json` is this script's own output, so the staleness
+    read can answer its question properly rather than approximately. The
+    question is whether the recipe's justification has been re-measured on the
+    data the models train on -- and a passing re-validation on a table that
+    reaches the training cutoff IS that measurement, even though each member's
+    own harness report is still older. Which is why nothing here rewrites
+    `harness_features_max_date`: that field records the table a specific
+    committed report ran on, and it did run on that table.
+    """
+    if not artifact:
+        return None
+    table = artifact.get("table") or {}
+    verdict = artifact.get("verdict") or {}
+    return {
+        "date": artifact.get("date"),
+        "features_max_date": table.get("features_max_date"),
+        "n_feature_rows": table.get("n_feature_rows"),
+        "still_justified": bool(verdict.get("still_justified")),
+        "bars_no_longer_met": list(verdict.get("bars_no_longer_met") or []),
+        "read_from": _rel(OUT),
+    }
+
+
+def staleness(table_max_date: str, n_table_rows: int, members: dict,
+              revalidation: dict | None = None) -> dict:
     """How far the deployed models have run ahead of their harness evidence.
 
     Reads dates, fits nothing. Each member's metrics file records both the
@@ -558,7 +593,21 @@ def staleness(table_max_date: str, n_table_rows: int, members: dict) -> dict:
     report behind it ran on (`harness_features_max_date`); the gap between
     them is exactly what `stale_harness_warning` fires on in the train
     scripts, and it is the trigger for running the full re-validation.
+
+    A gap is reported as `harness_stale` whether or not anything has been done
+    about it, because it is a true fact about that member's committed report.
+    What clears the ACTIONABLE `stale` flag is a passing re-validation whose
+    table reaches the member's training cutoff: the justification has then
+    been re-measured on the data the model trains on, which is the whole
+    question. A re-validation that found a bar no longer met never clears it
+    -- that is worse news than an unmeasured recipe, not better.
     """
+    cover = revalidation_cover(revalidation)
+    covers_through = (
+        pd.Timestamp(cover["features_max_date"])
+        if cover and cover["still_justified"] and cover["features_max_date"]
+        else None
+    )
     out = {}
     for name, metrics in members.items():
         train_through = metrics.get("train_through")
@@ -566,26 +615,37 @@ def staleness(table_max_date: str, n_table_rows: int, members: dict) -> dict:
         if train_through is None or harness is None:
             out[name] = {"train_through": train_through,
                          "harness_features_max_date": harness,
-                         "days_behind": None, "stale": None}
+                         "days_behind": None, "harness_stale": None,
+                         "revalidated": None, "stale": None}
             continue
         days = int((pd.Timestamp(train_through) - pd.Timestamp(harness)).days)
+        revalidated = bool(covers_through is not None
+                           and covers_through >= pd.Timestamp(train_through))
         out[name] = {
             "train_through": train_through,
             "harness_features_max_date": harness,
             "days_behind": max(days, 0),
-            "stale": days > 0,
+            "harness_stale": days > 0,
+            "revalidated": revalidated,
+            "stale": days > 0 and not revalidated,
         }
     stale = any(m.get("stale") for m in out.values())
+    behind = any(m.get("harness_stale") for m in out.values())
     return {
         "table_max_date": table_max_date,
         "n_table_rows": n_table_rows,
         "members": out,
+        "revalidation": cover,
         "stale": bool(stale),
         "what_it_means": (
             "the deployed models train on fights the walk-forward evidence behind "
             "their recipe never saw, so the recipe's justification is older than the "
             "recipe's training data"
         ) if stale else (
+            f"each member's own harness report is older than its training data, but "
+            f"the recipe was re-validated on a table through "
+            f"{cover['features_max_date']} and every recorded bar still cleared"
+            if behind and cover and cover["still_justified"] else
             "the harness evidence covers every fight the deployed models trained on"
         ),
         "what_to_do": (
@@ -645,6 +705,15 @@ def staleness_warning(report: dict) -> str | None:
     benchmark's regenerability (a prediction dump the current table has
     outgrown). Either alone is worth saying."""
     warnings = []
+    revalidation = report.get("revalidation")
+    if revalidation and not revalidation["still_justified"]:
+        warnings.append(
+            f"WARNING: the last re-validation ({revalidation['date']}, on a table "
+            f"through {revalidation['features_max_date']}) found bars that are no "
+            f"longer met: {', '.join(revalidation['bars_no_longer_met'])}. The "
+            "deployed recipe is not justified by its own recorded bars on the data "
+            f"it trains on. See {revalidation['read_from']}; this is a human call."
+        )
     if report["stale"]:
         behind = max(m["days_behind"] or 0 for m in report["members"].values())
         warnings.append(
@@ -676,7 +745,14 @@ def print_staleness(report: dict) -> None:
     for name, member in sorted(report["members"].items()):
         print(f"  {name:<8} trains through {member['train_through']}, "
               f"harness evidence from {member['harness_features_max_date']} "
-              f"({member['days_behind']} day(s) behind)")
+              f"({member['days_behind']} day(s) behind)"
+              f"{'' if not member.get('revalidated') else ' -- re-validated'}")
+    revalidation = report.get("revalidation")
+    if revalidation:
+        print(f"  last re-validation {revalidation['date']} on a table through "
+              f"{revalidation['features_max_date']}: "
+              + ("every recorded bar still cleared" if revalidation["still_justified"]
+                 else f"NOT met: {', '.join(revalidation['bars_no_longer_met'])}"))
     print(f"  {report['what_it_means']}")
     if report["stale"]:
         print(f"  {report['what_to_do']}")
@@ -704,6 +780,7 @@ def staleness_from_disk() -> dict:
         table_max_date=str(pd.Timestamp(features["date"].max()).date()),
         n_table_rows=int(len(features)),
         members={name: load(path) for name, path in DEPLOYED_METRICS.items()},
+        revalidation=json.loads(OUT.read_text()) if OUT.exists() else None,
     )
     return {**report, "benchmark": benchmark_pairing(pooled_row_count(features["date"]))}
 

@@ -325,6 +325,82 @@ def test_staleness_is_silent_when_the_evidence_covers_the_data():
     assert rr.staleness_warning(report) is None
 
 
+# --- a re-validation answers the question the staleness read asks -----------
+
+PASSED_REVALIDATION = {
+    "date": "2026-09-09",
+    "table": {"features_max_date": "2026-09-05", "n_feature_rows": 11290},
+    "verdict": {"still_justified": True, "bars_no_longer_met": []},
+}
+BEHIND = {"train_through": "2026-09-05", "harness_features_max_date": "2026-08-08"}
+
+
+def test_revalidation_cover_reads_the_committed_artifact():
+    cover = rr.revalidation_cover(PASSED_REVALIDATION)
+    assert cover["features_max_date"] == "2026-09-05"
+    assert cover["still_justified"] is True
+    assert cover["read_from"].endswith("recipe_revalidation.json")
+
+
+def test_revalidation_cover_is_absent_when_nothing_has_been_revalidated():
+    assert rr.revalidation_cover(None) is None
+
+
+def test_a_passing_revalidation_over_the_training_data_clears_the_staleness():
+    """The warning asks whether the recipe's justification has been re-measured
+    on the data the models train on. A passing re-validation on a table that
+    reaches the training cutoff IS that measurement -- the member's own
+    harness report is still older, and stays honestly recorded as such."""
+    report = rr.staleness(
+        table_max_date="2026-09-05", n_table_rows=11290,
+        members={"torch": dict(BEHIND)}, revalidation=PASSED_REVALIDATION,
+    )
+    assert report["members"]["torch"]["harness_stale"] is True
+    assert report["members"]["torch"]["revalidated"] is True
+    assert report["members"]["torch"]["harness_features_max_date"] == "2026-08-08"
+    assert report["stale"] is False
+    assert rr.staleness_warning(report) is None
+
+
+def test_a_revalidation_on_an_older_table_does_not_clear_it():
+    stale_revalidation = {
+        **PASSED_REVALIDATION,
+        "table": {"features_max_date": "2026-08-20", "n_feature_rows": 11260},
+    }
+    report = rr.staleness(
+        table_max_date="2026-09-05", n_table_rows=11290,
+        members={"torch": dict(BEHIND)}, revalidation=stale_revalidation,
+    )
+    assert report["members"]["torch"]["revalidated"] is False
+    assert report["stale"] is True
+
+
+def test_a_failing_revalidation_never_silences_the_warning():
+    """A re-validation that found a bar no longer met is worse news than an
+    unmeasured one, so it must not read as coverage."""
+    failed = {
+        **PASSED_REVALIDATION,
+        "verdict": {"still_justified": False, "bars_no_longer_met": ["sp3_joint_bar"]},
+    }
+    report = rr.staleness(
+        table_max_date="2026-09-05", n_table_rows=11290,
+        members={"torch": dict(BEHIND)}, revalidation=failed,
+    )
+    assert report["members"]["torch"]["revalidated"] is False
+    assert report["stale"] is True
+    warning = rr.staleness_warning(report)
+    assert "sp3_joint_bar" in warning
+    assert "no longer met" in warning
+
+
+def test_staleness_from_disk_is_quiet_now_the_recipe_has_been_revalidated():
+    """The committed re-validation covers the current training data, so the
+    deployed members are no longer reported as unjustified."""
+    report = rr.staleness_from_disk()
+    assert report["revalidation"]["still_justified"] is True
+    assert report["stale"] is False
+    assert all(m["harness_stale"] for m in report["members"].values())
+
 # --- the dump the market benchmark needs ------------------------------------
 
 def test_the_hybrid_run_dumps_its_predictions(tmp_path):
