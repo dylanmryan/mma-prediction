@@ -79,6 +79,72 @@ challenge; `src/mma/parsing.py` now supplies the string parsers the new
 layout needs. The `.github/workflows/refresh-data.yml` Action runs this
 refresh weekly and commits any rebuilt artifacts automatically.
 
+### Two sources, one union
+
+The Kaggle mirror is rebuilt whenever its maintainer gets round to it, which
+in practice means the tables can trail real events by a month. On 2026-09-09
+its newest fight was dated 2026-08-08 while four UFC cards had happened
+since — and because grading a prospective prediction needs the result to be
+*in* `fights.parquet`, that lag was holding 24 already-made predictions
+ungraded. Nothing about it was a modelling problem.
+
+So the pipeline reads a **second** source: [`Greco1899/scrape_ufc_stats`](https://github.com/Greco1899/scrape_ufc_stats),
+which scrapes the same ufcstats.com pages daily and publishes plain CSVs.
+It is used strictly as **data** — `scripts/refresh_secondary.py` fetches the
+published CSVs over HTTPS and no GPL-licensed code is vendored into this
+repo — and it is a **standing stage of every rebuild**, not an occasional
+write:
+
+- **Every rebuild fetches both and builds from the union.** That is the
+  whole design. A one-off write would have put fights into the committed
+  tables that the next Kaggle-only rebuild then dropped, firing
+  `make_dataset.py`'s regression guard and turning the weekly Action red
+  until Kaggle caught up. Because the merge happens on every rebuild, no
+  rebuild can drop what a previous one added and the guard keeps its meaning.
+- **The primary always wins.** On any fight both sources have, the Kaggle
+  row survives even where the two disagree — it is the reconciled, tested
+  source. The secondary can only ever append.
+- **The merge is gated.** Winner agreement on the fights both sources have
+  must reach 0.99 or the merge is refused; the measured figure is printed
+  every run (0.9999 on the 8,768-fight overlap today). A fight is merged only
+  if it brings the whole shape of record the primary provides — the fight
+  row, both fight-total stat rows, a complete per-round record, and a named
+  fighter in each corner. Anything less is rejected and counted, which is why
+  none of `make_dataset.py`'s integrity checks had to be relaxed to let the
+  new rows through.
+- **It is fail-soft.** An unreachable host, a renamed upstream column, a
+  truncated CSV or a source that disagrees with ours all degrade to a
+  primary-only build with a loud warning, never a half-built table and never
+  a red Action. If a later rebuild loses fights the scrape had supplied, the
+  regression guard says so and continues — a lost source is not a corrupted
+  one.
+- **Every row records where it came from.** `data/processed/provenance.parquet`
+  carries one row per `fights` and per `fighters` row (`table`, `row_id`,
+  `source` ∈ `primary`/`secondary`); `fight_stats` and `round_stats` are
+  keyed by `fight_id` and inherit their fight's entry. It is a **sidecar
+  rather than a column** on purpose: provenance is a near-perfect proxy for
+  recency, and `secondary` today means "in the last few weeks", so keeping it
+  out of the tables `build_features.py` reads means no future feature block
+  can pick it up by iterating columns and quietly learn the calendar.
+
+The first run of the standing stage added **52 fights and 9 fighters**,
+moving the tables from 11,441 fights through 2026-08-08 to **11,493 through
+2026-09-05**. The 9 are UFC debutants whose fights the earlier report-only
+runs had to reject for having no biographical row to build features from;
+the scrape publishes the same ufcstats fighter pages, so they now arrive with
+their fights. Nothing is rejected today: no fight, no fighter.
+
+Freshness is decided by asking both sources (`scripts/refresh_data.py`).
+Since the processed tables now run *ahead* of the Kaggle mirror by design,
+the Kaggle comparison is made against the primary-sourced rows only — that is
+the provenance sidecar's first real job — and the scrape's own event list is
+probed for anything later than the tables. Either source running ahead
+triggers a rebuild.
+
+Two consecutive full rebuilds produce byte-identical parquet for all six
+processed tables, including a rebuild that went primary-only in between and
+then came back.
+
 ## Features
 
 The feature table is assembled from named **blocks** (`src/mma/feature_blocks.py`,
@@ -496,7 +562,7 @@ the deployed form's metrics in `deployed_form`, and is regenerable by
 | [`ehan03/jds-mma-data`](https://github.com/ehan03/jds-mma-data) | pre-UFC career, nationality, notice and weigh-in tables (`data/external/`) | **MIT** (notice vendored as `data/external/LICENSE-jds-mma-data`) |
 | [`jerzyszocik/ufc-rankings-history`](https://www.kaggle.com/datasets/jerzyszocik/ufc-rankings-history) | the weekly divisional rankings (`data/external/rankings.parquet`) | **CC0** |
 | [`jerzyszocik/ufc-betting-odds-daily-dataset`](https://www.kaggle.com/datasets/jerzyszocik/ufc-betting-odds-daily-dataset) | the market benchmark only — never a model feature | **CC0** |
-| [`Greco1899/scrape_ufc_stats`](https://github.com/Greco1899/scrape_ufc_stats) | secondary daily gap-filler (`scripts/refresh_secondary.py`) | **GPL-3.0** — used as a *data* source only (its published CSVs are fetched over HTTPS; no GPL code is vendored), writes off by default, report-only in CI |
+| [`Greco1899/scrape_ufc_stats`](https://github.com/Greco1899/scrape_ufc_stats) | the secondary daily source, merged on top of the primary by every rebuild (`scripts/refresh_secondary.py`, driven by `scripts/make_dataset.py`) — fights, fight totals, per-round stats and debutant fighter rows | **GPL-3.0** — used as a *data* source only: its published CSVs are fetched over HTTPS and no GPL code is vendored. The primary wins on any overlapping fight; every row's origin is recorded in `data/processed/provenance.parquet` |
 | Wikipedia event pages | upcoming fight cards, and the withdrawal / missed-weight parser | CC BY-SA 4.0 |
 
 Only *derived*, compact tables are committed (a few MB); the raw snapshots
@@ -602,7 +668,11 @@ newest year (protocol B), does as well. On the same folds and the shipped
 within the noise floor (`models/walkforward/refit_decision_b1.json`). Since
 B is not worse and uses every available fight, both members of the deployed
 blend are trained on all **11,238 decisive fights through 2026-08-08** with
-that fixed budget (neural net: 6 epochs, temperature 1.15 on every seed;
+that fixed budget — the feature table now holds 11,290 rows through
+2026-09-05, 52 of them contributed by the daily scrape and none of them yet
+seen by the deployed model, because a retrain changes the model hash and
+opens a new track-record section and is therefore a deliberate step rather
+than a side effect of a data refresh — (neural net: 6 epochs, temperature 1.15 on every seed;
 XGBoost: 109/73/71 trees for the winner/method/round heads, on each of five
 seeds). The budget belongs to a *feature table*, not to the recipe: the
 previous table's budget was 10 epochs at temperature 1.07 and 105/61/75
@@ -790,8 +860,9 @@ runs `scripts/predict_upcoming.py`, which:
 
 A second step, `scripts/grade_predictions.py`, runs every week too: once an
 event's date has passed, it looks up the actual result in
-`data/processed/fights.parquet` (matched on the fighter pair + date within
-3 days) and appends grading fields — never touching the original
+`data/processed/fights.parquet` — which, since the daily scrape became a
+standing stage, reaches within days of the card rather than within weeks —
+(matched on the fighter pair + date within 3 days) and appends grading fields — never touching the original
 prediction — to the same file. Two comparison baselines are graded
 alongside the model on every fight: a coin flip and a "higher Elo wins"
 dummy (using the Elo ratings recorded at prediction time, so the dummy
@@ -802,11 +873,26 @@ stays gradeable even as ratings keep moving). Aggregate stats land in
 
 | Model version | Fights predicted | Fights graded | Accuracy | Log-loss |
 |---|---|---|---|---|
-| `40df77ec43c7` | 78 | 21 | 0.667 | 0.616 |
+| `40df77ec43c7` | 86 | 45 | 0.578 | 0.682 |
 
-21 of the 78 predicted fights have been graded so far (events through
-2026-08-08): 0.667 accuracy, 0.616 log-loss, 0.213 Brier — against a
-coin-flip baseline of 0.476 accuracy on the same fights. Those 78 predictions
+45 of the 86 predicted fights have been graded (events through 2026-09-05):
+0.578 accuracy, 0.682 log-loss, 0.244 Brier — against a coin-flip baseline of
+0.467 accuracy and a higher-Elo-wins dummy at 0.422 on the same fights.
+
+The graded count more than doubled on 2026-09-09, from 21 to 45, and not
+because anything was predicted or retrained: it is what happened when the
+daily ufcstats scrape became a standing part of the pipeline and the tables
+stopped trailing real events by a month. Four events from 2026-08-15 to
+2026-09-05 had happened and simply were not in `fights.parquet` yet. The
+fuller sample is **less** flattering than the small one it replaced —
+accuracy 0.667 → 0.578, log-loss 0.616 → 0.682 — which is the ordinary
+behaviour of a 21-fight sample growing up, and exactly why waiting for the
+results rather than reporting the early ones mattered. Five past-event
+predictions remain ungraded and none of them is data lag: one is from
+2026-07-25, well inside the primary source's own coverage, so these are
+bouts that did not happen as carded.
+
+Those 86 predictions
 were made by model `40df77ec43c7`, the SP1 model trained on the 46-column
 table. Four redeployments have happened since: the SP2 feature set and
 re-derived budget (`b617b96dae45`), the SP2.2 blend (`5aa33460ef40`), and two
@@ -826,13 +912,12 @@ change every probability the model will make: each moves exactly as
 measurably better calibrated (pooled ECE 0.0177 → 0.0108). Predictions already
 recorded under an older hash are left as they were made. The next weekly run opens a
 new section for the current hash rather than mixing different scorers'
-predictions into one row. 29 further
-predictions are awaiting results, and the rest cover events that haven't
-happened yet. Grading itself can lag a finished event by days to weeks,
-because it depends on the Kaggle mirror picking up the result — the same
-lag documented for the weekly data refresh above — but continues
-automatically as results land. Nothing here is cherry-picked: every
-prediction this pipeline ever makes gets a row, win or lose.
+predictions into one row. 36 further
+predictions cover events that haven't happened yet. Grading used to lag a
+finished event by days to weeks, because it waited on the Kaggle mirror
+picking up the result; since the daily scrape became a standing stage of
+every rebuild that wait is down to days. Nothing here is cherry-picked:
+every prediction this pipeline ever makes gets a row, win or lose.
 
 A walk-forward retraining hook (`scripts/roll_window.py`) watches this
 track record: once 150 graded prospective fights have accumulated since
