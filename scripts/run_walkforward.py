@@ -368,7 +368,7 @@ def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | No
 
 
 def prediction_dump(name: str, features: pd.DataFrame, fold_results: list) -> dict:
-    """Pooled evaluation rows as (fold year, y_winner, p_winner), row-aligned.
+    """Pooled evaluation rows as (fight id, fold year, y_winner, p_winner).
 
     Row order is `walkforward.pool`'s -- the concatenation order of the folds,
     which is also the order every pooled metric in the report is computed over,
@@ -376,6 +376,17 @@ def prediction_dump(name: str, features: pd.DataFrame, fold_results: list) -> di
     lookalike over a different row set. Winner probabilities are written at
     full precision: ECE at a different bin count moves in the fourth decimal,
     which rounding to the report's 4 dp would erase.
+
+    Every row NAMES the fight it scores. Row order alone would make a reader's
+    pairing depend on the feature table never moving underneath the dump, and
+    the table grows every time the scraper runs -- a daily refresh took it from
+    11,238 to 11,290 fights and the unbounded last fold absorbed all 52, which
+    left `scripts/build_odds_benchmark.py --mode oof` unable to pair a
+    committed dump with the table at all. With the id, pairing is a join on the
+    shared 16-hex ufcstats id and a grown table is a non-issue: the intersection
+    is just smaller than the table. A frame with no `fight_id` is refused rather
+    than dumped without one, because the id-less dump is the bug and it would
+    only be discovered later, after the dump had been committed.
 
     It exists because the reports carry metrics and no predictions, and SP2.2's
     ECE gate needs the underlying calibration curve -- which bins a candidate
@@ -390,15 +401,22 @@ def prediction_dump(name: str, features: pd.DataFrame, fold_results: list) -> di
     six-way (corner x method) distribution against the book's prop line, and
     that comparison has to be out of fold like every other one -- this dump is
     the only place an out-of-fold joint is written down. Candidates with no
-    joint keep the original three-list shape exactly, so existing readers
-    (`scripts/build_odds_benchmark.py`) are untouched.
+    joint keep the plain id/year/outcome/probability shape, which is what
+    `scripts/build_odds_benchmark.py` reads.
     """
+    if "fight_id" not in features.columns:
+        raise ValueError(
+            "prediction_dump needs a fight_id column to name the rows it "
+            "scores; a dump paired by position alone stops being pairable the "
+            "next time the feature table grows"
+        )
     pooled_feats, pooled_pred = pool(features, [(m, p) for _, m, p, _ in fold_results])
     years = np.concatenate([np.full(int(np.asarray(m, dtype=bool).sum()), int(y))
                             for y, m, _, _ in fold_results])
     dump = {
         "name": name,
         "n": int(len(pooled_feats)),
+        "fight_id": [str(v) for v in pooled_feats["fight_id"]],
         "fold_year": [int(v) for v in years],
         "y_winner": [float(v) for v in pooled_feats["y_winner"].to_numpy(dtype=float)],
         "p_winner": [float(v) for v in np.asarray(pooled_pred["winner"], dtype=float)],
