@@ -99,3 +99,23 @@ def test_secondary_cut_covers_at_least_headline(benchmark):
         benchmark["all_matched_fights_secondary"]["n_fights"]
         >= benchmark["headline_2021_plus"]["n_fights"]
     )
+
+
+def test_frozen_july_artifact_is_untouched(benchmark):
+    """models/market_benchmark.json is a one-time record of a model that no
+    longer exists: the pre-refit torch ensemble, for which the 2021+ fights
+    it is scored on were genuinely held out. The deployed model trains
+    through the latest event, so recomputing this file in place would
+    silently replace an out-of-sample finding with an in-sample one. The
+    honest recomputation lives in models/market_benchmark_oof.json instead,
+    and these values pin the July record against drift.
+    """
+    assert benchmark["computed_once_on"] == "2026-07-15"
+    headline = benchmark["headline_2021_plus"]
+    assert headline["n_fights"] == 1956
+    assert headline["model"] == {"accuracy": 0.6191, "log_loss": 0.644, "brier": 0.2266}
+    assert headline["market"] == {"accuracy": 0.6713, "log_loss": 0.6061, "brier": 0.2093}
+    assert headline["delta_model_minus_market"]["log_loss"] == 0.0379
+    assert benchmark["alignment"] == {
+        "n_aligned_by_id": 6274, "n_aligned_by_name": 0, "n_skipped": 238,
+    }

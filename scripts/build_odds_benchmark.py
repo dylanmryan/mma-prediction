@@ -3,23 +3,47 @@
 EVALUATION-ONLY: betting odds are a COMPARATOR here, never a model feature.
 This script downloads a Kaggle odds-history dataset via kagglehub, aligns it
 to our fighter_a/fighter_b feature convention using the shared 16-hex
-ufcstats fight id, and compares the committed model's pre-fight win
-probabilities against the devigged market-implied probabilities on the same
-historical fights -- reusing exactly the loading/prediction machinery
-`scripts/final_test_eval.py` uses (features.parquet + the committed
-artifacts), never re-predicting from live snapshots.
+ufcstats fight id, and compares the model's pre-fight win probabilities
+against the devigged market-implied probabilities on the same historical
+fights.
 
-The committed artifact (models/market_benchmark.json) was computed ONCE
-against the pre-refit torch ensemble, for which the 2021+ years were out of
-sample, and is not recomputed -- the app says so. If it is ever re-run, it now
-scores the DEPLOYED SCORER, which since SP2.2 is the blend
-(`mma.inference.BlendedPredictor`), not the torch member alone.
+TWO MODES, because the deployed model changed what "out of sample" means.
 
-Run once: .venv/bin/python scripts/build_odds_benchmark.py
-Writes models/market_benchmark.json.
+``--mode oof`` (the default, and the honest one) scores the WALK-FORWARD
+OUT-OF-FOLD predictions dumped by ``scripts/run_walkforward.py
+--dump-predictions``: fold year Y's probabilities come from a model fitted on
+fights before Y-1 and early-stopped on Y-1, so no fight is scored by a model
+that saw it. Those rows are joined to the aligned odds BY FIGHT ID ONLY, and
+the intersection is the comparison set. Writes models/market_benchmark_oof.json.
+It also carries, clearly labelled as a diagnostic and never as the headline,
+the same comparison run with the DEPLOYED refit model's own predictions --
+which is an in-sample model against an out-of-sample market, and is exactly
+the number this mode exists to avoid reporting.
+
+``--mode deployed`` is the original path: score whatever ``BlendedPredictor``
+serves today over every odds-matched fight, restricting the headline to
+2021+. That is how models/market_benchmark.json was computed on 2026-07-15,
+when the deployed model trained on pre-2021 data only and 2021+ was genuinely
+held out. It is no longer true -- ``models/torch/metrics_val.json`` records
+``mode=refit_through`` with ``train_through=2026-08-08``, so every one of
+those fights is in the deployed model's training set. The July artifact is
+therefore FROZEN as a historical record, and this mode refuses to overwrite
+it without ``--force``.
+
+Since SP3 the deployed scorer is the hybrid (`mma.inference.SimulatorPredictor`),
+but its winner marginal IS the blend member's own array -- returned unchanged,
+verified element-wise over all 4,804 pooled rows in
+models/walkforward/sp3_decision.json -- and the winner probability is the only
+head this benchmark compares. So both modes read the winner probability
+through the blend, and the walk-forward dump they use is the same one
+models/blend.json names as the deployed blend's source predictions.
+
+  .venv/bin/python scripts/build_odds_benchmark.py                 # OOF (default)
+  .venv/bin/python scripts/build_odds_benchmark.py --mode deployed --force
 """
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -27,17 +51,31 @@ import numpy as np
 import pandas as pd
 
 from mma.evaluate import accuracy, brier_score, log_loss
-from mma.inference import BlendedPredictor
+from mma.inference import BlendedPredictor, deployed_training_mask, load_deployed_metrics
 from mma.odds import consensus_odds, decimal_to_implied, devig_pair, extract_fight_id
 from mma.prospective import build_name_index, match_fighter_id
+from mma.versioning import model_version
+from mma.walkforward import make_folds
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
 MODELS = ROOT / "models"
+WALKFORWARD = MODELS / "walkforward"
 
 ODDS_DATASET = "jerzyszocik/ufc-betting-odds-daily-dataset"
-HEADLINE_START = "2021-01-01"  # model's validation+test era: NOT seen in training
+HEADLINE_START = "2021-01-01"  # the JULY 2026 model's validation+test era
 THRESHOLDS = (0.00, 0.05, 0.10)
+
+#: The frozen July 2026 record. Never overwritten without --force: it
+#: describes a model that no longer exists, and that is the point of keeping it.
+FROZEN_BENCHMARK = MODELS / "market_benchmark.json"
+#: The out-of-fold benchmark this script's default mode writes.
+OOF_BENCHMARK = MODELS / "market_benchmark_oof.json"
+#: The deployed hybrid's own walk-forward run, and the pooled predictions it
+#: dumped. `hybrid_e2` is the report `models/simulator.json` names as its
+#: source; the dump is row-aligned to `mma.walkforward.pool`'s order.
+OOF_REPORT = WALKFORWARD / "hybrid_e2.json"
+OOF_PREDICTIONS = WALKFORWARD / "preds" / "hybrid_e2.json"
 
 # Famous fights used to sanity-check corner alignment: (name_1, name_2,
 # expected favorite's name, approximate event date). Chosen so the favorite
@@ -287,7 +325,7 @@ def calibration_table(y: np.ndarray, p: np.ndarray, n_bins: int = 10) -> list[di
     return table
 
 
-def roi_sweep(df: pd.DataFrame) -> dict:
+def roi_sweep(df: pd.DataFrame, model_col: str = "model_p_a") -> dict:
     """Flat-stake (1 unit) simulated ROI, both edge directions, at each threshold.
 
     "Favorite edge": bet fighter_a whenever the model's p(a) exceeds the
@@ -297,15 +335,18 @@ def roi_sweep(df: pd.DataFrame) -> dict:
     This is an in-sample-of-the-market backtest over historical closing-ish
     lines, NOT a live betting-strategy claim (no bankroll management, no
     line-shopping/timing realism, no transaction costs).
+
+    `model_col` names the probability column so the same sweep can be run on
+    the out-of-fold predictions and on the deployed model's in-sample ones.
     """
     results = {}
     for threshold in THRESHOLDS:
-        edge_a = df["model_p_a"] - df["market_implied_a"]
+        edge_a = df[model_col] - df["market_implied_a"]
         bets_a = df[edge_a > threshold]
         won_a = bets_a["y_winner"] == 1
         profit_a = np.where(won_a, bets_a["decimal_a"] - 1.0, -1.0)
 
-        edge_b = (1.0 - df["model_p_a"]) - df["market_implied_b"]
+        edge_b = (1.0 - df[model_col]) - df["market_implied_b"]
         bets_b = df[edge_b > threshold]
         won_b = bets_b["y_winner"] == 0
         profit_b = np.where(won_b, bets_b["decimal_b"] - 1.0, -1.0)
@@ -336,7 +377,255 @@ def winner_metrics(y, p) -> dict:
     }
 
 
-def main() -> None:
+def compare_block(df: pd.DataFrame, model_col: str = "model_p_a") -> dict:
+    """Model-vs-market metrics, deltas and 10-bin calibration for one row set.
+
+    `model_col` is the model's P(fighter_a wins) in features.parquet's corner
+    convention -- the out-of-fold column by default, or the deployed model's
+    own predictions for the in-sample diagnostic. The market column is fixed:
+    both are compared against the same devigged line on the same fights, so
+    the only thing that changes between the two blocks is which model spoke.
+    """
+    y = df["y_winner"].to_numpy(dtype=float)
+    p_model = df[model_col].to_numpy(dtype=float)
+    p_market = df["market_implied_a"].to_numpy(dtype=float)
+    model_block = winner_metrics(y, p_model)
+    market_block = winner_metrics(y, p_market)
+    return {
+        "n_fights": int(len(df)),
+        "model": model_block,
+        "market": market_block,
+        "delta_model_minus_market": {
+            key: round(model_block[key] - market_block[key], 4) for key in model_block
+        },
+        "calibration": {
+            "model": calibration_table(y, p_model),
+            "market": calibration_table(y, p_market),
+        },
+    }
+
+
+# --------------------------------------------------------------------------
+# Walk-forward out-of-fold mode
+# --------------------------------------------------------------------------
+
+
+def load_features() -> pd.DataFrame:
+    """features.parquet in `scripts/run_walkforward.py`'s row order.
+
+    The harness sorts by date with a stable sort and resets the index before
+    it builds a single fold, so any frame that wants to line up with a
+    prediction dump has to start from the same sort.
+    """
+    return (
+        pd.read_parquet(PROCESSED / "features.parquet")
+        .sort_values("date", kind="stable")
+        .reset_index(drop=True)
+    )
+
+
+def pooled_frame(features: pd.DataFrame) -> pd.DataFrame:
+    """Rebuild `mma.walkforward.pool`'s row order, carrying `fold_year`.
+
+    `run_walkforward.prediction_dump` writes the pooled evaluation rows
+    positionally -- fold year, y_winner and p_winner as three parallel lists
+    with no fight id -- in the concatenation order of the folds. This walks
+    the same folds in the same order over the same table, so row i here is
+    row i there, which is what lets the dump be joined to anything at all.
+    The fold masks are pairwise disjoint by construction (`make_folds` gives
+    each year a half-open date window and the last fold absorbs the tail), so
+    no fight appears twice.
+    """
+    frames = []
+    for fold in make_folds(features["date"]):
+        block = features.loc[fold.eval].copy()
+        block["fold_year"] = fold.year
+        frames.append(block)
+    return pd.concat(frames).reset_index(drop=True)
+
+
+def attach_oof_predictions(pooled: pd.DataFrame, dump: dict) -> pd.DataFrame:
+    """`pooled` with the dump's out-of-fold winner probability as `model_p_a`.
+
+    The dump is positional, so the pairing is only correct if the rebuilt
+    frame IS the frame the dump was written from. That is checked, not
+    assumed: the row count, the fold-year sequence and the realised outcome
+    sequence must all match element for element. A silently mis-paired join
+    would still produce a plausible-looking log-loss, which is precisely the
+    failure this benchmark must not ship, so every mismatch raises.
+    """
+    n_dump = int(dump["n"])
+    if len(pooled) != n_dump:
+        raise ValueError(
+            f"prediction dump has {n_dump} pooled rows but the rebuilt "
+            f"walk-forward frame has {len(pooled)}; the dump was written from "
+            "a different feature table or a different fold set"
+        )
+    for column, key in (("fold_year", "fold_year"), ("y_winner", "y_winner")):
+        rebuilt = pooled[column].to_numpy(dtype=float)
+        dumped = np.asarray(dump[key], dtype=float)
+        if not np.array_equal(rebuilt, dumped):
+            n_bad = int((rebuilt != dumped).sum())
+            raise ValueError(
+                f"rebuilt {column!r} disagrees with the prediction dump on "
+                f"{n_bad} of {len(rebuilt)} rows; the positional pairing is "
+                "not valid and no metric computed from it would be"
+            )
+    out = pooled.copy()
+    out["model_p_a"] = np.asarray(dump["p_winner"], dtype=float)
+    if not ((out["model_p_a"] > 0.0) & (out["model_p_a"] < 1.0)).all():
+        raise ValueError("out-of-fold winner probabilities must lie strictly in (0, 1)")
+    return out
+
+
+def check_dump_reproduces_report(oof: pd.DataFrame, report: dict) -> dict:
+    """Recompute the report's pooled winner metrics from the dump.
+
+    The dump carries no metrics and the report carries no predictions, so
+    this is the one place the two can be tied together. Disagreement means
+    the dump and the report came from different runs, and the benchmark
+    would then be describing a model no report vouches for.
+    """
+    y = oof["y_winner"].to_numpy(dtype=float)
+    p = oof["model_p_a"].to_numpy(dtype=float)
+    recomputed = {
+        "n": int(len(oof)),
+        "winner_log_loss": round(log_loss(y, p), 4),
+        "accuracy": round(accuracy(y, p), 4),
+        "brier": round(brier_score(y, p), 4),
+    }
+    pooled = report["pooled"]
+    mismatched = {
+        key: (value, pooled[key])
+        for key, value in recomputed.items()
+        if pooled.get(key) != value
+    }
+    if mismatched:
+        raise ValueError(
+            "prediction dump does not reproduce the walk-forward report's "
+            f"pooled winner metrics: {mismatched} (recomputed, reported)"
+        )
+    return recomputed
+
+
+def join_odds_by_id(rows: pd.DataFrame, aligned: pd.DataFrame) -> pd.DataFrame:
+    """Inner-join predictions to aligned odds on `fight_id` and nothing else.
+
+    No name matching, no date proximity, no positional guess: the 16-hex
+    ufcstats fight id is present on both sides and is the whole key. Both
+    sides must be unique on it -- a duplicate would multiply rows into the
+    comparison and quietly reweight the metrics -- so that is enforced rather
+    than left to `merge` to resolve.
+    """
+    odds_columns = [
+        "fight_id", "market_implied_fights_a", "market_implied_fights_b",
+        "decimal_fights_a", "decimal_fights_b", "align_method", "n_books",
+    ]
+    for label, frame in (("predictions", rows), ("odds", aligned)):
+        if "fight_id" not in frame.columns:
+            raise ValueError(f"{label} frame has no fight_id column to join on")
+        n_duplicated = int(frame["fight_id"].duplicated().sum())
+        if n_duplicated:
+            raise ValueError(
+                f"{label} frame has {n_duplicated} duplicate fight_id(s); an "
+                "id-only join would multiply rows into the comparison"
+            )
+    return rows.merge(
+        aligned[odds_columns], on="fight_id", how="inner", validate="one_to_one"
+    ).reset_index(drop=True)
+
+
+def fold_year_coverage(oof: pd.DataFrame, matched: pd.DataFrame) -> dict:
+    """Per-fold-year odds coverage and out-of-fold log-loss, matched vs all.
+
+    The intersection is not a random sample of the walk-forward rows -- odds
+    coverage is thinner in the early years -- so the honest thing is to show
+    what the model scores on the rows the market also priced AND on the rows
+    it did not, year by year, rather than to assert the subset is neutral.
+    """
+    out = {}
+    matched_ids = set(matched["fight_id"])
+    for year, block in oof.groupby("fold_year"):
+        in_odds = block["fight_id"].isin(matched_ids).to_numpy()
+        row = {
+            "n_walkforward": int(len(block)),
+            "n_odds_matched": int(in_odds.sum()),
+            "odds_coverage": round(float(in_odds.mean()), 4),
+            "model_log_loss_matched": None,
+            "model_log_loss_unmatched": None,
+        }
+        for label, mask in (("matched", in_odds), ("unmatched", ~in_odds)):
+            if mask.any():
+                row[f"model_log_loss_{label}"] = round(
+                    log_loss(
+                        block.loc[mask, "y_winner"].to_numpy(dtype=float),
+                        block.loc[mask, "model_p_a"].to_numpy(dtype=float),
+                    ),
+                    4,
+                )
+        out[str(int(year))] = row
+    return out
+
+
+def july_comparison(oof_2021_plus: dict) -> dict | None:
+    """The frozen July artifact's headline beside the same date cut, out of fold.
+
+    Returns None when the July artifact is absent. The two n's differ (the
+    walk-forward's 2021+ rows are a subset of every odds-matched 2021+
+    fight), so this reports both rather than implying one number replaced
+    another in place.
+    """
+    if not FROZEN_BENCHMARK.exists():
+        return None
+    july = json.loads(FROZEN_BENCHMARK.read_text())["headline_2021_plus"]
+    july_gap = july["delta_model_minus_market"]["log_loss"]
+    now_gap = oof_2021_plus["delta_model_minus_market"]["log_loss"]
+    change = round(now_gap - july_gap, 4)
+    return {
+        "july_2026_artifact": {
+            "model": "the pre-refit torch ensemble, trained on pre-2021 data only",
+            "n_fights": july["n_fights"],
+            "model_log_loss": july["model"]["log_loss"],
+            "market_log_loss": july["market"]["log_loss"],
+            "gap_market_favour": july_gap,
+        },
+        "out_of_fold_2021_plus": {
+            "model": "the deployed hybrid's winner marginal, out of fold",
+            "n_fights": oof_2021_plus["n_fights"],
+            "model_log_loss": oof_2021_plus["model"]["log_loss"],
+            "market_log_loss": oof_2021_plus["market"]["log_loss"],
+            "gap_market_favour": now_gap,
+        },
+        "change_in_gap": change,
+        "direction": (
+            "narrowed" if change < 0 else "widened" if change > 0 else "unchanged"
+        ),
+        "caveat": (
+            "Different row sets and different market samples: the July cut is "
+            "every odds-matched fight from 2021 on, this cut is the "
+            "odds-matched fights that are also walk-forward evaluation rows. "
+            "Read the direction, not a difference of differences."
+        ),
+    }
+
+
+def main_deployed(force: bool = False) -> None:
+    """The original path: score whatever serves today over the matched fights.
+
+    This is how models/market_benchmark.json was produced on 2026-07-15, when
+    the model trained on pre-2021 data only. It does not describe the deployed
+    model any more (which trains through the latest event), so it will not
+    overwrite the frozen artifact unless the caller insists.
+    """
+    if FROZEN_BENCHMARK.exists() and not force:
+        raise SystemExit(
+            f"{FROZEN_BENCHMARK.relative_to(ROOT)} is the FROZEN July 2026 "
+            "record of a model that no longer exists, and this mode would "
+            "overwrite it with an in-sample comparison (the deployed model "
+            "trains through the latest event). Run the default --mode oof for "
+            "the honest recomputation, or pass --force if you really mean to "
+            "replace the frozen artifact."
+        )
     print("Loading fights/features/fighters parquet ...")
     fights = pd.read_parquet(PROCESSED / "fights.parquet")
     features = pd.read_parquet(PROCESSED / "features.parquet")
@@ -384,27 +673,7 @@ def main() -> None:
         f"{len(headline)} in the {HEADLINE_START}+ validation+test era"
     )
 
-    def _cut(df: pd.DataFrame) -> dict:
-        y = df["y_winner"].to_numpy(dtype=float)
-        p_model = df["model_p_a"].to_numpy(dtype=float)
-        p_market = df["market_implied_a"].to_numpy(dtype=float)
-        model_block = winner_metrics(y, p_model)
-        market_block = winner_metrics(y, p_market)
-        delta = {
-            key: round(model_block[key] - market_block[key], 4) for key in model_block
-        }
-        return {
-            "n_fights": int(len(df)),
-            "model": model_block,
-            "market": market_block,
-            "delta_model_minus_market": delta,
-            "calibration": {
-                "model": calibration_table(y, p_model),
-                "market": calibration_table(y, p_market),
-            },
-        }
-
-    headline_block = _cut(headline)
+    headline_block = compare_block(headline)
     headline_block["roi"] = roi_sweep(headline)
 
     results = {
@@ -424,10 +693,10 @@ def main() -> None:
             "n_skipped": stats["n_skipped"],
         },
         "headline_2021_plus": headline_block,
-        "all_matched_fights_secondary": _cut(all_matched),
+        "all_matched_fights_secondary": compare_block(all_matched),
     }
 
-    out_path = MODELS / "market_benchmark.json"
+    out_path = FROZEN_BENCHMARK
     out_path.write_text(json.dumps(results, indent=2))
     print(f"\nWrote {out_path}")
 
@@ -461,5 +730,197 @@ def main() -> None:
         )
 
 
+def main_oof(predictions: Path, report: Path, out_path: Path) -> None:
+    """The honest recomputation: out-of-fold predictions against the market.
+
+    Every probability here comes from a fold model that never saw the fight
+    it is scoring. The deployed refit model's own predictions are computed on
+    the SAME fights and reported alongside as a labelled diagnostic, because
+    the size of the gap between the two blocks is the argument for why this
+    mode exists.
+    """
+    print("Loading fights/features/fighters parquet ...")
+    fights = pd.read_parquet(PROCESSED / "fights.parquet")
+    fighters = pd.read_parquet(PROCESSED / "fighters.parquet")
+    features = load_features()
+
+    print(f"Downloading odds dataset ({ODDS_DATASET}) via kagglehub ...")
+    odds_raw = load_odds_raw()
+    print(f"  {len(odds_raw)} odds rows across {odds_raw['fight_id'].nunique()} fights")
+
+    print("Aligning odds to fights.parquet corner convention ...")
+    aligned, stats = align_odds_to_fights(odds_raw, fights, fighters)
+    print(
+        f"  aligned {len(aligned)} fights "
+        f"(by id: {stats['n_id']}, by name: {stats['n_name']}, skipped: {stats['n_skipped']})"
+    )
+
+    print("Validating alignment against famous fights ...")
+    validate_famous_fights(fights, fighters, aligned)
+
+    print(f"Rebuilding the walk-forward pooled rows and pairing {predictions.name} ...")
+    dump = json.loads(predictions.read_text())
+    wf_report = json.loads(report.read_text())
+    oof = attach_oof_predictions(pooled_frame(features), dump)
+    reproduced = check_dump_reproduces_report(oof, wf_report)
+    print(f"  {len(oof)} out-of-fold rows; dump reproduces the report's pooled metrics")
+
+    print("Joining out-of-fold predictions to the aligned odds by fight id ...")
+    matched = to_features_convention(join_odds_by_id(oof, aligned))
+    matched["y_winner"] = matched["y_winner"].astype(float)
+    print(
+        f"  {len(matched)} fights are both walk-forward evaluation rows and "
+        f"odds-matched ({100.0 * len(matched) / len(oof):.1f}% of the "
+        f"{len(oof)} walk-forward rows)"
+    )
+
+    print("Computing the DEPLOYED model's own predictions on the same fights ...")
+    print("  (in-sample by construction -- a labelled diagnostic, never the headline)")
+    deployed = BlendedPredictor.load(ROOT)
+    matched["deployed_p_a"] = deployed.predict(matched)["winner_prob"]
+    metrics = load_deployed_metrics()
+    trained_on = deployed_training_mask(matched, metrics)
+
+    headline = compare_block(matched)
+    headline["roi"] = roi_sweep(matched)
+    since_2021 = matched[matched["date"] >= HEADLINE_START].reset_index(drop=True)
+    in_sample = compare_block(matched, model_col="deployed_p_a")
+    in_sample["roi"] = roi_sweep(matched, model_col="deployed_p_a")
+
+    results = {
+        "computed_on": pd.Timestamp.today().date().isoformat(),
+        "describes": (
+            "The DEPLOYED model (the SP3 hybrid), evaluated out of fold. Its "
+            "winner marginal is the deployed blend's own array, returned "
+            "unchanged by the hybrid -- see models/walkforward/sp3_decision.json "
+            "-- and the winner probability is the only head compared here."
+        ),
+        "odds_dataset": ODDS_DATASET,
+        "note": (
+            "Betting odds are an EVALUATION-ONLY comparator here, never a "
+            "model feature. Every model probability in 'headline_out_of_fold' "
+            "and 'out_of_fold_2021_plus' comes from a walk-forward fold model "
+            "fitted on fights strictly before the fold's inner-validation "
+            "year, so no fight is scored by a model that saw it. "
+            "'in_sample_diagnostic' scores the SAME fights with the deployed "
+            "refit model, which trained on all of them; it is reported to "
+            "show how much an in-sample comparison would flatter the model, "
+            "and must never be quoted as the model-vs-market result."
+        ),
+        "provenance": {
+            "predictions": str(predictions.relative_to(ROOT)),
+            "predictions_name": dump["name"],
+            "walkforward_report": str(report.relative_to(ROOT)),
+            "fold_years": [int(y) for y in wf_report["fold_years"]],
+            "n_pooled_walkforward_rows": int(dump["n"]),
+            "dump_reproduces_report_pooled": reproduced,
+            "deployed_model_version": model_version(ROOT),
+            "deployed_training_recipe": {
+                "mode": metrics.get("mode"),
+                "train_through": metrics.get("train_through"),
+                "n_train": metrics.get("n_train"),
+            },
+            "frozen_predecessor": str(FROZEN_BENCHMARK.relative_to(ROOT)),
+        },
+        "alignment": {
+            "n_aligned_by_id": stats["n_id"],
+            "n_aligned_by_name": stats["n_name"],
+            "n_skipped": stats["n_skipped"],
+        },
+        "intersection": {
+            "n_walkforward_rows": int(len(oof)),
+            "n_odds_aligned_fights": int(len(aligned)),
+            "n_intersection": int(len(matched)),
+            "join_key": "fight_id (the shared 16-hex ufcstats id), and nothing else",
+            "n_intersection_rows_in_deployed_training_window": int(trained_on.sum()),
+            "deployed_training_window_covers_the_whole_intersection": bool(trained_on.all()),
+        },
+        "headline_out_of_fold": headline,
+        "out_of_fold_2021_plus": compare_block(since_2021),
+        "in_sample_diagnostic": {
+            "warning": (
+                "NOT the headline. The deployed model trained on every fight "
+                "scored here, so this compares an in-sample model against an "
+                "out-of-sample market. It is the number the out-of-fold "
+                "headline exists to replace."
+            ),
+            **in_sample,
+        },
+        "comparison_with_frozen_july_artifact": july_comparison(
+            compare_block(since_2021)
+        ),
+        "odds_coverage_by_fold_year": fold_year_coverage(oof, matched),
+    }
+
+    out_path.write_text(json.dumps(results, indent=2) + "\n")
+    print(f"\nWrote {out_path}")
+
+    print("\n=== SUMMARY (out of fold, fold years "
+          f"{results['provenance']['fold_years'][0]}-"
+          f"{results['provenance']['fold_years'][-1]}) ===")
+    print(f"n_fights: {headline['n_fights']}")
+    print(f"{'':22s}{'accuracy':>10s}{'log_loss':>10s}{'brier':>10s}")
+    for label, block in (("model (out of fold)", headline["model"]),
+                         ("market", headline["market"]),
+                         ("model (IN SAMPLE)", in_sample["model"])):
+        print(f"{label:22s}{block['accuracy']:>10.4f}{block['log_loss']:>10.4f}{block['brier']:>10.4f}")
+    print("delta out of fold (model - market):", headline["delta_model_minus_market"])
+    print("delta in sample  (model - market):", in_sample["delta_model_minus_market"])
+
+    gate_delta = headline["delta_model_minus_market"]["log_loss"]
+    if gate_delta < -0.02:
+        print(
+            "\n*** HONESTY GATE WARNING: model log-loss beats market by "
+            f"{-gate_delta:.4f} (> 0.02) -- this almost certainly means "
+            "odds/corner misalignment or leakage. DO NOT trust these "
+            "numbers without investigating. ***"
+        )
+    else:
+        print("\nHonesty gate OK: model does not implausibly dominate the market.")
+
+    july = results["comparison_with_frozen_july_artifact"]
+    if july is not None:
+        print(
+            f"\nVersus the frozen July 2026 artifact, on 2021+ fights: the "
+            f"market's log-loss edge {july['direction']} from "
+            f"{july['july_2026_artifact']['gap_market_favour']:+.4f} "
+            f"(n={july['july_2026_artifact']['n_fights']}) to "
+            f"{july['out_of_fold_2021_plus']['gap_market_favour']:+.4f} "
+            f"(n={july['out_of_fold_2021_plus']['n_fights']})."
+        )
+
+
+def parse_args(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--mode", choices=("oof", "deployed"), default="oof",
+        help="'oof' (default) scores the walk-forward out-of-fold predictions; "
+             "'deployed' scores whatever serves today, which is in-sample for "
+             "every fight in this dataset",
+    )
+    parser.add_argument("--predictions", type=Path, default=OOF_PREDICTIONS,
+                        help="oof mode: the --dump-predictions JSON to score")
+    parser.add_argument("--report", type=Path, default=OOF_REPORT,
+                        help="oof mode: the walk-forward report those predictions came from")
+    parser.add_argument("--out", type=Path, default=None,
+                        help="output path (defaults to the mode's own artifact)")
+    parser.add_argument("--force", action="store_true",
+                        help="deployed mode: overwrite the frozen July 2026 artifact")
+    return parser.parse_args(argv)
+
+
+def main(argv=None) -> None:
+    args = parse_args(argv)
+    if args.mode == "deployed":
+        if args.out is not None:
+            raise SystemExit("--out is not supported in deployed mode")
+        main_deployed(force=args.force)
+        return
+    main_oof(args.predictions, args.report, args.out or OOF_BENCHMARK)
+
+
 if __name__ == "__main__":
     main()
+
