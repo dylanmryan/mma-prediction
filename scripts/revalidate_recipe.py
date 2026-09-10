@@ -420,6 +420,77 @@ def check_ece_gate(blend_report: dict, gate: dict) -> dict:
     }
 
 
+#: Each margin the re-validation re-measures, and whether the bar it reports
+#: to is cleared by going DOWN (a log-loss delta, an ECE) or by going UP.
+#: `margin_movement` needs the direction to say which way a change moved the
+#: recipe relative to its bar; getting it backwards would report a
+#: deterioration as headroom.
+LOWER_IS_BETTER = {
+    "sp3_joint_delta": True,
+    "sp3_winner_delta": True,
+    "refit_torch_delta": True,
+    "refit_xgb_delta": True,
+    "blend_pooled_ece": True,
+}
+
+
+def recorded_margins() -> dict:
+    """The margins as the committed decision artifacts recorded them.
+
+    The "then" side of the comparison, read out of the artifacts rather than
+    off a re-run, so it is the number each decision was actually taken on.
+    Every one is the seeds 0-4 measurement against the same paired incumbent
+    this re-validation re-runs, which is what makes the two sides comparable
+    at all.
+    """
+    sp3 = load(SP3_DECISION)["experiments"]["D2"]["bar_check"]
+    refit = load(REFIT_DECISION)
+    ece = load(SP2_2_DECISION)["ece_gate"]
+    return {
+        "sp3_joint_delta": float(sp3["joint_delta"]),
+        "sp3_winner_delta": float(sp3["winner_delta"]),
+        "refit_torch_delta": float(refit["torch"]["delta_B_minus_A"]),
+        "refit_xgb_delta": float(refit["xgb"]["delta_B_minus_A"]),
+        "blend_pooled_ece": float(ece["B1_pooled_ece"]),
+        "read_from": {
+            "sp3_joint_delta": f"{_rel(SP3_DECISION)} experiments.D2.bar_check",
+            "sp3_winner_delta": f"{_rel(SP3_DECISION)} experiments.D2.bar_check",
+            "refit_torch_delta": f"{_rel(REFIT_DECISION)} torch",
+            "refit_xgb_delta": f"{_rel(REFIT_DECISION)} xgb",
+            "blend_pooled_ece": f"{_rel(SP2_2_DECISION)} ece_gate.B1_pooled_ece",
+        },
+    }
+
+
+def margin_movement(then: dict, bars: dict) -> dict:
+    """How far each margin moved between the recorded decision and today.
+
+    A bar that still clears can still be worth reading about: a margin that
+    halved on one table's worth of new fights is the early warning the next
+    re-validation needs, and a verdict of "still justified" with no numbers
+    beside it hides exactly that.
+    """
+    now = {
+        "sp3_joint_delta": float(bars["sp3_joint_bar"]["joint_delta"]),
+        "sp3_winner_delta": float(bars["sp3_joint_bar"]["winner_delta"]),
+        "refit_torch_delta": float(bars["refit_rule_torch"]["delta_B_minus_A"]),
+        "refit_xgb_delta": float(bars["refit_rule_xgb"]["delta_B_minus_A"]),
+        "blend_pooled_ece": float(bars["blend_ece_gate"]["pooled_ece"]),
+    }
+    out = {}
+    for key, now_value in now.items():
+        change = round(now_value - then[key], 6)
+        worse = change > 0 if LOWER_IS_BETTER[key] else change < 0
+        out[key] = {
+            "then": then[key],
+            "now": now_value,
+            "change": change,
+            "closer_to_the_bar": bool(worse and change != 0),
+            "recorded_in": (then.get("read_from") or {}).get(key),
+        }
+    return out
+
+
 def verdict(bars: dict) -> dict:
     """The plain verdict. Only GATED bars decide it; ungated reads are surfaced.
 
@@ -580,6 +651,40 @@ def execute(plan: list[dict]) -> dict:
     return reports
 
 
+def reuse_reports(out_dir: Path, table_max_date: str, n_feature_rows: int) -> dict:
+    """The batch's reports already on disk, checked against the current table.
+
+    Re-deriving the artifact without re-fitting is what every other decision
+    script in this project does (they are pure over committed reports), and it
+    is what makes a fix to the artifact's wording cost seconds rather than a
+    re-run. What it must not do is assemble a verdict out of runs made on a
+    table that is no longer the current one, or out of two runs made on
+    different tables -- so each report's own `config` is checked against the
+    table this invocation is re-validating.
+    """
+    reports = {}
+    for run in RUNS:
+        path = Path(out_dir) / f"revalidation_{run.key}.json"
+        if not path.exists():
+            raise SystemExit(
+                f"missing {path.name} in {out_dir}; --from-reports reuses a batch that "
+                "has already been run, and this one has not"
+            )
+        report = json.loads(path.read_text())
+        config = report["config"]
+        if (config.get("features_max_date") != table_max_date
+                or config.get("n_feature_rows") != n_feature_rows):
+            raise SystemExit(
+                f"{path.name} was computed on a table ending "
+                f"{config.get('features_max_date')} with {config.get('n_feature_rows')} "
+                f"rows, but the current table ends {table_max_date} with "
+                f"{n_feature_rows} rows; re-run the batch rather than re-deriving a "
+                "verdict from stale reports"
+            )
+        reports[run.key] = report
+    return reports
+
+
 # --- the artifact ------------------------------------------------------------
 
 
@@ -601,6 +706,7 @@ def build(reports: dict, configuration: dict, *, table: dict,
         "blend_ece_gate": check_ece_gate(reports["blend_cells"], gate),
     }
     decision = verdict(bars)
+    moved = margin_movement(recorded_margins(), bars)
     return {
         "experiment": "periodic re-validation of the deployed recipe on the current table",
         "generated_by": "scripts/revalidate_recipe.py",
@@ -616,6 +722,7 @@ def build(reports: dict, configuration: dict, *, table: dict,
         "reports": {key: _rel(REVAL_DIR / f"revalidation_{key}.json") for key in reports},
         "measured_sigma_seed": measured_sigma,
         "bars": bars,
+        "margin_movement": moved,
         "verdict": decision,
         "what_this_does_not_do": (
             "It deploys nothing, promotes nothing and stages nothing. It does not "
@@ -647,6 +754,10 @@ def print_summary(artifact: dict) -> None:
                        f"{bar['thresholds']['sigma_seed']:.6f}")
         print(f"  {name:<22} {str(bool(bar['gated'])):<7} "
               f"{str(bool(bar['still_clears'])):<14} {numbers}")
+    print("\nmargin                  then         now       change  closer to the bar")
+    for name, row in artifact["margin_movement"].items():
+        print(f"  {name:<22} {row['then']:>+9.6f} {row['now']:>+9.6f} "
+              f"{row['change']:>+12.6f}  {row['closer_to_the_bar']}")
     print(f"\n{artifact['verdict']['outcome']}")
 
 
@@ -658,6 +769,10 @@ def main(argv=None) -> int:
                              "their harness evidence and exit 0; fits nothing")
     parser.add_argument("--plan", action="store_true",
                         help="print the harness runs this would make and exit; fits nothing")
+    parser.add_argument("--from-reports", action="store_true",
+                        help="re-derive the artifact from a batch already in "
+                             "--reports-dir instead of re-running it; refuses reports "
+                             "computed on any table but the current one")
     parser.add_argument("--out", type=Path, default=OUT)
     parser.add_argument("--reports-dir", type=Path, default=REVAL_DIR)
     parser.add_argument("--print", dest="echo", action="store_true",
@@ -683,8 +798,16 @@ def main(argv=None) -> int:
         return 0
 
     configuration = deployed_configuration()
-    args.reports_dir.mkdir(parents=True, exist_ok=True)
-    reports = execute(plan)
+    if args.from_reports:
+        current = pd.read_parquet(FEATURES, columns=["date"])
+        reports = reuse_reports(
+            args.reports_dir,
+            table_max_date=str(pd.Timestamp(current["date"].max()).date()),
+            n_feature_rows=int(len(current)),
+        )
+    else:
+        args.reports_dir.mkdir(parents=True, exist_ok=True)
+        reports = execute(plan)
 
     hybrid_config = reports["hybrid"]["config"]
     table = {

@@ -323,3 +323,79 @@ def test_staleness_is_silent_when_the_evidence_covers_the_data():
                            "harness_features_max_date": "2026-08-08"}},
     )
     assert rr.staleness_warning(report) is None
+
+
+# --- then vs now: has the margin moved? -------------------------------------
+
+def test_recorded_margins_come_from_the_committed_decision_artifacts():
+    """A re-validation that only reports today's number cannot say whether a
+    margin has moved. The 'then' side is read out of the artifacts, so it is
+    the number the decision was actually taken on."""
+    then = rr.recorded_margins()
+    assert then["sp3_joint_delta"] == pytest.approx(-0.0581, abs=1e-6)
+    assert then["sp3_winner_delta"] == 0.0
+    assert then["refit_torch_delta"] == pytest.approx(-0.0002)
+    assert then["refit_xgb_delta"] == pytest.approx(-0.0007)
+    assert then["blend_pooled_ece"] == pytest.approx(0.0124)
+
+
+def test_margin_movement_lines_the_two_up_and_names_the_direction():
+    then = {"sp3_joint_delta": -0.0581, "sp3_winner_delta": 0.0,
+            "refit_torch_delta": -0.0002, "refit_xgb_delta": -0.0007,
+            "blend_pooled_ece": 0.0124}
+    bars = {
+        "sp3_joint_bar": {"joint_delta": -0.0580, "winner_delta": 0.0,
+                          "joint_margin_past_the_bar": 0.048},
+        "refit_rule_torch": {"delta_B_minus_A": -0.0002},
+        "refit_rule_xgb": {"delta_B_minus_A": -0.0008},
+        "blend_ece_gate": {"pooled_ece": 0.0146, "headroom": 0.002641,
+                           "thresholds": {"threshold": 0.017241}},
+    }
+    moved = rr.margin_movement(then, bars)
+    assert moved["sp3_joint_delta"]["then"] == -0.0581
+    assert moved["sp3_joint_delta"]["now"] == -0.0580
+    # ECE moved toward the threshold; the block has to make that visible
+    assert moved["blend_pooled_ece"]["change"] == pytest.approx(0.0022, abs=1e-6)
+    assert moved["blend_pooled_ece"]["closer_to_the_bar"] is True
+    assert moved["refit_xgb_delta"]["closer_to_the_bar"] is False
+
+
+def test_margin_movement_reads_a_worse_sp3_joint_as_closer_to_the_bar():
+    """The joint delta is negative-is-better, so 'closer to the bar' is the
+    delta rising -- the opposite direction from the ECE's."""
+    then = {"sp3_joint_delta": -0.0581, "sp3_winner_delta": 0.0,
+            "refit_torch_delta": -0.0002, "refit_xgb_delta": -0.0007,
+            "blend_pooled_ece": 0.0124}
+    bars = {
+        "sp3_joint_bar": {"joint_delta": -0.0300, "winner_delta": 0.0,
+                          "joint_margin_past_the_bar": 0.020},
+        "refit_rule_torch": {"delta_B_minus_A": -0.0002},
+        "refit_rule_xgb": {"delta_B_minus_A": -0.0007},
+        "blend_ece_gate": {"pooled_ece": 0.0124, "headroom": 0.0048,
+                           "thresholds": {"threshold": 0.017241}},
+    }
+    moved = rr.margin_movement(then, bars)
+    assert moved["sp3_joint_delta"]["closer_to_the_bar"] is True
+    assert moved["blend_pooled_ece"]["closer_to_the_bar"] is False
+
+
+# --- rebuilding the artifact without re-fitting ------------------------------
+
+def test_reusing_reports_refuses_a_report_from_a_different_table(tmp_path):
+    """--from-reports must not quietly assemble a verdict out of runs made on
+    two different tables, or on a table that is no longer the current one."""
+    for run in rr.RUNS:
+        path = tmp_path / f"revalidation_{run.key}.json"
+        config = dict(rr.load(run.source)["config"])
+        config["features_max_date"] = "2026-08-08"
+        config["n_feature_rows"] = 11238
+        path.write_text(json.dumps({"name": run.key, "config": config,
+                                    "folds": {}, "pooled": {}, "slices": {},
+                                    "fit_info": {}}))
+    with pytest.raises(SystemExit, match="2026-08-08"):
+        rr.reuse_reports(tmp_path, table_max_date="2026-09-05", n_feature_rows=11290)
+
+
+def test_reusing_reports_refuses_a_missing_run(tmp_path):
+    with pytest.raises(SystemExit, match="revalidation_hybrid"):
+        rr.reuse_reports(tmp_path, table_max_date="2026-09-05", n_feature_rows=11290)
