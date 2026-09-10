@@ -1,6 +1,7 @@
 """Pure-function tests for the train scripts' refit-through mode (budget
-parsing, mode resolution, and the metrics-file assembly). Importing the
-scripts has no side effects: they define main() under __main__."""
+parsing, mode resolution, and the metrics-file assembly), plus the
+cross-trainer staleness guard that runs after them. Importing the scripts has
+no side effects: they define main() under __main__."""
 from __future__ import annotations
 
 import argparse
@@ -13,6 +14,7 @@ import pytest
 
 from mma.models.xgb import feature_frame
 
+import scripts.check_display_calibration as check_display_calibration
 import scripts.train_hazard as train_hazard
 import scripts.train_torch as train_torch
 import scripts.train_xgb as train_xgb
@@ -361,3 +363,54 @@ def test_refit_cutoff(module):
     features = pd.DataFrame({"date": pd.to_datetime(["2020-01-01", "2026-08-08", "2024-05-05"])})
     assert module.refit_cutoff(features, "latest") == pd.Timestamp("2026-08-08")
     assert module.refit_cutoff(features, "2024-12-31") == pd.Timestamp("2024-12-31")
+
+
+# --- the cross-trainer staleness guard -------------------------------------
+#
+# `scripts/check_display_calibration.py` runs last in the refit chain and
+# measures the deployed scorer on rows it reads from the TORCH member's
+# metrics file. If any member was refit through a different date that mask is
+# not every member's training set and the measurement is partly out of sample
+# -- which is exactly what a refresh that runs one trainer and not the other
+# leaves behind.
+
+REFIT = {"mode": "refit_through", "train_through": "2026-08-08"}
+
+
+def test_members_agree_is_silent_when_every_member_matches():
+    assert check_display_calibration.check_members_agree(
+        {"torch": REFIT, "xgb": REFIT, "simulator": REFIT}) is None
+
+
+def test_members_agree_catches_a_stale_xgb_member():
+    warning = check_display_calibration.check_members_agree(
+        {"torch": REFIT, "xgb": {**REFIT, "train_through": "2026-07-04"},
+         "simulator": REFIT})
+    assert warning is not None
+    assert "xgb 2026-07-04" in warning and "torch 2026-08-08" in warning
+
+
+def test_members_agree_catches_a_stale_simulator():
+    """SP3's members are the ones this was missing. `scripts/train_hazard.py`
+    runs LAST in the refit chain, which makes it the likeliest casualty of a
+    timeout -- and until this it was the one member nothing compared."""
+    warning = check_display_calibration.check_members_agree(
+        {"torch": REFIT, "xgb": REFIT,
+         "simulator": {**REFIT, "train_through": "2026-07-04"}})
+    assert warning is not None
+    assert "simulator 2026-07-04" in warning
+
+
+def test_members_agree_ignores_a_member_not_in_refit_mode():
+    """A split-protocol metrics file has no deployed train_through to compare;
+    comparing it would fire on every run of the split trainer."""
+    assert check_display_calibration.check_members_agree(
+        {"torch": REFIT, "xgb": {"mode": "split", "train_through": "2019-01-01"},
+         "simulator": REFIT}) is None
+
+
+def test_members_agree_ignores_a_missing_metrics_file():
+    """A member whose metrics file does not exist reads as {} -- no mode, so
+    nothing to compare, and no spurious warning."""
+    assert check_display_calibration.check_members_agree(
+        {"torch": REFIT, "xgb": {}, "simulator": REFIT}) is None

@@ -60,6 +60,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
 OUT = ROOT / "models" / "display_calibration.json"
 XGB_METRICS = ROOT / "models" / "xgb_metrics_val.json"
+#: The simulator's two members are described by one metrics file, written by
+#: scripts/train_hazard.py after its whole fit loop.
+HAZARD_METRICS = ROOT / "models" / "hazard_metrics.json"
+#: The mode a deployed (rather than split-protocol) metrics file records.
+MODE_REFIT = "refit_through"
 #: How far the deployed scorer's aggregate may drift from the base rates
 #: before this script says so out loud, in PROBABILITY POINTS rather than as a
 #: ratio: a rare class makes a ratio look alarming over a gap too small to see
@@ -69,25 +74,43 @@ XGB_METRICS = ROOT / "models" / "xgb_metrics_val.json"
 TOLERANCE = 0.05
 
 
-def check_members_agree(torch_metrics: dict, xgb_metrics: dict) -> str | None:
-    """Warning text when the blend's two members were refit through different
-    dates, else None.
+def check_members_agree(metrics_by_member: dict[str, dict]) -> str | None:
+    """Warning text when the deployed scorer's members were refit through
+    different dates, else None.
 
     The measurement rows are `deployed_training_mask`, read from the TORCH
-    member's metrics file. If the XGBoost member was refit through a different
-    date then that mask is not both members' training set and the comparison
+    member's metrics file. If another member was refit through a different
+    date then that mask is not every member's training set and the comparison
     is partly out of sample for one of them -- which happens if a refresh runs
     one trainer and not the other.
+
+    Since SP3 the deployed scorer is the hybrid, so the simulator's two
+    members (`models/hazard_metrics.json`, written by
+    `scripts/train_hazard.py`) are compared alongside the blend's. They are
+    the ones this most needed to cover: `train_hazard.py` runs LAST in the
+    refit chain, which makes it the likeliest casualty of a timeout, and it
+    was the one member nothing checked.
+
+    A member not in refit-through mode is skipped rather than compared -- a
+    split-protocol metrics file has no deployed `train_through`, and a member
+    whose file does not exist reads as `{}`, which has no mode either.
     """
-    if torch_metrics.get("mode") != "refit_through":
+    dates = {
+        member: metrics.get("train_through")
+        for member, metrics in metrics_by_member.items()
+        if metrics.get("mode") == MODE_REFIT
+    }
+    if len(set(dates.values())) <= 1:
         return None
-    if xgb_metrics.get("mode") != "refit_through":
-        return None
-    if torch_metrics.get("train_through") == xgb_metrics.get("train_through"):
-        return None
-    return (f"WARNING: the blend's members were refit through different dates "
-            f"(torch {torch_metrics.get('train_through')}, xgb "
-            f"{xgb_metrics.get('train_through')}); re-run both trainers")
+    detail = ", ".join(f"{member} {date}" for member, date in dates.items())
+    return (f"WARNING: the deployed scorer's members were refit through different "
+            f"dates ({detail}); re-run the trainers")
+
+
+def _read_metrics(path: Path) -> dict:
+    """A metrics file's contents, or `{}` when it does not exist -- which
+    `check_members_agree` reads as "nothing to compare"."""
+    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def compare(empirical: dict, predicted: np.ndarray, classes: list) -> dict:
@@ -180,8 +203,11 @@ def measure(features: pd.DataFrame, hybrid, blend, metrics: dict) -> dict:
 def main() -> None:
     features = pd.read_parquet(PROCESSED / "features.parquet")
     metrics = load_deployed_metrics()
-    warning = check_members_agree(
-        metrics, json.loads(XGB_METRICS.read_text()) if XGB_METRICS.exists() else {})
+    warning = check_members_agree({
+        "torch": metrics,
+        "xgb": _read_metrics(XGB_METRICS),
+        "simulator": _read_metrics(HAZARD_METRICS),
+    })
     if warning:
         print(warning, file=sys.stderr)
 

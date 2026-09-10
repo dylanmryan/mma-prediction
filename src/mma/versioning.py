@@ -30,13 +30,22 @@ the file from the walk-forward report rather than letting it drift.
 ``n_runs``, ``alpha``, ``sim_seed`` and the default-rounds bound are not
 learned by anything, but each one changes what a simulated fight comes out
 at: halve ``n_runs`` and every joint cell moves, change ``sim_seed`` and they
-move again, change ``alpha`` and the smoothing over reachable cells changes,
-change the default-rounds bound and the 45 fights with no recorded schedule
-are played out over a different number of rounds. SP2.2's lesson was that a
-number outside the hash can silently change what every recorded prediction
-means; SP3's simulation parameters are exactly such numbers, which is why
-they live in an artifact rather than as module constants read at serving
-time.
+move again, change ``alpha`` and the smoothing over reachable cells changes.
+``default_rounds`` is the narrowest of the four: it is the round bound for a
+fight with NO recorded ``scheduled_rounds``, and both serving entry points
+pass an explicit number, so on the served path it moves nothing. What it
+moves is the CALIBRATION MEASUREMENT -- the 45 training fights with no
+recorded schedule are played out over a different number of rounds by
+``scripts/check_display_calibration.py``, and a five-round bound puts mass on
+a '45' class a three-round bound cannot reach. It is hashed anyway because
+it is a parameter of the same simulator, and because "no caller happens to
+exercise it today" is not a property the hash should depend on;
+``tests/test_inference.py`` scores an unscheduled row through the served
+``predict`` so the parameter is pinned rather than merely pinned-in-name.
+SP2.2's lesson was that a number outside the hash can silently change what
+every recorded prediction means; SP3's simulation parameters are exactly such
+numbers, which is why they live in an artifact rather than as module
+constants read at serving time.
 
 Display priors (applied only in ``app.py``, after the probability the track
 record stores) remain deliberately excluded, so regenerating them does not
