@@ -734,6 +734,12 @@ side effect of a data refresh.
   harness-form pooled ECE 0.0124 → 0.0146 on 52 new fights, more than halving
   its headroom (0.0056 → 0.0026). It passes; it is what the next re-validation
   should be read for first.
+  Its hybrid run also dumps its pooled out-of-fold predictions, which is what
+  keeps `models/market_benchmark_oof.json` rebuildable: that benchmark joins a
+  dump to the pooled rows positionally, so every refresh that grows the table
+  retires the previous dump, and `hybrid_e2.json` is SP3's evidence and is
+  never refreshed in place. `--check-staleness` reports that pairing alongside
+  the recipe's, because nothing else runs the benchmark on a schedule.
   The weekly Action rebuilds `round_stats` and the derived external table.
 - README rewritten around the new ladder (v1 heads → simulator), the
   walk-forward results, and the honest "market still wins / market gap"

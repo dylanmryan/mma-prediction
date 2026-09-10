@@ -1132,6 +1132,20 @@ which walk-forward report, the deployed model hash) — are in
 ensemble, a model that no longer exists, and `build_odds_benchmark.py`
 refuses to overwrite it without `--force`.
 
+Rebuilding the out-of-fold benchmark needs a walk-forward prediction dump,
+and the dump is joined to the pooled rows *positionally* — so it belongs to
+the feature table it was written from, and every weekly refresh that lands a
+new event retires it. The dump that keeps it regenerable is the one
+`scripts/revalidate_recipe.py` writes when it re-runs the deployed hybrid on
+the current table
+([`models/walkforward/revalidation/preds/revalidation_hybrid.json`](models/walkforward/revalidation/preds/revalidation_hybrid.json)).
+`models/walkforward/hybrid_e2.json` and its dump are never refreshed in
+place: they are the evidence SP3's decision rests on and what
+`models/simulator.json` names as its source. If no committed dump matches
+the current table, `build_odds_benchmark.py --mode oof` refuses to run
+rather than scoring a mis-paired join, and the weekly staleness check says
+so first.
+
 ## Development notes
 
 - **Local-disk virtualenv.** If the repo lives in an iCloud-synced folder,
@@ -1170,7 +1184,10 @@ refuses to overwrite it without `--force`.
   warn when the harness's data is older than the training cutoff, and the
   weekly Action reports the same gap through
   `scripts/revalidate_recipe.py --check-staleness`, which is the signal that
-  it is worth running the full thing.
+  it is worth running the full thing. That same check also reports whether
+  `models/market_benchmark_oof.json` can still be regenerated on the current
+  table — nothing runs that script on a schedule, so without the check a
+  refresh silently leaves it unrebuildable until someone next tries.
 
 ## Interactive app
 
