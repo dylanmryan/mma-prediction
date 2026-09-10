@@ -1,32 +1,32 @@
 {
-  "generated_at_utc": "2026-09-09T17:49:07Z",
+  "generated_at_utc": "2026-09-10T01:57:30Z",
   "overall": {
     "n_predicted": 86,
-    "n_graded": 21,
-    "accuracy": 0.6666666666666666,
-    "log_loss": 0.6161132121794892,
-    "brier": 0.21305744164456888
+    "n_graded": 45,
+    "accuracy": 0.5777777777777777,
+    "log_loss": 0.6823833784254654,
+    "brier": 0.24444086917460492
   },
   "model_versions": {
     "40df77ec43c7": {
       "n_predicted": 86,
-      "n_graded": 21,
-      "accuracy": 0.6666666666666666,
-      "log_loss": 0.6161132121794892,
-      "brier": 0.21305744164456888,
+      "n_graded": 45,
+      "accuracy": 0.5777777777777777,
+      "log_loss": 0.6823833784254654,
+      "brier": 0.24444086917460492,
       "first_prediction_at": "2026-07-15T16:48:23Z"
     }
   },
   "baselines": {
     "coin_flip": {
-      "n_graded": 21,
-      "accuracy": 0.47619047619047616,
+      "n_graded": 45,
+      "accuracy": 0.4666666666666667,
       "log_loss": 0.6931471805599453,
       "brier": 0.25
     },
     "higher_elo_dummy": {
-      "n_graded": 21,
-      "accuracy": 0.42857142857142855
+      "n_graded": 45,
+      "accuracy": 0.4222222222222222
     }
   }
 }
