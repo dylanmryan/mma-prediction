@@ -710,6 +710,62 @@ the walk-forward derivation tracks that drift by construction rather than
 averaging it away.
 
 
+### Is the model's confidence honest, and is there a prize in fixing it?
+
+`scripts/calibration_audit.py` → `models/calibration_audit.json`. Read the
+4,856 out-of-fold predictions from the favoured side — the probability the
+model put on whichever corner it picked, against whether that corner won,
+because a symmetrised model averages its own error away when read per corner —
+and test each confidence band against what happened.
+
+| Band | n | predicted | observed | binomial *p* | oracle repair |
+|---|---|---|---|---|---|
+| [0.50,0.55) | 1,120 | 0.524 | 0.512 | 0.437 | −0.00029 |
+| [0.55,0.60) | 1,063 | 0.575 | 0.574 | 0.951 | −0.00022 |
+| [0.60,0.65) | 876 | 0.623 | 0.612 | 0.508 | −0.00020 |
+| [0.65,0.70) | 696 | 0.674 | 0.647 | 0.135 | +0.00016 |
+| [0.70,0.75) | 494 | 0.723 | 0.739 | 0.451 | −0.00010 |
+| [0.75,0.80) | 314 | 0.773 | 0.780 | 0.788 | −0.00043 |
+| **[0.80,1.00]** | 293 | **0.843** | **0.785** | **0.010** | +0.00037 |
+
+Seven bands is seven looks, so the threshold is **p < 0.0071** and it is set by
+the band count in the source, not chosen after the p-values existed. **Zero
+bands survive it.** The extreme band is nominally off at p=0.010 and its
+per-year gap changes sign (+0.075 in 2018, −0.112 in 2021), which is what one
+marginal flag in seven looks tends to look like.
+
+**The part worth keeping is what the fix would be worth.** Repair that band
+using the realised rate *itself* — hindsight no model can have — and pooled
+log-loss moves **+0.0004**, against a shipping bar of **0.003**. The band is 6%
+of the rows and log-loss is not sensitive enough there for any remedy to clear.
+Repairing *every* band that way makes the model **worse (−0.00070)**: flattening
+a band buys calibration by spending discrimination.
+
+That bound covers band-level repair, not every calibrator — a smooth remedy
+keeps the ordering a constant destroys, and a fitted temperature beats the
+bound outright on synthetic data (pinned in `tests/test_calibration_audit.py`,
+where the assertion failed when first written the other way round). So the
+question was also asked directly, fitting calibrators on four fifths of the
+rows and scoring the fifth they had not seen:
+
+| Calibrator | CV gain over what is deployed |
+|---|---|
+| Temperature (1 param) | −0.00001 |
+| Platt on the favoured axis (2 params) | −0.00021 |
+| Isotonic on the favoured axis | −0.00413 |
+
+Nothing helps. Two things fall out of the negative: the deployed post-average
+temperature of **0.85 is confirmed** — refitting it out of sample moves nothing
+— and the isotonic result reproduces SP2.2's rejected remediation (0.7049
+against the temperature form's 0.6437) for the same reason it failed then.
+
+This audit exists because the reliability table alone would have justified
+building something. A 68-fight bin in the odds-matched subset read as a real
+overconfidence to go and fix; on the full out-of-fold set it is one marginal
+flag whose best possible repair is an eighth of the bar. The cost of finding
+that out was an afternoon rather than a sprint.
+
+
 ### Original validation window (2021–2023, for continuity)
 
 The numbers below described models trained on pre-2021 fights only and
