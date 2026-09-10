@@ -570,10 +570,14 @@ def fold_year_coverage(oof: pd.DataFrame, matched: pd.DataFrame) -> dict:
 def july_comparison(oof_2021_plus: dict) -> dict | None:
     """The frozen July artifact's headline beside the same date cut, out of fold.
 
-    Returns None when the July artifact is absent. The two n's differ (the
-    walk-forward's 2021+ rows are a subset of every odds-matched 2021+
-    fight), so this reports both rather than implying one number replaced
-    another in place.
+    Returns None when the July artifact is absent. Whether the two cuts cover
+    the SAME fights is established rather than assumed: the walk-forward's
+    fold years start at 2018, so every 2021+ odds-matched fight should also
+    be a walk-forward evaluation row, and if that holds then the row count
+    and all three market metrics -- which depend on the fights and the lines,
+    not on the model -- must agree exactly. When they do, the two model
+    numbers are directly subtractable; when they do not, this says so and the
+    change is a direction, not a difference of differences.
     """
     if not FROZEN_BENCHMARK.exists():
         return None
@@ -581,6 +585,10 @@ def july_comparison(oof_2021_plus: dict) -> dict | None:
     july_gap = july["delta_model_minus_market"]["log_loss"]
     now_gap = oof_2021_plus["delta_model_minus_market"]["log_loss"]
     change = round(now_gap - july_gap, 4)
+    same_fights = (
+        july["n_fights"] == oof_2021_plus["n_fights"]
+        and july["market"] == oof_2021_plus["market"]
+    )
     return {
         "july_2026_artifact": {
             "model": "the pre-refit torch ensemble, trained on pre-2021 data only",
@@ -600,11 +608,16 @@ def july_comparison(oof_2021_plus: dict) -> dict | None:
         "direction": (
             "narrowed" if change < 0 else "widened" if change > 0 else "unchanged"
         ),
-        "caveat": (
-            "Different row sets and different market samples: the July cut is "
-            "every odds-matched fight from 2021 on, this cut is the "
-            "odds-matched fights that are also walk-forward evaluation rows. "
-            "Read the direction, not a difference of differences."
+        "same_fight_set": bool(same_fights),
+        "same_fight_set_evidence": (
+            "Identical n and identical market accuracy/log-loss/Brier: the "
+            "market block depends only on which fights are in the cut and "
+            "what the lines were, so agreement to four decimals on all three "
+            "means the two cuts are the same fights. Only the model changed."
+            if same_fights else
+            "The two cuts do NOT cover the same fights (n or the market "
+            "metrics differ), so read the direction of the change rather "
+            "than subtracting one gap from the other."
         ),
     }
 
@@ -781,11 +794,16 @@ def main_oof(predictions: Path, report: Path, out_path: Path) -> None:
     metrics = load_deployed_metrics()
     trained_on = deployed_training_mask(matched, metrics)
 
+    coverage = fold_year_coverage(oof, matched)
+    thinnest_year = min(coverage, key=lambda year: coverage[year]["odds_coverage"])
+    thinnest = {"fold_year": int(thinnest_year), **coverage[thinnest_year]}
+
     headline = compare_block(matched)
     headline["roi"] = roi_sweep(matched)
     since_2021 = matched[matched["date"] >= HEADLINE_START].reset_index(drop=True)
     in_sample = compare_block(matched, model_col="deployed_p_a")
     in_sample["roi"] = roi_sweep(matched, model_col="deployed_p_a")
+    in_sample_gap = in_sample["delta_model_minus_market"]["log_loss"]
 
     results = {
         "computed_on": pd.Timestamp.today().date().isoformat(),
@@ -834,10 +852,33 @@ def main_oof(predictions: Path, report: Path, out_path: Path) -> None:
             "join_key": "fight_id (the shared 16-hex ufcstats id), and nothing else",
             "n_intersection_rows_in_deployed_training_window": int(trained_on.sum()),
             "deployed_training_window_covers_the_whole_intersection": bool(trained_on.all()),
+            "odds_coverage_of_walkforward_rows": round(len(matched) / len(oof), 4),
+            "thinnest_fold_year": thinnest,
+            "coverage_note": (
+                "Odds coverage is not uniform across the fold years: the "
+                f"dataset lags, so {thinnest['fold_year']} is only "
+                f"{thinnest['odds_coverage']:.1%} covered. The pooled "
+                "out-of-fold cut is therefore weighted toward the earlier "
+                "fold years. See odds_coverage_by_fold_year for the "
+                "model's log-loss on the covered and uncovered rows of each "
+                "year, which is what says whether the covered subset is a "
+                "harder or easier sample than the rest."
+            ),
         },
         "headline_out_of_fold": headline,
         "out_of_fold_2021_plus": compare_block(since_2021),
         "in_sample_diagnostic": {
+            "beats_the_market": bool(in_sample_gap < 0),
+            "honesty_gate_would_have_caught_it": bool(in_sample_gap < -0.02),
+            "honesty_gate_note": (
+                "The gate in this script fires only when the model beats the "
+                "market by more than 0.02 log-loss. An in-sample "
+                "recomputation lands inside that tolerance, so the gate "
+                "would have passed it. A leakage gate calibrated on 'is this "
+                "edge implausibly large' does not catch 'this model was "
+                "trained on the evaluation set' -- only using out-of-fold "
+                "predictions does."
+            ),
             "warning": (
                 "NOT the headline. The deployed model trained on every fight "
                 "scored here, so this compares an in-sample model against an "
@@ -849,7 +890,7 @@ def main_oof(predictions: Path, report: Path, out_path: Path) -> None:
         "comparison_with_frozen_july_artifact": july_comparison(
             compare_block(since_2021)
         ),
-        "odds_coverage_by_fold_year": fold_year_coverage(oof, matched),
+        "odds_coverage_by_fold_year": coverage,
     }
 
     out_path.write_text(json.dumps(results, indent=2) + "\n")
