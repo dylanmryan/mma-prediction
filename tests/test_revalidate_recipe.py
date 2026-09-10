@@ -325,6 +325,90 @@ def test_staleness_is_silent_when_the_evidence_covers_the_data():
     assert rr.staleness_warning(report) is None
 
 
+# --- the dump the market benchmark needs ------------------------------------
+
+def test_the_hybrid_run_dumps_its_predictions(tmp_path):
+    """`scripts/build_odds_benchmark.py --mode oof` joins a prediction dump to
+    the pooled walk-forward rows positionally, so it needs a dump written from
+    the CURRENT table. This batch already re-runs the deployed hybrid on that
+    table; dumping its predictions is what makes the benchmark regenerable
+    without refreshing `hybrid_e2.json`, which SP3's decision rests on."""
+    plan = {step["key"]: step for step in rr.planned_runs(tmp_path)}
+    hybrid = plan["hybrid"]
+    assert hybrid["dump"] == tmp_path / "preds" / "revalidation_hybrid.json"
+    assert "--dump-predictions" in hybrid["args"]
+    assert hybrid["args"][hybrid["args"].index("--dump-predictions") + 1] == str(hybrid["dump"])
+
+
+def test_only_the_run_that_scores_the_deployed_winner_dumps(tmp_path):
+    """Every other run in the batch exists to supply a paired comparison, and
+    a dump nothing reads is a large file with no reader."""
+    for step in rr.planned_runs(tmp_path):
+        if step["key"] == "hybrid":
+            continue
+        assert step["dump"] is None
+        assert "--dump-predictions" not in step["args"]
+
+
+# --- staleness: can the market benchmark still be rebuilt? -------------------
+
+def test_benchmark_pairing_is_regenerable_when_a_source_still_pairs():
+    report = rr.benchmark_pairing(
+        4856, sources=[{"report": "revalidation_hybrid.json", "pairs": True,
+                        "n_dump": 4856, "exists": True}],
+    )
+    assert report["regenerable"] is True
+    assert report["usable_source"] == "revalidation_hybrid.json"
+
+
+def test_benchmark_pairing_names_what_to_run_when_nothing_pairs():
+    report = rr.benchmark_pairing(
+        4856, sources=[{"report": "hybrid_e2.json", "pairs": False,
+                        "n_dump": 4804, "exists": True}],
+    )
+    assert report["regenerable"] is False
+    assert report["usable_source"] is None
+    assert "revalidate_recipe.py" in report["what_to_do"]
+
+
+def test_staleness_warning_calls_out_a_benchmark_that_cannot_be_rebuilt():
+    """A dump that no longer pairs is exactly the silent rot this check
+    exists for: nothing runs the benchmark script on a schedule, so the
+    failure surfaces only when someone tries."""
+    report = rr.staleness(
+        table_max_date="2026-09-05", n_table_rows=11290,
+        members={"torch": {"train_through": "2026-09-05",
+                           "harness_features_max_date": "2026-09-05"}},
+    )
+    report["benchmark"] = rr.benchmark_pairing(
+        4856, sources=[{"report": "hybrid_e2.json", "pairs": False,
+                        "n_dump": 4804, "exists": True}],
+    )
+    warning = rr.staleness_warning(report)
+    assert "market_benchmark_oof.json" in warning
+    assert "4804" in warning and "4856" in warning
+
+
+def test_staleness_warning_is_silent_when_the_benchmark_can_be_rebuilt():
+    report = rr.staleness(
+        table_max_date="2026-09-05", n_table_rows=11290,
+        members={"torch": {"train_through": "2026-09-05",
+                           "harness_features_max_date": "2026-09-05"}},
+    )
+    report["benchmark"] = rr.benchmark_pairing(
+        4856, sources=[{"report": "revalidation_hybrid.json", "pairs": True,
+                        "n_dump": 4856, "exists": True}],
+    )
+    assert rr.staleness_warning(report) is None
+
+
+def test_staleness_from_disk_reads_the_benchmark_pairing_too():
+    """Still the cheap mode: dates, row counts and a dump's own `n`. No fit,
+    no model load, no kagglehub."""
+    report = rr.staleness_from_disk()
+    assert report["benchmark"]["n_pooled_walkforward_rows"] > 0
+    assert [row["report"] for row in report["benchmark"]["sources"]]
+
 # --- then vs now: has the margin moved? -------------------------------------
 
 def test_recorded_margins_come_from_the_committed_decision_artifacts():

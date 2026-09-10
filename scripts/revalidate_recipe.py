@@ -46,9 +46,18 @@ longer clears is reported, and what to do about it is a human call.
 
 `--check-staleness` is the cheap mode the weekly Action runs: it reads the
 committed metrics files and the table, reports how far the deployed models'
-training data has run ahead of the harness evidence, and fits nothing. The
-full re-validation is minutes of fitting and writes a decision artifact, so
-it stays human-triggered.
+training data has run ahead of the harness evidence, and fits nothing. It also
+reports whether `models/market_benchmark_oof.json` can still be regenerated --
+that benchmark is rebuilt from a walk-forward prediction dump joined to the
+pooled rows POSITIONALLY, so every refresh that grows the table retires the
+previous dump, and nothing else runs that script on a schedule. Both reads are
+warnings: the committed artifacts still describe the tables they were computed
+on. The full re-validation is minutes of fitting and writes a decision
+artifact, so it stays human-triggered.
+
+The hybrid run in the batch below writes that dump (`--dump-predictions`),
+which is what keeps the benchmark regenerable without ever refreshing
+`models/walkforward/hybrid_e2.json` in place.
 """
 from __future__ import annotations
 
@@ -69,6 +78,9 @@ sys.path.insert(0, str(ROOT))
 from mma.feature_blocks import table_blocks  # noqa: E402
 from mma.versioning import model_version  # noqa: E402
 from mma.walkforward import paired_delta  # noqa: E402
+from scripts.build_odds_benchmark import (  # noqa: E402
+    OOF_BENCHMARK, oof_source_status, pooled_row_count,
+)
 from scripts.sp3_decision import simulator_bar_check  # noqa: E402
 
 WF = ROOT / "models" / "walkforward"
@@ -106,16 +118,24 @@ class Run:
     a fixed budget: a refit budget derived on the 2026-08-08 table is a budget
     for that table, so re-validating against it would re-validate half the
     question.
+    `dump` asks the run to write its pooled out-of-fold predictions as well as
+    its report. Only the hybrid does: `scripts/build_odds_benchmark.py --mode
+    oof` joins a dump to the pooled walk-forward rows POSITIONALLY, so it needs
+    one written from the current table, and this batch is already re-running
+    the deployed hybrid on exactly that table. A dump nobody reads is a
+    megabyte of JSON per run, so the others do not write one.
     """
     key: str
     source: Path
     role: str
     budget_from: str | None = None
+    dump: bool = False
 
 
 RUNS = (
     Run("hybrid", WF / "hybrid_e2.json",
-        "the deployed scorer: the blend's winner, the simulator's shape"),
+        "the deployed scorer: the blend's winner, the simulator's shape",
+        dump=True),
     Run("blend_cells", WF / "blend_b1_cells.json",
         "SP3's paired incumbent -- the same blend read through the cell scorer"),
     Run("torch_A", WF / "torch_a1_combined.json",
@@ -577,21 +597,77 @@ def staleness(table_max_date: str, n_table_rows: int, members: dict) -> dict:
     }
 
 
+def benchmark_pairing(pooled_rows: int, sources: list[dict] | None = None) -> dict:
+    """Whether `models/market_benchmark_oof.json` can still be regenerated.
+
+    That benchmark is the project's honest "does the model beat the market?"
+    answer, and the only thing that can rebuild it is a walk-forward
+    prediction dump joined POSITIONALLY to the pooled rows of the table it was
+    written from. Every weekly refresh grows the table and retires the
+    previous dump, and nothing runs the benchmark script on a schedule -- so
+    without this read the artifact quietly becomes unregenerable and the
+    failure surfaces only when someone next tries.
+
+    It is a WARNING, not a failure, for the same reason the harness-staleness
+    read above is: the committed benchmark still describes the table it was
+    computed on, and re-running it is a human-triggered few minutes of fitting.
+    """
+    rows = oof_source_status(pooled_rows) if sources is None else list(sources)
+    usable = next((row for row in rows if row.get("pairs")), None)
+    return {
+        "artifact": _rel(OOF_BENCHMARK),
+        "n_pooled_walkforward_rows": int(pooled_rows),
+        "sources": rows,
+        "usable_source": usable["report"] if usable else None,
+        "regenerable": usable is not None,
+        "what_it_means": (
+            f"{_rel(OOF_BENCHMARK)} can be rebuilt on the current table from "
+            f"{usable['report']}" if usable else
+            "no committed prediction dump pairs with the current table, so "
+            f"{_rel(OOF_BENCHMARK)} cannot be regenerated at all"
+        ),
+        "what_to_do": (
+            "run `python scripts/revalidate_recipe.py` -- its hybrid run dumps "
+            "the predictions this benchmark scores -- and then `python "
+            "scripts/build_odds_benchmark.py --mode oof`"
+        ),
+    }
+
+
 def staleness_warning(report: dict) -> str | None:
-    """Warning text when the recipe's evidence is older than its training
-    data, else None. Written to stderr by the weekly Action's step, the way
+    """Warning text for anything the harness evidence no longer covers, else
+    None. Written to stderr by the weekly Action's step, the way
     `scripts/check_snapshot_coverage.py` warns about the other measurement
-    that ages rather than breaks."""
-    if not report["stale"]:
-        return None
-    behind = max(m["days_behind"] or 0 for m in report["members"].values())
-    return (
-        f"WARNING: the deployed recipe's walk-forward evidence is {behind} day(s) "
-        f"older than the data the deployed models train on (table now "
-        f"{report['table_max_date']}, {report['n_table_rows']} rows). "
-        "The recipe's justification has not been re-measured on that data; "
-        "run `python scripts/revalidate_recipe.py`."
-    )
+    that ages rather than breaks.
+
+    Two things age here and they age separately: the recipe's justification
+    (measured on a table the models have since trained past) and the market
+    benchmark's regenerability (a prediction dump the current table has
+    outgrown). Either alone is worth saying."""
+    warnings = []
+    if report["stale"]:
+        behind = max(m["days_behind"] or 0 for m in report["members"].values())
+        warnings.append(
+            f"WARNING: the deployed recipe's walk-forward evidence is {behind} day(s) "
+            f"older than the data the deployed models train on (table now "
+            f"{report['table_max_date']}, {report['n_table_rows']} rows). "
+            "The recipe's justification has not been re-measured on that data; "
+            "run `python scripts/revalidate_recipe.py`."
+        )
+    benchmark = report.get("benchmark")
+    if benchmark is not None and not benchmark["regenerable"]:
+        dumps = ", ".join(
+            f"{row['report']} ({row['n_dump']} rows)" if row["exists"] else
+            f"{row['report']} (absent)"
+            for row in benchmark["sources"]
+        )
+        warnings.append(
+            f"WARNING: {benchmark['artifact']} can no longer be regenerated. The "
+            f"current table rebuilds {benchmark['n_pooled_walkforward_rows']} pooled "
+            f"walk-forward rows and no committed dump matches it: {dumps}. "
+            f"To rebuild it, {benchmark['what_to_do']}."
+        )
+    return "\n\n".join(warnings) or None
 
 
 def print_staleness(report: dict) -> None:
@@ -604,16 +680,32 @@ def print_staleness(report: dict) -> None:
     print(f"  {report['what_it_means']}")
     if report["stale"]:
         print(f"  {report['what_to_do']}")
+    benchmark = report.get("benchmark")
+    if benchmark is None:
+        return
+    print(f"\nmarket benchmark, against {benchmark['n_pooled_walkforward_rows']} "
+          f"pooled walk-forward rows:")
+    width = max(len(row["report"]) for row in benchmark["sources"])
+    for row in benchmark["sources"]:
+        state = ("no dump on disk" if not row["exists"]
+                 else f"{row['n_dump']} pooled rows"
+                      f"{' -- pairs' if row['pairs'] else ' -- does not pair'}")
+        print(f"  {row['report']:<{width}} {state}")
+    print(f"  {benchmark['what_it_means']}")
+    if not benchmark["regenerable"]:
+        print(f"  {benchmark['what_to_do']}")
 
 
 def staleness_from_disk() -> dict:
-    """`staleness` over the committed metrics files and the current table."""
+    """`staleness` over the committed metrics files and the current table,
+    plus the market benchmark's pairing against that same table."""
     features = pd.read_parquet(FEATURES, columns=["date"])
-    return staleness(
+    report = staleness(
         table_max_date=str(pd.Timestamp(features["date"].max()).date()),
         n_table_rows=int(len(features)),
         members={name: load(path) for name, path in DEPLOYED_METRICS.items()},
     )
+    return {**report, "benchmark": benchmark_pairing(pooled_row_count(features["date"]))}
 
 
 # --- running the harness -----------------------------------------------------
@@ -627,12 +719,17 @@ def planned_runs(out_dir: Path) -> list[dict]:
         name = f"revalidation_{run.key}"
         budget_from = (out_dir / f"revalidation_{run.budget_from}.json"
                        if run.budget_from else None)
+        args = run_args(config, name, out_dir,
+                        None if budget_from is None else str(budget_from))
+        dump = Path(out_dir) / "preds" / f"{name}.json" if run.dump else None
+        if dump is not None:
+            args += ["--dump-predictions", str(dump)]
         plan.append({
             "key": run.key, "name": name, "role": run.role,
             "recipe_read_from": _rel(run.source),
-            "args": run_args(config, name, out_dir,
-                             None if budget_from is None else str(budget_from)),
+            "args": args,
             "report": out_dir / f"{name}.json",
+            "dump": dump,
         })
     return plan
 
@@ -766,7 +863,8 @@ def main(argv=None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--check-staleness", action="store_true",
                         help="report how far the deployed models have run ahead of "
-                             "their harness evidence and exit 0; fits nothing")
+                             "their harness evidence, and whether the market "
+                             "benchmark can still be regenerated; exits 0, fits nothing")
     parser.add_argument("--plan", action="store_true",
                         help="print the harness runs this would make and exit; fits nothing")
     parser.add_argument("--from-reports", action="store_true",

@@ -161,7 +161,11 @@ jobs:
       # data whenever new fights arrive, so the fresh fit IS the incumbent.
       # What CAN go wrong silently is that the recipe's justification ages --
       # every walk-forward report behind it was computed on an older table,
-      # and the models keep training past it.
+      # and the models keep training past it. The same refresh also retires
+      # the walk-forward prediction dump that models/market_benchmark_oof.json
+      # is rebuilt from (the join is positional, so a dump belongs to the table
+      # it was written from), and nothing runs that benchmark on a schedule --
+      # so this step reports that pairing too.
       #
       # This step reads dates and fits nothing (a second or two). The full
       # re-validation (`scripts/revalidate_recipe.py` with no flags) re-runs
@@ -170,7 +174,7 @@ jobs:
       # cost every run a re-measurement almost nothing has changed, and turn a
       # human's call about the deployed recipe into a side effect of a cron
       # job. It stays human-triggered; this step is the trigger's signal.
-      - name: Check how stale the deployed recipe's evidence is (report only)
+      - name: Check how stale the recipe's evidence and the market benchmark are (report only)
         if: always()
         env:
           OMP_NUM_THREADS: "1"
