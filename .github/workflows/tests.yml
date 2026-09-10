@@ -41,8 +41,14 @@ jobs:
       # CPU wheels: nothing here needs CUDA, and the default wheels are a
       # multi-gigabyte download that dominates the job. Same index the weekly
       # refresh installs from, so the two jobs resolve the same versions.
+      #
+      # `app` as well as `dev`, because four tests in tests/test_app.py import
+      # app.py to check the model card and the outcome table, and app.py
+      # imports streamlit. The file's skip guards cover missing model
+      # artifacts and pandas 3.x, not a missing streamlit -- so without the
+      # extra those four error rather than skip.
       - name: Install dependencies
-        run: pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cpu
+        run: pip install -e ".[dev,app]" --extra-index-url https://download.pytorch.org/whl/cpu
 
       # tests/conftest.py pins this too; setting it here as well means a
       # failure in collection, before conftest is imported, still gets it.

@@ -26,8 +26,13 @@ jobs:
         with:
           python-version: '3.11'
 
+      # `app` as well as `dev`: the "Run test suite" step below imports
+      # tests/test_app.py, which imports app.py, which imports streamlit. With
+      # only the dev extra those four tests error rather than skip. This job
+      # never noticed because its pytest step is guarded by `if refresh ==
+      # 'true'`, so it has not run since those tests were written.
       - name: Install dependencies
-        run: pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cpu
+        run: pip install -e ".[dev,app]" --extra-index-url https://download.pytorch.org/whl/cpu
 
       # Asks BOTH sources whether anything happened: the Kaggle mirror it
       # downloads, compared against the primary-sourced processed rows, and
