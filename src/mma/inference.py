@@ -556,11 +556,15 @@ class SimulatorPredictor:
         missing booster is in `BlendedPredictor.load`: serving a
         three-seed simulator, or falling back to the blend's own method and
         round heads, would be a scorer no report describes.
+
+        A *torn* pair is the same error wearing a disguise, so `_check_seeds`
+        rejects it too -- see there for what that is and what it can and
+        cannot catch.
         """
         root = Path(root)
         blend = BlendedPredictor.load(root) if blend is None else blend
         config = load_simulator_config(root / "models" / "simulator.json") if config is None else config
-        members = {}
+        members, seeds = {}, {}
         for member in ("hazard", "decision"):
             paths = sorted((root / "models").glob(f"xgb_{member}_seed*.json"),
                            key=lambda q: int(q.stem.rsplit("seed", 1)[1]))
@@ -569,13 +573,67 @@ class SimulatorPredictor:
                     f"no XGBoost {member} models under {root / 'models'} "
                     f"(expected xgb_{member}_seed*.json); run scripts/train_hazard.py"
                 )
+            seeds[member] = [int(path.stem.rsplit("seed", 1)[1]) for path in paths]
             models = []
             for path in paths:
                 model = xgb.XGBClassifier(enable_categorical=True)
                 model.load_model(path)
                 models.append(model)
             members[member] = models
+        cls._check_seeds(root, seeds["hazard"], seeds["decision"])
         return cls(blend, members["hazard"], members["decision"], config)
+
+    @staticmethod
+    def _check_seeds(root: Path, hazard_seeds: list[int], decision_seeds: list[int]) -> None:
+        """Refuse a simulator whose two members are not the same fit.
+
+        `scripts/train_hazard.py` writes interleaved -- hazard seed *n*, then
+        decision seed *n*, then the next seed -- in place and non-atomically,
+        and writes `models/hazard_metrics.json` only after the whole loop. An
+        interrupted local run therefore leaves per-seed artifacts on disk that
+        load perfectly well and are not a single fit. Until this check that
+        was invisible: the filenames are the same, the glob is non-empty, and
+        the ensemble serves.
+
+        Two shapes are rejected:
+
+        * the members disagree about which seeds exist, which is what an
+          interruption between a hazard save and the decision save beside it
+          leaves;
+        * the seeds on disk are not the seeds `hazard_metrics.json` says were
+          fitted, which is what a run at a different ``SEEDS`` leaves --
+          the previous fit's extra seed files keep their filenames and load
+          beside the new ones, so the count alone proves nothing.
+
+        What it does NOT catch, and no load-time check could: an interruption
+        at a loop boundary, which leaves both members with the same seed set
+        and the same count, some seeds from the new fit and some from the old.
+        Detecting that needs the writes to be atomic (fit into a temp dir,
+        rename over) rather than a reader that can only see filenames.
+
+        The metrics comparison runs only when the file is present, because a
+        root holding a fold's models and nothing else is a legitimate caller
+        (`tests/test_serving_parity.py`) and that file is not part of
+        `mma.versioning.MODEL_ARTIFACT_GLOBS`. The deployed root always has
+        one, and a test pins it against the committed artifacts.
+        """
+        if sorted(hazard_seeds) != sorted(decision_seeds):
+            raise ValueError(
+                f"the simulator's two members are not the same fit: hazard seeds "
+                f"{sorted(hazard_seeds)} but decision seeds {sorted(decision_seeds)} "
+                f"under {root / 'models'}; re-run scripts/train_hazard.py"
+            )
+        metrics_path = root / "models" / "hazard_metrics.json"
+        if not metrics_path.exists():
+            return
+        expected = json.loads(metrics_path.read_text()).get("seeds")
+        if expected is not None and sorted(hazard_seeds) != sorted(int(s) for s in expected):
+            raise ValueError(
+                f"the simulator's seeds on disk ({sorted(hazard_seeds)}) are not the "
+                f"seeds {metrics_path.name} says were fitted ({sorted(expected)}); "
+                f"the artifacts and hazard_metrics.json describe different fits -- "
+                f"re-run scripts/train_hazard.py"
+            )
 
     def _rounds(self, features: pd.DataFrame) -> np.ndarray:
         """Rounds simulated per fight: `scheduled_rounds`, or the committed

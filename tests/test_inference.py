@@ -566,6 +566,44 @@ def test_simulator_survives_a_weight_class_the_models_never_saw(simulator, match
 
 
 @simulator_artifacts
+def test_default_rounds_bounds_the_served_simulation_for_an_unscheduled_fight(blended, matchup):
+    """`models/simulator.json`'s `default_rounds` is hashed into the deployed
+    model version, so it has to be able to move a served number -- otherwise
+    the hash promises something the code does not deliver.
+
+    It moves exactly one thing: how many rounds a fight with no recorded
+    `scheduled_rounds` is played out over (`SimulatorPredictor._rounds`). Both
+    serving entry points always pass an explicit int today, so nothing else in
+    the suite would notice the parameter being wrong; this scores a NaN-
+    scheduled row through the served `predict` and pins the difference. Three
+    rounds can never reach the '45' class; five can.
+    """
+    from mma.inference import SimulatorPredictor, load_simulator_config
+
+    frame, _ = matchup
+    unscheduled = frame.copy()
+    unscheduled["scheduled_rounds"] = np.nan
+    committed = load_simulator_config()
+    assert committed["default_rounds"] == 3, "the committed value this pins"
+
+    def served(default_rounds):
+        predictor = SimulatorPredictor.load(
+            blend=blended, config={**committed, "default_rounds": default_rounds})
+        return predictor.predict(unscheduled)
+
+    three, five = served(3), served(5)
+    # the round head, read off the joint
+    assert three["round_probs"][0, -1] == 0.0
+    assert five["round_probs"][0, -1] > 0.0
+    # and the joint cells themselves, in BOTH corners
+    assert three["joint_cells"][0][[3, 7, 11, 15]].tolist() == [0.0, 0.0, 0.0, 0.0]
+    assert five["joint_cells"][0][[3, 7, 11, 15]].sum() > 0.0
+    # the winner is the blend's either way -- this parameter moves the shape,
+    # never the probability the track record stores
+    assert three["winner_prob"][0] == pytest.approx(five["winner_prob"][0], abs=1e-12)
+
+
+@simulator_artifacts
 def test_simulator_load_demands_both_members(blended, tmp_path):
     """A missing member is a loud error, never a silent fall back to the
     blend's own method and round heads -- that would be a scorer no report
@@ -581,3 +619,75 @@ def test_simulator_load_demands_both_members(blended, tmp_path):
             (ROOT / "models" / f"xgb_hazard_seed{seed}.json").read_bytes())
     with pytest.raises(FileNotFoundError, match="no XGBoost decision models"):
         SimulatorPredictor.load(root=tmp_path, blend=blended, config=config)
+
+
+def _stage_simulator(tmp_path, hazard_seeds, decision_seeds, metrics_seeds=(0, 1, 2, 3, 4)):
+    """A models/ dir holding exactly the named per-seed artifacts, copied from
+    the committed ones, plus a hazard_metrics.json claiming `metrics_seeds`."""
+    import json
+
+    models = tmp_path / "models"
+    models.mkdir(exist_ok=True)
+    for member, seeds in (("hazard", hazard_seeds), ("decision", decision_seeds)):
+        for seed in seeds:
+            source = ROOT / "models" / f"xgb_{member}_seed{seed % 5}.json"
+            (models / f"xgb_{member}_seed{seed}.json").write_bytes(source.read_bytes())
+    if metrics_seeds is not None:
+        (models / "hazard_metrics.json").write_text(
+            json.dumps({"mode": "refit_through", "seeds": list(metrics_seeds)}))
+    return models
+
+
+@simulator_artifacts
+def test_simulator_load_rejects_a_half_written_decision_ensemble(blended, tmp_path):
+    """`scripts/train_hazard.py` saves the hazard model and then the decision
+    model for each seed in turn, in place and non-atomically. An interrupted
+    run therefore leaves the two members disagreeing about which seeds exist,
+    and nothing downstream would notice: the filenames are the same, the
+    ensemble still loads, and it serves a scorer no report describes."""
+    from mma.inference import SimulatorPredictor, load_simulator_config
+
+    _stage_simulator(tmp_path, hazard_seeds=range(5), decision_seeds=range(4))
+    with pytest.raises(ValueError, match="hazard.*decision|decision.*hazard"):
+        SimulatorPredictor.load(root=tmp_path, blend=blended,
+                                config=load_simulator_config())
+
+
+@simulator_artifacts
+def test_simulator_load_rejects_a_half_written_hazard_ensemble(blended, tmp_path):
+    """The other direction, so the check cannot be one-sided."""
+    from mma.inference import SimulatorPredictor, load_simulator_config
+
+    _stage_simulator(tmp_path, hazard_seeds=range(4), decision_seeds=range(5))
+    with pytest.raises(ValueError, match="hazard.*decision|decision.*hazard"):
+        SimulatorPredictor.load(root=tmp_path, blend=blended,
+                                config=load_simulator_config())
+
+
+@simulator_artifacts
+def test_simulator_load_rejects_seeds_the_metrics_file_does_not_describe(blended, tmp_path):
+    """Both members agree with each other and still disagree with the fit that
+    `models/hazard_metrics.json` describes -- which is what a run at a
+    different `SEEDS` leaves behind, since the leftovers of the wider previous
+    fit keep their filenames and load beside the new ones."""
+    from mma.inference import SimulatorPredictor, load_simulator_config
+
+    _stage_simulator(tmp_path, hazard_seeds=range(6), decision_seeds=range(6),
+                     metrics_seeds=(0, 1, 2, 3, 4))
+    with pytest.raises(ValueError, match="hazard_metrics.json"):
+        SimulatorPredictor.load(root=tmp_path, blend=blended,
+                                config=load_simulator_config())
+
+
+@simulator_artifacts
+def test_committed_simulator_artifacts_match_their_metrics_file():
+    """The deployed root satisfies the guard above -- and, since the guard only
+    compares against the metrics file WHEN one is present, this is what keeps
+    the deployed path covered rather than exempted."""
+    import json
+
+    metrics = json.loads((ROOT / "models" / "hazard_metrics.json").read_text())
+    for member in ("hazard", "decision"):
+        seeds = sorted(int(path.stem.rsplit("seed", 1)[1])
+                       for path in (ROOT / "models").glob(f"xgb_{member}_seed*.json"))
+        assert seeds == sorted(metrics["seeds"]), member
