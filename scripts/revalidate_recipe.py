@@ -506,6 +506,35 @@ def staleness(table_max_date: str, n_table_rows: int, members: dict) -> dict:
     }
 
 
+def staleness_warning(report: dict) -> str | None:
+    """Warning text when the recipe's evidence is older than its training
+    data, else None. Written to stderr by the weekly Action's step, the way
+    `scripts/check_snapshot_coverage.py` warns about the other measurement
+    that ages rather than breaks."""
+    if not report["stale"]:
+        return None
+    behind = max(m["days_behind"] or 0 for m in report["members"].values())
+    return (
+        f"WARNING: the deployed recipe's walk-forward evidence is {behind} day(s) "
+        f"older than the data the deployed models train on (table now "
+        f"{report['table_max_date']}, {report['n_table_rows']} rows). "
+        "The recipe's justification has not been re-measured on that data; "
+        "run `python scripts/revalidate_recipe.py`."
+    )
+
+
+def print_staleness(report: dict) -> None:
+    print(f"deployed recipe evidence, against a table ending "
+          f"{report['table_max_date']} ({report['n_table_rows']} rows):")
+    for name, member in sorted(report["members"].items()):
+        print(f"  {name:<8} trains through {member['train_through']}, "
+              f"harness evidence from {member['harness_features_max_date']} "
+              f"({member['days_behind']} day(s) behind)")
+    print(f"  {report['what_it_means']}")
+    if report["stale"]:
+        print(f"  {report['what_to_do']}")
+
+
 def staleness_from_disk() -> dict:
     """`staleness` over the committed metrics files and the current table."""
     features = pd.read_parquet(FEATURES, columns=["date"])
@@ -631,11 +660,18 @@ def main(argv=None) -> int:
                         help="print the harness runs this would make and exit; fits nothing")
     parser.add_argument("--out", type=Path, default=OUT)
     parser.add_argument("--reports-dir", type=Path, default=REVAL_DIR)
+    parser.add_argument("--print", dest="echo", action="store_true",
+                        help="echo the JSON as well as the human summary")
     args = parser.parse_args(argv)
 
     if args.check_staleness:
         report = staleness_from_disk()
-        print(json.dumps(report, indent=2))
+        print_staleness(report)
+        if args.echo:
+            print(json.dumps(report, indent=2))
+        warning = staleness_warning(report)
+        if warning:
+            print(f"\n{warning}", file=sys.stderr)
         return 0
 
     plan = planned_runs(args.reports_dir)
