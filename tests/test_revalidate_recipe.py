@@ -399,3 +399,130 @@ def test_reusing_reports_refuses_a_report_from_a_different_table(tmp_path):
 def test_reusing_reports_refuses_a_missing_run(tmp_path):
     with pytest.raises(SystemExit, match="revalidation_hybrid"):
         rr.reuse_reports(tmp_path, table_max_date="2026-09-05", n_feature_rows=11290)
+
+
+# --- a re-validation answers the question the staleness read asks ------------
+#
+# The warning asks one thing: has the recipe's justification been re-measured
+# on the data the deployed models train on? Each member's own harness report is
+# older than its training cutoff and always will be -- that report ran on the
+# table it ran on -- so the member gap alone cannot answer it. This script's own
+# artifact can, and these pin the four ways it can answer.
+
+PASSED_REVALIDATION = {
+    "date": "2026-09-09",
+    "table": {"features_max_date": "2026-09-05", "n_feature_rows": 11290},
+    "verdict": {"still_justified": True, "bars_no_longer_met": []},
+}
+BEHIND = {"train_through": "2026-09-05", "harness_features_max_date": "2026-08-08"}
+
+
+def test_revalidation_cover_reads_the_committed_artifact():
+    cover = rr.revalidation_cover(PASSED_REVALIDATION)
+    assert cover["date"] == "2026-09-09"
+    assert cover["features_max_date"] == "2026-09-05"
+    assert cover["still_justified"] is True
+    assert cover["bars_no_longer_met"] == []
+    assert cover["read_from"].endswith("recipe_revalidation.json")
+
+
+def test_revalidation_cover_is_absent_when_nothing_has_been_revalidated():
+    assert rr.revalidation_cover(None) is None
+
+
+# case 1: no re-validation artifact at all -- the warning is the whole point
+def test_with_no_revalidation_the_gap_is_actionable_and_warns():
+    report = rr.staleness(
+        table_max_date="2026-09-05", n_table_rows=11290,
+        members={"torch": dict(BEHIND)},
+    )
+    assert report["members"]["torch"]["harness_stale"] is True
+    assert report["members"]["torch"]["revalidated"] is False
+    assert report["stale"] is True
+    assert report["revalidation"] is None
+    warning = rr.staleness_warning(report)
+    assert "28 day(s)" in warning
+    assert "has not been re-measured" in warning
+    assert "No re-validation artifact" in warning
+
+
+# case 2: a passing re-validation that reaches the training cutoff -- clears
+def test_a_passing_revalidation_over_the_training_data_clears_the_flag():
+    """A passing re-validation on a table that reaches the training cutoff IS
+    the measurement the warning asks for. The member's own harness report is
+    still older, and stays honestly recorded as such -- rewriting
+    `harness_features_max_date` would be a lie about which table it ran on."""
+    report = rr.staleness(
+        table_max_date="2026-09-05", n_table_rows=11290,
+        members={"torch": dict(BEHIND)}, revalidation=PASSED_REVALIDATION,
+    )
+    assert report["members"]["torch"]["harness_stale"] is True
+    assert report["members"]["torch"]["days_behind"] == 28
+    assert report["members"]["torch"]["harness_features_max_date"] == "2026-08-08"
+    assert report["members"]["torch"]["revalidated"] is True
+    assert report["stale"] is False
+    assert "2026-09-05" in report["what_it_means"]
+    assert rr.staleness_warning(report) is None
+
+
+# case 3: a passing re-validation that predates the training cutoff -- does not
+def test_a_passing_revalidation_on_an_older_table_does_not_clear_the_flag():
+    """It measured the recipe on a table the models have since trained past, so
+    it does not answer the question for the data they train on now."""
+    older = {**PASSED_REVALIDATION,
+             "table": {"features_max_date": "2026-08-20", "n_feature_rows": 11260}}
+    report = rr.staleness(
+        table_max_date="2026-09-05", n_table_rows=11290,
+        members={"torch": dict(BEHIND)}, revalidation=older,
+    )
+    assert report["members"]["torch"]["revalidated"] is False
+    assert report["stale"] is True
+    warning = rr.staleness_warning(report)
+    # check_snapshot_coverage.py's convention: name the standing decision, the
+    # table it was taken on, and how far things have drifted since.
+    assert "2026-08-20" in warning
+    assert "still cleared" in warning
+    assert "16 day(s)" in warning and "30 row(s)" in warning
+
+
+# case 4: a re-validation that found a bar no longer met -- never clears, louder
+def test_a_failing_revalidation_never_clears_the_flag_and_warns_louder():
+    """Worse news than an unmeasured recipe, so it must not read as coverage --
+    and it must reach the weekly reader in its own right."""
+    failed = {**PASSED_REVALIDATION,
+              "verdict": {"still_justified": False,
+                          "bars_no_longer_met": ["blend_ece_gate", "sp3_joint_bar"]}}
+    report = rr.staleness(
+        table_max_date="2026-09-05", n_table_rows=11290,
+        members={"torch": dict(BEHIND)}, revalidation=failed,
+    )
+    assert report["members"]["torch"]["revalidated"] is False
+    assert report["stale"] is True
+    warning = rr.staleness_warning(report)
+    assert "blend_ece_gate" in warning and "sp3_joint_bar" in warning
+    assert "no longer met" in warning
+    assert "models/walkforward/recipe_revalidation.json" in warning
+    # and it must not also claim the data was never re-measured -- it was, and
+    # it failed. That claim would be this false positive's mirror image.
+    assert "has not been re-measured" not in warning
+    assert "HAS been re-measured" in warning
+
+
+def test_drift_since_the_revalidation_is_measured_against_the_current_table():
+    report = rr.staleness(
+        table_max_date="2026-09-19", n_table_rows=11310,
+        members={"torch": dict(BEHIND)}, revalidation=PASSED_REVALIDATION,
+    )
+    assert report["drift_since_revalidation"] == {"days": 14, "rows": 20}
+
+
+def test_the_committed_tree_is_revalidated_so_the_weekly_read_is_quiet():
+    """The live false positive this fixed: the committed re-validation ran on
+    the 2026-09-05 table with every bar clearing, which is exactly the data the
+    deployed models train on."""
+    report = rr.staleness_from_disk()
+    assert report["revalidation"]["still_justified"] is True
+    assert all(m["harness_stale"] for m in report["members"].values())
+    assert all(m["revalidated"] for m in report["members"].values())
+    assert report["stale"] is False
+    assert rr.staleness_warning(report) is None
