@@ -1,0 +1,274 @@
+{
+  "experiment": "calibration audit of the deployed scorer, out of fold",
+  "generated_by": "scripts/calibration_audit.py",
+  "describes": "The DEPLOYED model (the SP3 hybrid) read through its winner marginal, scored strictly out of fold. Betting odds appear nowhere here; this asks only whether the model's own stated confidence matches what happened.",
+  "provenance": {
+    "predictions": "models/walkforward/preds/hybrid_e2_cells.json",
+    "n": 4856,
+    "pooled_winner_log_loss": 0.6459,
+    "fold_years": [
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
+  "method": {
+    "axis": "the FAVOURED side's probability against whether that side won -- a symmetric model averages its own errors away when read per-corner",
+    "bands": [
+      "[0.50,0.55)",
+      "[0.55,0.60)",
+      "[0.60,0.65)",
+      "[0.65,0.70)",
+      "[0.70,0.75)",
+      "[0.75,0.80)",
+      "[0.80,1.00)"
+    ],
+    "min_band_n": 20,
+    "n_looks": 7,
+    "bonferroni_threshold": 0.00714,
+    "threshold_fixed_by": "the number of bands, which is a constant in this script, not a choice made after seeing the p-values",
+    "oracle": "each band re-predicted at its own realised rate -- the answer itself. An upper bound on any buildable calibrator, used only to rule remedies out.",
+    "bar": 0.003
+  },
+  "bands": [
+    {
+      "band": "[0.50,0.55)",
+      "lo": 0.5,
+      "hi": 0.55,
+      "n": 1120,
+      "share_of_rows": 0.23064250411861614,
+      "predicted": 0.5244,
+      "observed": 0.5125,
+      "gap": -0.0119,
+      "observed_ci95": [
+        0.4828,
+        0.5422
+      ],
+      "binomial_p": 0.4367,
+      "nominally_off": false,
+      "survives_bonferroni": false,
+      "oracle_gain": -0.00029,
+      "oracle_clears_bar": false
+    },
+    {
+      "band": "[0.55,0.60)",
+      "lo": 0.55,
+      "hi": 0.6,
+      "n": 1063,
+      "share_of_rows": 0.21890444810543658,
+      "predicted": 0.5748,
+      "observed": 0.5738,
+      "gap": -0.0009,
+      "observed_ci95": [
+        0.5435,
+        0.6038
+      ],
+      "binomial_p": 0.9506,
+      "nominally_off": false,
+      "survives_bonferroni": false,
+      "oracle_gain": -0.00022,
+      "oracle_clears_bar": false
+    },
+    {
+      "band": "[0.60,0.65)",
+      "lo": 0.6,
+      "hi": 0.65,
+      "n": 876,
+      "share_of_rows": 0.18039538714991762,
+      "predicted": 0.6231,
+      "observed": 0.6119,
+      "gap": -0.0113,
+      "observed_ci95": [
+        0.5787,
+        0.6443
+      ],
+      "binomial_p": 0.5078,
+      "nominally_off": false,
+      "survives_bonferroni": false,
+      "oracle_gain": -0.0002,
+      "oracle_clears_bar": false
+    },
+    {
+      "band": "[0.65,0.70)",
+      "lo": 0.65,
+      "hi": 0.7,
+      "n": 696,
+      "share_of_rows": 0.14332784184514002,
+      "predicted": 0.6737,
+      "observed": 0.6466,
+      "gap": -0.0271,
+      "observed_ci95": [
+        0.6098,
+        0.6821
+      ],
+      "binomial_p": 0.1347,
+      "nominally_off": false,
+      "survives_bonferroni": false,
+      "oracle_gain": 0.00016,
+      "oracle_clears_bar": false
+    },
+    {
+      "band": "[0.70,0.75)",
+      "lo": 0.7,
+      "hi": 0.75,
+      "n": 494,
+      "share_of_rows": 0.10172981878088962,
+      "predicted": 0.7228,
+      "observed": 0.7389,
+      "gap": 0.016,
+      "observed_ci95": [
+        0.6978,
+        0.7771
+      ],
+      "binomial_p": 0.451,
+      "nominally_off": false,
+      "survives_bonferroni": false,
+      "oracle_gain": -0.0001,
+      "oracle_clears_bar": false
+    },
+    {
+      "band": "[0.75,0.80)",
+      "lo": 0.75,
+      "hi": 0.8,
+      "n": 314,
+      "share_of_rows": 0.06466227347611203,
+      "predicted": 0.7727,
+      "observed": 0.7803,
+      "gap": 0.0075,
+      "observed_ci95": [
+        0.7303,
+        0.8248
+      ],
+      "binomial_p": 0.7879,
+      "nominally_off": false,
+      "survives_bonferroni": false,
+      "oracle_gain": -0.00043,
+      "oracle_clears_bar": false
+    },
+    {
+      "band": "[0.80,1.00]",
+      "lo": 0.8,
+      "hi": 1.0,
+      "n": 293,
+      "share_of_rows": 0.060337726523887976,
+      "predicted": 0.8427,
+      "observed": 0.785,
+      "gap": -0.0578,
+      "observed_ci95": [
+        0.7335,
+        0.8306
+      ],
+      "binomial_p": 0.01,
+      "nominally_off": true,
+      "survives_bonferroni": false,
+      "oracle_gain": 0.00037,
+      "oracle_clears_bar": false
+    }
+  ],
+  "flagged_bands_by_year": {
+    "[0.80,1.00]": {
+      "2018": {
+        "n": 29,
+        "predicted": 0.822,
+        "observed": 0.8966
+      },
+      "2019": {
+        "n": 38,
+        "predicted": 0.8427,
+        "observed": 0.7632
+      },
+      "2021": {
+        "n": 25,
+        "predicted": 0.8317,
+        "observed": 0.72
+      },
+      "2023": {
+        "n": 51,
+        "predicted": 0.8512,
+        "observed": 0.7843
+      },
+      "2024": {
+        "n": 34,
+        "predicted": 0.8374,
+        "observed": 0.7647
+      },
+      "2025": {
+        "n": 108,
+        "predicted": 0.849,
+        "observed": 0.7963
+      }
+    }
+  },
+  "recalibrator_trial": {
+    "question": "can a calibrator fitted out of sample beat the deployed probabilities, which already carry a fitted temperature?",
+    "cv": "5-fold, 5 seeds",
+    "baseline_log_loss": 0.6459,
+    "bar": 0.003,
+    "families": {
+      "temperature (1 param)": {
+        "cv_gain": -1e-05,
+        "per_seed": [
+          0.00019,
+          0.00017,
+          -0.00017,
+          -0.00011,
+          -0.00011
+        ],
+        "clears_bar": false,
+        "median_fitted_params": [
+          0.9292,
+          0.0
+        ]
+      },
+      "platt on the favoured axis (2 params)": {
+        "cv_gain": -0.00021,
+        "per_seed": [
+          -0.00013,
+          -5e-05,
+          -0.00023,
+          -0.00047,
+          -0.00016
+        ],
+        "clears_bar": false,
+        "median_fitted_params": [
+          0.9503,
+          -0.0261
+        ]
+      },
+      "isotonic on the favoured axis": {
+        "cv_gain": -0.00413,
+        "per_seed": [
+          -0.00402,
+          -0.00445,
+          -0.00893,
+          -0.00231,
+          -0.00093
+        ],
+        "clears_bar": false
+      }
+    },
+    "any_family_clears_the_bar": false
+  },
+  "oracle_ceiling": {
+    "best_single_band": 0.00037,
+    "all_bands_at_once": -0.0007,
+    "sum_of_single_bands": -0.00071,
+    "bar": 0.003,
+    "any_band_worth_a_remedy": false
+  },
+  "verdict": {
+    "miscalibrated_bands": [],
+    "nominally_off_but_not_past_correction": [
+      "[0.80,1.00]"
+    ],
+    "bands_where_even_an_oracle_fix_clears_the_bar": [],
+    "calibration_is_sound": true,
+    "a_remedy_is_worth_building": false,
+    "outcome": "0 of 7 bands are miscalibrated past a Bonferroni threshold of 0.00714; 1 are nominally off ([0.80,1.00]) and do not survive it. No band's ORACLE repair -- recalibration with the realised answer -- reaches the 0.003 bar, so no calibration remedy is worth building whether or not the miscalibration is real."
+  }
+}
