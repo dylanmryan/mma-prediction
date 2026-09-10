@@ -1,12 +1,12 @@
 {
-  "computed_on": "2026-09-09",
+  "computed_on": "2026-09-10",
   "describes": "The DEPLOYED model (the SP3 hybrid), evaluated out of fold. Its winner marginal is the deployed blend's own array, returned unchanged by the hybrid -- see models/walkforward/sp3_decision.json -- and the winner probability is the only head compared here.",
   "odds_dataset": "jerzyszocik/ufc-betting-odds-daily-dataset",
   "note": "Betting odds are an EVALUATION-ONLY comparator here, never a model feature. Every model probability in 'headline_out_of_fold' and 'out_of_fold_2021_plus' comes from a walk-forward fold model fitted on fights strictly before the fold's inner-validation year, so no fight is scored by a model that saw it. 'in_sample_diagnostic' scores the SAME fights with the deployed refit model, which trained on all of them; it is reported to show how much an in-sample comparison would flatter the model, and must never be quoted as the model-vs-market result.",
   "provenance": {
-    "predictions": "models/walkforward/preds/hybrid_e2.json",
-    "predictions_name": "hybrid_e2",
-    "walkforward_report": "models/walkforward/hybrid_e2.json",
+    "predictions": "models/walkforward/revalidation/preds/revalidation_hybrid.json",
+    "predictions_name": "revalidation_hybrid",
+    "walkforward_report": "models/walkforward/revalidation/revalidation_hybrid.json",
     "fold_years": [
       2018,
       2019,
@@ -17,18 +17,18 @@
       2024,
       2025
     ],
-    "n_pooled_walkforward_rows": 4804,
+    "n_pooled_walkforward_rows": 4856,
     "dump_reproduces_report_pooled": {
-      "n": 4804,
-      "winner_log_loss": 0.6437,
-      "accuracy": 0.6216,
-      "brier": 0.2264
+      "n": 4856,
+      "winner_log_loss": 0.6459,
+      "accuracy": 0.6199,
+      "brier": 0.2273
     },
-    "deployed_model_version": "04cecd71c980",
+    "deployed_model_version": "18d1a70777ea",
     "deployed_training_recipe": {
       "mode": "refit_through",
-      "train_through": "2026-08-08",
-      "n_train": 11238
+      "train_through": "2026-09-05",
+      "n_train": 11290
     },
     "frozen_predecessor": "models/market_benchmark.json"
   },
@@ -38,22 +38,22 @@
     "n_skipped": 238
   },
   "intersection": {
-    "n_walkforward_rows": 4804,
+    "n_walkforward_rows": 4856,
     "n_odds_aligned_fights": 6274,
     "n_intersection": 3310,
     "join_key": "fight_id (the shared 16-hex ufcstats id), and nothing else",
     "n_intersection_rows_in_deployed_training_window": 3310,
     "deployed_training_window_covers_the_whole_intersection": true,
-    "odds_coverage_of_walkforward_rows": 0.689,
+    "odds_coverage_of_walkforward_rows": 0.6816,
     "thinnest_fold_year": {
       "fold_year": 2025,
-      "n_walkforward": 935,
+      "n_walkforward": 987,
       "n_odds_matched": 212,
-      "odds_coverage": 0.2267,
+      "odds_coverage": 0.2148,
       "model_log_loss_matched": 0.5866,
-      "model_log_loss_unmatched": 0.6322
+      "model_log_loss_unmatched": 0.6469
     },
-    "coverage_note": "Odds coverage is not uniform across the fold years: the dataset lags, so 2025 is only 22.7% covered. The pooled out-of-fold cut is therefore weighted toward the earlier fold years. See odds_coverage_by_fold_year for the model's log-loss on the covered and uncovered rows of each year, which is what says whether the covered subset is a harder or easier sample than the rest."
+    "coverage_note": "Odds coverage is not uniform across the fold years: the dataset lags, so 2025 is only 21.5% covered. The pooled out-of-fold cut is therefore weighted toward the earlier fold years. See odds_coverage_by_fold_year for the model's log-loss on the covered and uncovered rows of each year, which is what says whether the covered subset is a harder or easier sample than the rest."
   },
   "headline_out_of_fold": {
     "n_fights": 3310,
@@ -394,9 +394,9 @@
     "warning": "NOT the headline. The deployed model trained on every fight scored here, so this compares an in-sample model against an out-of-sample market. It is the number the out-of-fold headline exists to replace.",
     "n_fights": 3310,
     "model": {
-      "accuracy": 0.6807,
-      "log_loss": 0.6011,
-      "brier": 0.2068
+      "accuracy": 0.6767,
+      "log_loss": 0.6017,
+      "brier": 0.207
     },
     "market": {
       "accuracy": 0.6604,
@@ -404,65 +404,65 @@
       "brier": 0.2111
     },
     "delta_model_minus_market": {
-      "accuracy": 0.0203,
-      "log_loss": -0.0088,
-      "brier": -0.0043
+      "accuracy": 0.0163,
+      "log_loss": -0.0082,
+      "brier": -0.0041
     },
     "calibration": {
       "model": [
         {
           "bin": "[0.0, 0.1)",
           "count": 3,
-          "mean_pred": 0.0741,
+          "mean_pred": 0.0811,
           "empirical_rate": 0.0
         },
         {
           "bin": "[0.1, 0.2)",
-          "count": 111,
-          "mean_pred": 0.1622,
-          "empirical_rate": 0.0631
+          "count": 108,
+          "mean_pred": 0.1641,
+          "empirical_rate": 0.0556
         },
         {
           "bin": "[0.2, 0.3)",
-          "count": 330,
-          "mean_pred": 0.2558,
-          "empirical_rate": 0.1606
+          "count": 329,
+          "mean_pred": 0.2574,
+          "empirical_rate": 0.1672
         },
         {
           "bin": "[0.3, 0.4)",
-          "count": 569,
-          "mean_pred": 0.3537,
-          "empirical_rate": 0.2988
+          "count": 567,
+          "mean_pred": 0.3543,
+          "empirical_rate": 0.2963
         },
         {
           "bin": "[0.4, 0.5)",
-          "count": 713,
-          "mean_pred": 0.452,
-          "empirical_rate": 0.4404
+          "count": 714,
+          "mean_pred": 0.4513,
+          "empirical_rate": 0.4468
         },
         {
           "bin": "[0.5, 0.6)",
-          "count": 697,
-          "mean_pred": 0.5509,
-          "empirical_rate": 0.5696
+          "count": 713,
+          "mean_pred": 0.5503,
+          "empirical_rate": 0.568
         },
         {
           "bin": "[0.6, 0.7)",
-          "count": 581,
-          "mean_pred": 0.6458,
-          "empirical_rate": 0.7091
+          "count": 591,
+          "mean_pred": 0.6468,
+          "empirical_rate": 0.7073
         },
         {
           "bin": "[0.7, 0.8)",
-          "count": 276,
-          "mean_pred": 0.7393,
-          "empirical_rate": 0.8478
+          "count": 257,
+          "mean_pred": 0.7399,
+          "empirical_rate": 0.8521
         },
         {
           "bin": "[0.8, 0.9)",
-          "count": 30,
-          "mean_pred": 0.8265,
-          "empirical_rate": 0.9333
+          "count": 28,
+          "mean_pred": 0.8251,
+          "empirical_rate": 0.8929
         },
         {
           "bin": "[0.9, 1.0)",
@@ -537,44 +537,44 @@
     "roi": {
       "0.00": {
         "favorite_edge_on_a": {
-          "n_bets": 1509,
-          "staked": 1509.0,
-          "net": 101.751,
-          "roi_pct": 6.743
+          "n_bets": 1522,
+          "staked": 1522.0,
+          "net": 103.651,
+          "roi_pct": 6.81
         },
         "underdog_edge_on_b": {
-          "n_bets": 1801,
-          "staked": 1801.0,
-          "net": 160.038,
-          "roi_pct": 8.886
+          "n_bets": 1788,
+          "staked": 1788.0,
+          "net": 160.399,
+          "roi_pct": 8.971
         }
       },
       "0.05": {
         "favorite_edge_on_a": {
-          "n_bets": 1004,
-          "staked": 1004.0,
-          "net": 97.441,
-          "roi_pct": 9.705
+          "n_bets": 993,
+          "staked": 993.0,
+          "net": 88.936,
+          "roi_pct": 8.956
         },
         "underdog_edge_on_b": {
-          "n_bets": 1233,
-          "staked": 1233.0,
-          "net": 165.76,
-          "roi_pct": 13.444
+          "n_bets": 1230,
+          "staked": 1230.0,
+          "net": 166.382,
+          "roi_pct": 13.527
         }
       },
       "0.10": {
         "favorite_edge_on_a": {
-          "n_bets": 620,
-          "staked": 620.0,
-          "net": 110.09,
-          "roi_pct": 17.756
+          "n_bets": 622,
+          "staked": 622.0,
+          "net": 105.015,
+          "roi_pct": 16.883
         },
         "underdog_edge_on_b": {
-          "n_bets": 784,
-          "staked": 784.0,
-          "net": 157.0,
-          "roi_pct": 20.026
+          "n_bets": 770,
+          "staked": 770.0,
+          "net": 143.831,
+          "roi_pct": 18.679
         }
       }
     }
@@ -650,11 +650,11 @@
       "model_log_loss_unmatched": 0.6306
     },
     "2025": {
-      "n_walkforward": 935,
+      "n_walkforward": 987,
       "n_odds_matched": 212,
-      "odds_coverage": 0.2267,
+      "odds_coverage": 0.2148,
       "model_log_loss_matched": 0.5866,
-      "model_log_loss_unmatched": 0.6322
+      "model_log_loss_unmatched": 0.6469
     }
   }
 }
