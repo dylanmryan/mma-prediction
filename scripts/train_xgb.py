@@ -56,6 +56,11 @@ import pandas as pd
 
 from mma.evaluate import accuracy, brier_score, log_loss, macro_f1
 from mma.models.xgb import feature_frame, train_binary, train_multiclass
+from mma.staleness import (
+    load_revalidation,
+    revalidation_cover,
+    stale_harness_warning,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
@@ -148,16 +153,6 @@ def refit_metrics(train_through: str, n_train: int, budget: dict, report_path: s
             "source": source + no_equivalent,
         },
     }
-
-
-def stale_harness_warning(train_through: str, harness_features_max_date: str) -> str | None:
-    """Warning text when the refit trains on fights newer than the harness
-    report ever saw, else None."""
-    if pd.Timestamp(train_through) <= pd.Timestamp(harness_features_max_date):
-        return None
-    return (f"WARNING: harness evidence predates this training data (harness "
-            f"features_max_date {harness_features_max_date} < train_through {train_through}); "
-            "re-run scripts/run_walkforward.py to refresh")
 
 
 def resolve_mode(args) -> str:
@@ -282,7 +277,10 @@ def run_refit(features: pd.DataFrame, x: pd.DataFrame, args, models_dir: Path) -
     train = features["date"] <= cutoff
     print(f"refit through {cutoff.date()}: n_train={int(train.sum())} budget={budget} "
           f"seeds={list(SEEDS)}")
-    warning = stale_harness_warning(str(cutoff.date()), harness_max_date)
+    warning = stale_harness_warning(
+        str(cutoff.date()), harness_max_date,
+        revalidation_cover(load_revalidation(ROOT)),
+    )
     if warning:
         print(warning, file=sys.stderr)
 

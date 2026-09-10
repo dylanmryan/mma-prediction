@@ -1225,6 +1225,21 @@ refuses to overwrite it without `--force`.
   `scripts/revalidate_recipe.py --check-staleness`, which is the signal that
   it is worth running the full thing.
 
+  All of them ask that question through one read, `mma.staleness`, and the
+  answer is not the date comparison alone: a *passing* re-validation whose
+  table reaches the training cutoff **is** the missing measurement, so the
+  warning goes quiet even though each member's own harness report still
+  records the older table (it did run on that table; nothing rewrites that).
+  It comes back the moment the table grows past what the re-validation
+  reached, and a re-validation that ran and *failed* never counts as cover —
+  that gap is more actionable, not less, and says so. Before this was
+  centralised the comparison existed five times over, in the three train
+  scripts and two provenance tests, and every copy was still warning about a
+  gap the 2026-09-09 re-validation had already closed. A standing warning
+  nobody can act on is how a real one gets scrolled past, which is why
+  `tests/test_staleness.py` pins the committed tree as covered: when it
+  genuinely runs ahead, the suite says so rather than staying quiet.
+
 ## Interactive app
 
 `app.py` is a Streamlit front end over the committed **blend**: pick two
