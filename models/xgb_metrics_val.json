@@ -1,7 +1,7 @@
 {
   "mode": "refit_through",
-  "train_through": "2026-08-08",
-  "n_train": 11238,
+  "train_through": "2026-09-05",
+  "n_train": 11290,
   "budget": {
     "winner": 109,
     "method": 73,

@@ -1,9 +1,9 @@
 {
   "mode": "refit_through",
-  "train_through": "2026-08-08",
-  "n_train_fights": 11238,
-  "n_hazard_rows": 25336,
-  "n_decision_rows": 4925,
+  "train_through": "2026-09-05",
+  "n_train_fights": 11290,
+  "n_hazard_rows": 25451,
+  "n_decision_rows": 4941,
   "budget": {
     "hazard": 138,
     "decision": 114
