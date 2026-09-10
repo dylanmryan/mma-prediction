@@ -1,0 +1,1589 @@
+{
+  "computed_on": "2026-09-09",
+  "plan": "docs/superpowers/plans/2026-09-09-market-edge-analysis.md",
+  "describes": "The deployed SP3 hybrid, out of fold, against the same bookmaker's moneyline (per pre-registered slice) and six-way method-prop market.",
+  "odds_dataset": "jerzyszocik/ufc-betting-odds-daily-dataset",
+  "retrospective_warning": "EVERY number here is retrospective. These fights have been reused across five experiments (SP1, SP2, SP2.1, SP2.2, SP3), the slice list was pre-registered but the fights were not fresh, and no result here has been confirmed prospectively. Prospective confirmation on fights nobody has looked at is required before any of this means anything. Nothing here is a betting strategy: no bankroll management, no line shopping, no closing-line timing, no transaction costs, no limits.",
+  "guards": {
+    "out_of_fold": "Every model probability comes from a walk-forward fold model fitted on fights strictly before the fold's inner-validation year. The deployed refit model's own predictions on these fights are in-sample and are used nowhere here.",
+    "preregistration": "The eight slices and two markets were fixed in the plan doc and committed before the first number was computed.",
+    "p_values": "Nominal, from a normal approximation to the paired t-test on per-fight log-loss differences, and to be read only alongside multiple_comparisons below.",
+    "brier_scale": "'brier' on the moneyline blocks is the repo's binary Brier; 'brier_multiclass' on the prop blocks is the summed-over-classes form, which is twice the binary one on two classes. Compare them within a block, never across."
+  },
+  "provenance": {
+    "predictions": "models/walkforward/preds/hybrid_e2_cells.json",
+    "predictions_name": "hybrid_e2_cells",
+    "walkforward_report": "models/walkforward/hybrid_e2_cells.json",
+    "n_pooled_walkforward_rows": 4856,
+    "dump_reproduces_report_pooled": {
+      "n": 4856,
+      "winner_log_loss": 0.6459,
+      "accuracy": 0.6199,
+      "brier": 0.2273
+    },
+    "deployed_model_version": "18d1a70777ea",
+    "moneyline_benchmark": "models/market_benchmark_oof.json"
+  },
+  "multiple_comparisons": {
+    "n_preregistered_looks": 10,
+    "family_wise_alpha": 0.05,
+    "bonferroni_alpha": 0.005,
+    "sidak_alpha": 0.005116196891823743,
+    "looks": {
+      "part_a_slices": [
+        "debut",
+        "womens",
+        "five_round",
+        "external_missing",
+        "youth_gap_5",
+        "home_advantage",
+        "title_fight",
+        "short_notice"
+      ],
+      "part_b_markets": [
+        "six_way",
+        "method_three_way"
+      ]
+    },
+    "note": "Ten pre-registered looks. A nominal p of 0.05 across ten independent looks is expected to appear about 40% of the time under a true null, so a slice is only interesting below the Bonferroni threshold -- and even then it is one retrospective look at fights this project has mined five times."
+  },
+  "alignment": {
+    "moneyline": {
+      "n_by_id": 6274,
+      "n_by_name": 0,
+      "n_skipped": 238
+    },
+    "props": {
+      "n_fights_with_all_six_prices": 4867,
+      "n_by_id": 4867,
+      "n_by_name": 0,
+      "n_unoriented": 0,
+      "n_failing_overround_filter": 22,
+      "overround_bounds": [
+        1.0,
+        1.6
+      ],
+      "median_overround": 1.2229,
+      "corner_orientation": "Resolved by scripts/build_odds_benchmark's own id-then-name helpers, the same ones whose moneyline output is validated against known historical favourites in this run."
+    }
+  },
+  "part_a_moneyline_slices": {
+    "all_odds_matched_reference": {
+      "n": 3310,
+      "date_range": [
+        "2018-01-14",
+        "2025-09-06"
+      ],
+      "model": {
+        "log_loss": 0.6463,
+        "accuracy": 0.6211,
+        "brier": 0.2275
+      },
+      "market": {
+        "log_loss": 0.6099,
+        "accuracy": 0.6604,
+        "brier": 0.2111
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.0364,
+        "accuracy": -0.0393,
+        "brier": 0.0164
+      },
+      "paired_log_loss_test": {
+        "n": 3310,
+        "mean_delta": 0.036377,
+        "t_stat": 7.4244,
+        "p_value": 0.0,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 2904,
+          "n_fights_with_a_bet": 2901,
+          "staked": 2904.0,
+          "net": -173.824,
+          "roi_pct": -5.986,
+          "roi_se_pct": 2.34,
+          "roi_95ci_pct": [
+            -10.573,
+            -1.399
+          ],
+          "t_stat": -2.5576,
+          "p_value": 0.01054
+        },
+        "0.05": {
+          "n_bets": 1980,
+          "n_fights_with_a_bet": 1978,
+          "staked": 1980.0,
+          "net": -126.257,
+          "roi_pct": -6.377,
+          "roi_se_pct": 2.956,
+          "roi_95ci_pct": [
+            -12.17,
+            -0.584
+          ],
+          "t_stat": -2.1574,
+          "p_value": 0.030972
+        },
+        "0.10": {
+          "n_bets": 1275,
+          "n_fights_with_a_bet": 1274,
+          "staked": 1275.0,
+          "net": -97.625,
+          "roi_pct": -7.657,
+          "roi_se_pct": 3.813,
+          "roi_95ci_pct": [
+            -15.131,
+            -0.183
+          ],
+          "t_stat": -2.008,
+          "p_value": 0.04464
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 3310,
+          "n_fights_with_a_bet": 3310,
+          "staked": 3310.0,
+          "net": -233.863,
+          "roi_pct": -7.065,
+          "roi_se_pct": 2.126,
+          "roi_95ci_pct": [
+            -11.232,
+            -2.899
+          ],
+          "t_stat": -3.3238,
+          "p_value": 0.000888
+        },
+        "0.05": {
+          "n_bets": 2315,
+          "n_fights_with_a_bet": 2315,
+          "staked": 2315.0,
+          "net": -117.542,
+          "roi_pct": -5.077,
+          "roi_se_pct": 2.653,
+          "roi_95ci_pct": [
+            -10.277,
+            0.123
+          ],
+          "t_stat": -1.9138,
+          "p_value": 0.055648
+        },
+        "0.10": {
+          "n_bets": 1499,
+          "n_fights_with_a_bet": 1499,
+          "staked": 1499.0,
+          "net": -116.593,
+          "roi_pct": -7.778,
+          "roi_se_pct": 3.428,
+          "roi_95ci_pct": [
+            -14.497,
+            -1.059
+          ],
+          "t_stat": -2.269,
+          "p_value": 0.023269
+        }
+      }
+    },
+    "debut": {
+      "n": 384,
+      "date_range": [
+        "2018-01-20",
+        "2025-09-06"
+      ],
+      "model": {
+        "log_loss": 0.6272,
+        "accuracy": 0.6589,
+        "brier": 0.2179
+      },
+      "market": {
+        "log_loss": 0.5464,
+        "accuracy": 0.7292,
+        "brier": 0.1823
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.0808,
+        "accuracy": -0.0703,
+        "brier": 0.0356
+      },
+      "paired_log_loss_test": {
+        "n": 384,
+        "mean_delta": 0.080783,
+        "t_stat": 4.8669,
+        "p_value": 1e-06,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 358,
+          "n_fights_with_a_bet": 357,
+          "staked": 358.0,
+          "net": -63.561,
+          "roi_pct": -17.755,
+          "roi_se_pct": 6.461,
+          "roi_95ci_pct": [
+            -30.418,
+            -5.091
+          ],
+          "t_stat": -2.7479,
+          "p_value": 0.005998
+        },
+        "0.05": {
+          "n_bets": 247,
+          "n_fights_with_a_bet": 247,
+          "staked": 247.0,
+          "net": -51.003,
+          "roi_pct": -20.649,
+          "roi_se_pct": 8.318,
+          "roi_95ci_pct": [
+            -36.952,
+            -4.346
+          ],
+          "t_stat": -2.4824,
+          "p_value": 0.013049
+        },
+        "0.10": {
+          "n_bets": 180,
+          "n_fights_with_a_bet": 180,
+          "staked": 180.0,
+          "net": -49.384,
+          "roi_pct": -27.436,
+          "roi_se_pct": 9.448,
+          "roi_95ci_pct": [
+            -45.954,
+            -8.918
+          ],
+          "t_stat": -2.9039,
+          "p_value": 0.003685
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 384,
+          "n_fights_with_a_bet": 384,
+          "staked": 384.0,
+          "net": -70.598,
+          "roi_pct": -18.385,
+          "roi_se_pct": 6.126,
+          "roi_95ci_pct": [
+            -30.392,
+            -6.378
+          ],
+          "t_stat": -3.0012,
+          "p_value": 0.00269
+        },
+        "0.05": {
+          "n_bets": 293,
+          "n_fights_with_a_bet": 293,
+          "staked": 293.0,
+          "net": -51.154,
+          "roi_pct": -17.459,
+          "roi_se_pct": 7.324,
+          "roi_95ci_pct": [
+            -31.813,
+            -3.104
+          ],
+          "t_stat": -2.3839,
+          "p_value": 0.017132
+        },
+        "0.10": {
+          "n_bets": 203,
+          "n_fights_with_a_bet": 203,
+          "staked": 203.0,
+          "net": -47.134,
+          "roi_pct": -23.219,
+          "roi_se_pct": 9.105,
+          "roi_95ci_pct": [
+            -41.065,
+            -5.373
+          ],
+          "t_stat": -2.55,
+          "p_value": 0.010771
+        }
+      }
+    },
+    "womens": {
+      "n": 541,
+      "date_range": [
+        "2018-01-14",
+        "2025-09-06"
+      ],
+      "model": {
+        "log_loss": 0.6519,
+        "accuracy": 0.61,
+        "brier": 0.2301
+      },
+      "market": {
+        "log_loss": 0.6132,
+        "accuracy": 0.6599,
+        "brier": 0.2125
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.0387,
+        "accuracy": -0.0499,
+        "brier": 0.0176
+      },
+      "paired_log_loss_test": {
+        "n": 541,
+        "mean_delta": 0.038736,
+        "t_stat": 3.4109,
+        "p_value": 0.000648,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 471,
+          "n_fights_with_a_bet": 469,
+          "staked": 471.0,
+          "net": -4.724,
+          "roi_pct": -1.003,
+          "roi_se_pct": 6.33,
+          "roi_95ci_pct": [
+            -13.409,
+            11.403
+          ],
+          "t_stat": -0.1585,
+          "p_value": 0.874099
+        },
+        "0.05": {
+          "n_bets": 332,
+          "n_fights_with_a_bet": 331,
+          "staked": 332.0,
+          "net": -25.989,
+          "roi_pct": -7.828,
+          "roi_se_pct": 7.482,
+          "roi_95ci_pct": [
+            -22.493,
+            6.836
+          ],
+          "t_stat": -1.0463,
+          "p_value": 0.295427
+        },
+        "0.10": {
+          "n_bets": 203,
+          "n_fights_with_a_bet": 202,
+          "staked": 203.0,
+          "net": -15.001,
+          "roi_pct": -7.39,
+          "roi_se_pct": 10.377,
+          "roi_95ci_pct": [
+            -27.729,
+            12.949
+          ],
+          "t_stat": -0.7121,
+          "p_value": 0.476388
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 541,
+          "n_fights_with_a_bet": 541,
+          "staked": 541.0,
+          "net": 2.158,
+          "roi_pct": 0.399,
+          "roi_se_pct": 5.695,
+          "roi_95ci_pct": [
+            -10.764,
+            11.562
+          ],
+          "t_stat": 0.0701,
+          "p_value": 0.944153
+        },
+        "0.05": {
+          "n_bets": 386,
+          "n_fights_with_a_bet": 386,
+          "staked": 386.0,
+          "net": -24.415,
+          "roi_pct": -6.325,
+          "roi_se_pct": 6.72,
+          "roi_95ci_pct": [
+            -19.497,
+            6.846
+          ],
+          "t_stat": -0.9412,
+          "p_value": 0.346593
+        },
+        "0.10": {
+          "n_bets": 252,
+          "n_fights_with_a_bet": 252,
+          "staked": 252.0,
+          "net": -21.964,
+          "roi_pct": -8.716,
+          "roi_se_pct": 8.822,
+          "roi_95ci_pct": [
+            -26.006,
+            8.575
+          ],
+          "t_stat": -0.988,
+          "p_value": 0.323159
+        }
+      }
+    },
+    "five_round": {
+      "n": 344,
+      "date_range": [
+        "2018-01-14",
+        "2025-09-06"
+      ],
+      "model": {
+        "log_loss": 0.6452,
+        "accuracy": 0.6221,
+        "brier": 0.2277
+      },
+      "market": {
+        "log_loss": 0.6372,
+        "accuracy": 0.6192,
+        "brier": 0.2244
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.008,
+        "accuracy": 0.0029,
+        "brier": 0.0033
+      },
+      "paired_log_loss_test": {
+        "n": 344,
+        "mean_delta": 0.007986,
+        "t_stat": 0.561,
+        "p_value": 0.574794,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 299,
+          "n_fights_with_a_bet": 299,
+          "staked": 299.0,
+          "net": 10.0,
+          "roi_pct": 3.344,
+          "roi_se_pct": 7.701,
+          "roi_95ci_pct": [
+            -11.749,
+            18.437
+          ],
+          "t_stat": 0.4343,
+          "p_value": 0.664055
+        },
+        "0.05": {
+          "n_bets": 201,
+          "n_fights_with_a_bet": 201,
+          "staked": 201.0,
+          "net": 29.491,
+          "roi_pct": 14.672,
+          "roi_se_pct": 9.63,
+          "roi_95ci_pct": [
+            -4.202,
+            33.546
+          ],
+          "t_stat": 1.5236,
+          "p_value": 0.127599
+        },
+        "0.10": {
+          "n_bets": 120,
+          "n_fights_with_a_bet": 120,
+          "staked": 120.0,
+          "net": 14.272,
+          "roi_pct": 11.893,
+          "roi_se_pct": 12.9,
+          "roi_95ci_pct": [
+            -13.39,
+            37.177
+          ],
+          "t_stat": 0.922,
+          "p_value": 0.356544
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 344,
+          "n_fights_with_a_bet": 344,
+          "staked": 344.0,
+          "net": 7.131,
+          "roi_pct": 2.073,
+          "roi_se_pct": 6.932,
+          "roi_95ci_pct": [
+            -11.514,
+            15.66
+          ],
+          "t_stat": 0.2991,
+          "p_value": 0.764894
+        },
+        "0.05": {
+          "n_bets": 237,
+          "n_fights_with_a_bet": 237,
+          "staked": 237.0,
+          "net": 17.543,
+          "roi_pct": 7.402,
+          "roi_se_pct": 8.503,
+          "roi_95ci_pct": [
+            -9.265,
+            24.069
+          ],
+          "t_stat": 0.8705,
+          "p_value": 0.384043
+        },
+        "0.10": {
+          "n_bets": 145,
+          "n_fights_with_a_bet": 145,
+          "staked": 145.0,
+          "net": 10.4,
+          "roi_pct": 7.172,
+          "roi_se_pct": 11.262,
+          "roi_95ci_pct": [
+            -14.901,
+            29.246
+          ],
+          "t_stat": 0.6369,
+          "p_value": 0.524209
+        }
+      }
+    },
+    "external_missing": {
+      "n": 54,
+      "date_range": [
+        "2018-01-27",
+        "2025-09-06"
+      ],
+      "model": {
+        "log_loss": 0.6272,
+        "accuracy": 0.6481,
+        "brier": 0.2201
+      },
+      "market": {
+        "log_loss": 0.6511,
+        "accuracy": 0.6111,
+        "brier": 0.2289
+      },
+      "delta_model_minus_market": {
+        "log_loss": -0.0239,
+        "accuracy": 0.037,
+        "brier": -0.0088
+      },
+      "paired_log_loss_test": {
+        "n": 54,
+        "mean_delta": -0.023877,
+        "t_stat": -0.4043,
+        "p_value": 0.686026,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 48,
+          "n_fights_with_a_bet": 48,
+          "staked": 48.0,
+          "net": 10.999,
+          "roi_pct": 22.915,
+          "roi_se_pct": 21.808,
+          "roi_95ci_pct": [
+            -19.828,
+            65.658
+          ],
+          "t_stat": 1.0508,
+          "p_value": 0.293367
+        },
+        "0.05": {
+          "n_bets": 41,
+          "n_fights_with_a_bet": 41,
+          "staked": 41.0,
+          "net": 12.369,
+          "roi_pct": 30.169,
+          "roi_se_pct": 24.618,
+          "roi_95ci_pct": [
+            -18.083,
+            78.42
+          ],
+          "t_stat": 1.2255,
+          "p_value": 0.220401
+        },
+        "0.10": {
+          "n_bets": 30,
+          "n_fights_with_a_bet": 30,
+          "staked": 30.0,
+          "net": 14.38,
+          "roi_pct": 47.933,
+          "roi_se_pct": 31.312,
+          "roi_95ci_pct": [
+            -13.437,
+            109.304
+          ],
+          "t_stat": 1.5309,
+          "p_value": 0.125806
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 54,
+          "n_fights_with_a_bet": 54,
+          "staked": 54.0,
+          "net": 10.775,
+          "roi_pct": 19.954,
+          "roi_se_pct": 19.657,
+          "roi_95ci_pct": [
+            -18.574,
+            58.482
+          ],
+          "t_stat": 1.0151,
+          "p_value": 0.310049
+        },
+        "0.05": {
+          "n_bets": 45,
+          "n_fights_with_a_bet": 45,
+          "staked": 45.0,
+          "net": 11.799,
+          "roi_pct": 26.22,
+          "roi_se_pct": 22.839,
+          "roi_95ci_pct": [
+            -18.543,
+            70.984
+          ],
+          "t_stat": 1.1481,
+          "p_value": 0.25094
+        },
+        "0.10": {
+          "n_bets": 34,
+          "n_fights_with_a_bet": 34,
+          "staked": 34.0,
+          "net": 14.959,
+          "roi_pct": 43.997,
+          "roi_se_pct": 27.962,
+          "roi_95ci_pct": [
+            -10.808,
+            98.803
+          ],
+          "t_stat": 1.5735,
+          "p_value": 0.115611
+        }
+      }
+    },
+    "youth_gap_5": {
+      "n": 1179,
+      "date_range": [
+        "2018-01-14",
+        "2025-09-06"
+      ],
+      "model": {
+        "log_loss": 0.6202,
+        "accuracy": 0.6667,
+        "brier": 0.2151
+      },
+      "market": {
+        "log_loss": 0.5866,
+        "accuracy": 0.704,
+        "brier": 0.2
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.0336,
+        "accuracy": -0.0373,
+        "brier": 0.0151
+      },
+      "paired_log_loss_test": {
+        "n": 1179,
+        "mean_delta": 0.033639,
+        "t_stat": 4.0817,
+        "p_value": 4.5e-05,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 1023,
+          "n_fights_with_a_bet": 1022,
+          "staked": 1023.0,
+          "net": -85.884,
+          "roi_pct": -8.395,
+          "roi_se_pct": 3.924,
+          "roi_95ci_pct": [
+            -16.085,
+            -0.705
+          ],
+          "t_stat": -2.1397,
+          "p_value": 0.032378
+        },
+        "0.05": {
+          "n_bets": 708,
+          "n_fights_with_a_bet": 708,
+          "staked": 708.0,
+          "net": -31.473,
+          "roi_pct": -4.445,
+          "roi_se_pct": 4.933,
+          "roi_95ci_pct": [
+            -14.113,
+            5.223
+          ],
+          "t_stat": -0.9012,
+          "p_value": 0.367495
+        },
+        "0.10": {
+          "n_bets": 440,
+          "n_fights_with_a_bet": 440,
+          "staked": 440.0,
+          "net": -20.744,
+          "roi_pct": -4.715,
+          "roi_se_pct": 6.444,
+          "roi_95ci_pct": [
+            -17.344,
+            7.915
+          ],
+          "t_stat": -0.7317,
+          "p_value": 0.46437
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 1179,
+          "n_fights_with_a_bet": 1179,
+          "staked": 1179.0,
+          "net": -115.422,
+          "roi_pct": -9.79,
+          "roi_se_pct": 3.52,
+          "roi_95ci_pct": [
+            -16.689,
+            -2.89
+          ],
+          "t_stat": -2.7811,
+          "p_value": 0.005417
+        },
+        "0.05": {
+          "n_bets": 816,
+          "n_fights_with_a_bet": 816,
+          "staked": 816.0,
+          "net": -38.889,
+          "roi_pct": -4.766,
+          "roi_se_pct": 4.463,
+          "roi_95ci_pct": [
+            -13.513,
+            3.982
+          ],
+          "t_stat": -1.0678,
+          "p_value": 0.285589
+        },
+        "0.10": {
+          "n_bets": 529,
+          "n_fights_with_a_bet": 529,
+          "staked": 529.0,
+          "net": -29.33,
+          "roi_pct": -5.544,
+          "roi_se_pct": 5.698,
+          "roi_95ci_pct": [
+            -16.713,
+            5.624
+          ],
+          "t_stat": -0.973,
+          "p_value": 0.330568
+        }
+      }
+    },
+    "home_advantage": {
+      "n": 1453,
+      "date_range": [
+        "2018-01-14",
+        "2025-09-06"
+      ],
+      "model": {
+        "log_loss": 0.6452,
+        "accuracy": 0.6277,
+        "brier": 0.2271
+      },
+      "market": {
+        "log_loss": 0.6125,
+        "accuracy": 0.6524,
+        "brier": 0.2124
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.0327,
+        "accuracy": -0.0247,
+        "brier": 0.0147
+      },
+      "paired_log_loss_test": {
+        "n": 1453,
+        "mean_delta": 0.032711,
+        "t_stat": 4.5071,
+        "p_value": 7e-06,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 1263,
+          "n_fights_with_a_bet": 1262,
+          "staked": 1263.0,
+          "net": -80.576,
+          "roi_pct": -6.38,
+          "roi_se_pct": 3.614,
+          "roi_95ci_pct": [
+            -13.464,
+            0.704
+          ],
+          "t_stat": -1.7651,
+          "p_value": 0.077547
+        },
+        "0.05": {
+          "n_bets": 861,
+          "n_fights_with_a_bet": 860,
+          "staked": 861.0,
+          "net": -33.637,
+          "roi_pct": -3.907,
+          "roi_se_pct": 4.625,
+          "roi_95ci_pct": [
+            -12.972,
+            5.159
+          ],
+          "t_stat": -0.8447,
+          "p_value": 0.398306
+        },
+        "0.10": {
+          "n_bets": 563,
+          "n_fights_with_a_bet": 563,
+          "staked": 563.0,
+          "net": -15.689,
+          "roi_pct": -2.787,
+          "roi_se_pct": 6.003,
+          "roi_95ci_pct": [
+            -14.553,
+            8.98
+          ],
+          "t_stat": -0.4642,
+          "p_value": 0.64251
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 1453,
+          "n_fights_with_a_bet": 1453,
+          "staked": 1453.0,
+          "net": -116.912,
+          "roi_pct": -8.046,
+          "roi_se_pct": 3.254,
+          "roi_95ci_pct": [
+            -14.425,
+            -1.668
+          ],
+          "t_stat": -2.4724,
+          "p_value": 0.013421
+        },
+        "0.05": {
+          "n_bets": 1006,
+          "n_fights_with_a_bet": 1006,
+          "staked": 1006.0,
+          "net": -39.53,
+          "roi_pct": -3.929,
+          "roi_se_pct": 4.115,
+          "roi_95ci_pct": [
+            -11.994,
+            4.135
+          ],
+          "t_stat": -0.955,
+          "p_value": 0.339571
+        },
+        "0.10": {
+          "n_bets": 656,
+          "n_fights_with_a_bet": 656,
+          "staked": 656.0,
+          "net": -34.84,
+          "roi_pct": -5.311,
+          "roi_se_pct": 5.354,
+          "roi_95ci_pct": [
+            -15.805,
+            5.183
+          ],
+          "t_stat": -0.9919,
+          "p_value": 0.321223
+        }
+      }
+    },
+    "title_fight": {
+      "n": 138,
+      "date_range": [
+        "2018-01-20",
+        "2025-08-16"
+      ],
+      "model": {
+        "log_loss": 0.6173,
+        "accuracy": 0.6594,
+        "brier": 0.2147
+      },
+      "market": {
+        "log_loss": 0.6054,
+        "accuracy": 0.6594,
+        "brier": 0.2088
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.0119,
+        "accuracy": 0.0,
+        "brier": 0.0059
+      },
+      "paired_log_loss_test": {
+        "n": 138,
+        "mean_delta": 0.011841,
+        "t_stat": 0.5683,
+        "p_value": 0.569848,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 122,
+          "n_fights_with_a_bet": 122,
+          "staked": 122.0,
+          "net": 8.366,
+          "roi_pct": 6.857,
+          "roi_se_pct": 13.292,
+          "roi_95ci_pct": [
+            -19.196,
+            32.91
+          ],
+          "t_stat": 0.5159,
+          "p_value": 0.605937
+        },
+        "0.05": {
+          "n_bets": 72,
+          "n_fights_with_a_bet": 72,
+          "staked": 72.0,
+          "net": 7.687,
+          "roi_pct": 10.677,
+          "roi_se_pct": 17.733,
+          "roi_95ci_pct": [
+            -24.081,
+            45.434
+          ],
+          "t_stat": 0.6021,
+          "p_value": 0.547133
+        },
+        "0.10": {
+          "n_bets": 40,
+          "n_fights_with_a_bet": 40,
+          "staked": 40.0,
+          "net": 1.265,
+          "roi_pct": 3.161,
+          "roi_se_pct": 25.647,
+          "roi_95ci_pct": [
+            -47.106,
+            53.429
+          ],
+          "t_stat": 0.1233,
+          "p_value": 0.901899
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 138,
+          "n_fights_with_a_bet": 138,
+          "staked": 138.0,
+          "net": 13.797,
+          "roi_pct": 9.998,
+          "roi_se_pct": 12.162,
+          "roi_95ci_pct": [
+            -13.839,
+            33.835
+          ],
+          "t_stat": 0.8221,
+          "p_value": 0.411015
+        },
+        "0.05": {
+          "n_bets": 91,
+          "n_fights_with_a_bet": 91,
+          "staked": 91.0,
+          "net": 5.408,
+          "roi_pct": 5.942,
+          "roi_se_pct": 14.543,
+          "roi_95ci_pct": [
+            -22.561,
+            34.446
+          ],
+          "t_stat": 0.4086,
+          "p_value": 0.682824
+        },
+        "0.10": {
+          "n_bets": 49,
+          "n_fights_with_a_bet": 49,
+          "staked": 49.0,
+          "net": -1.393,
+          "roi_pct": -2.844,
+          "roi_se_pct": 21.908,
+          "roi_95ci_pct": [
+            -45.783,
+            40.095
+          ],
+          "t_stat": -0.1298,
+          "p_value": 0.896719
+        }
+      }
+    },
+    "short_notice": {
+      "n": 300,
+      "date_range": [
+        "2018-01-20",
+        "2024-12-07"
+      ],
+      "model": {
+        "log_loss": 0.6315,
+        "accuracy": 0.6467,
+        "brier": 0.2189
+      },
+      "market": {
+        "log_loss": 0.549,
+        "accuracy": 0.7233,
+        "brier": 0.1839
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.0825,
+        "accuracy": -0.0766,
+        "brier": 0.035
+      },
+      "paired_log_loss_test": {
+        "n": 300,
+        "mean_delta": 0.082452,
+        "t_stat": 4.7801,
+        "p_value": 2e-06,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 274,
+          "n_fights_with_a_bet": 272,
+          "staked": 274.0,
+          "net": -71.432,
+          "roi_pct": -26.07,
+          "roi_se_pct": 6.808,
+          "roi_95ci_pct": [
+            -39.414,
+            -12.726
+          ],
+          "t_stat": -3.8292,
+          "p_value": 0.000129
+        },
+        "0.05": {
+          "n_bets": 188,
+          "n_fights_with_a_bet": 187,
+          "staked": 188.0,
+          "net": -49.013,
+          "roi_pct": -26.071,
+          "roi_se_pct": 8.72,
+          "roi_95ci_pct": [
+            -43.161,
+            -8.981
+          ],
+          "t_stat": -2.9899,
+          "p_value": 0.00279
+        },
+        "0.10": {
+          "n_bets": 118,
+          "n_fights_with_a_bet": 118,
+          "staked": 118.0,
+          "net": -38.015,
+          "roi_pct": -32.216,
+          "roi_se_pct": 10.786,
+          "roi_95ci_pct": [
+            -53.357,
+            -11.075
+          ],
+          "t_stat": -2.9867,
+          "p_value": 0.00282
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 300,
+          "n_fights_with_a_bet": 300,
+          "staked": 300.0,
+          "net": -80.399,
+          "roi_pct": -26.8,
+          "roi_se_pct": 6.365,
+          "roi_95ci_pct": [
+            -39.276,
+            -14.324
+          ],
+          "t_stat": -4.2103,
+          "p_value": 2.6e-05
+        },
+        "0.05": {
+          "n_bets": 222,
+          "n_fights_with_a_bet": 222,
+          "staked": 222.0,
+          "net": -54.599,
+          "roi_pct": -24.594,
+          "roi_se_pct": 7.727,
+          "roi_95ci_pct": [
+            -39.74,
+            -9.448
+          ],
+          "t_stat": -3.1827,
+          "p_value": 0.001459
+        },
+        "0.10": {
+          "n_bets": 141,
+          "n_fights_with_a_bet": 141,
+          "staked": 141.0,
+          "net": -39.182,
+          "roi_pct": -27.788,
+          "roi_se_pct": 10.231,
+          "roi_95ci_pct": [
+            -47.84,
+            -7.737
+          ],
+          "t_stat": -2.7162,
+          "p_value": 0.006603
+        }
+      }
+    }
+  },
+  "part_b_method_props": {
+    "n_out_of_fold_fights_with_prop_prices": 2911,
+    "n_scored": 2890,
+    "n_dropped_unscorable_method": 8,
+    "n_dropped_overround_filter": 13,
+    "collapse_verification": {
+      "six_way_rows_sum_to_one": true,
+      "max_abs_winner_marginal_error": 2.220446049250313e-16,
+      "max_abs_method_marginal_error": 3.3306690738754696e-16,
+      "note": "The collapse must be the SAME reading of the cells that mma.joint.marginals_from_cells already reports, or the six-way comparison is scoring a distribution no other artifact vouches for."
+    },
+    "six_way": {
+      "n": 2890,
+      "date_range": [
+        "2018-01-14",
+        "2024-12-07"
+      ],
+      "model": {
+        "log_loss": 1.6254,
+        "accuracy": 0.3263,
+        "brier_multiclass": 0.777
+      },
+      "market": {
+        "log_loss": 1.5317,
+        "accuracy": 0.3737,
+        "brier_multiclass": 0.7418
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.0937,
+        "accuracy": -0.0474,
+        "brier_multiclass": 0.0352
+      },
+      "paired_log_loss_test": {
+        "n": 2890,
+        "mean_delta": 0.093671,
+        "t_stat": 10.5726,
+        "p_value": 0.0,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 6230,
+          "n_fights_with_a_bet": 2813,
+          "staked": 6230.0,
+          "net": -1374.84,
+          "roi_pct": -22.068,
+          "roi_se_pct": 3.227,
+          "roi_95ci_pct": [
+            -28.393,
+            -15.743
+          ],
+          "t_stat": -6.8387,
+          "p_value": 0.0
+        },
+        "0.05": {
+          "n_bets": 2370,
+          "n_fights_with_a_bet": 1831,
+          "staked": 2370.0,
+          "net": -281.85,
+          "roi_pct": -11.892,
+          "roi_se_pct": 5.085,
+          "roi_95ci_pct": [
+            -21.859,
+            -1.925
+          ],
+          "t_stat": -2.3386,
+          "p_value": 0.019354
+        },
+        "0.10": {
+          "n_bets": 842,
+          "n_fights_with_a_bet": 779,
+          "staked": 842.0,
+          "net": 23.33,
+          "roi_pct": 2.771,
+          "roi_se_pct": 8.782,
+          "roi_95ci_pct": [
+            -14.442,
+            19.983
+          ],
+          "t_stat": 0.3155,
+          "p_value": 0.752375
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 9102,
+          "n_fights_with_a_bet": 2890,
+          "staked": 9102.0,
+          "net": -2041.36,
+          "roi_pct": -22.428,
+          "roi_se_pct": 2.527,
+          "roi_95ci_pct": [
+            -27.381,
+            -17.474
+          ],
+          "t_stat": -8.8742,
+          "p_value": 0.0
+        },
+        "0.05": {
+          "n_bets": 4010,
+          "n_fights_with_a_bet": 2560,
+          "staked": 4010.0,
+          "net": -544.945,
+          "roi_pct": -13.59,
+          "roi_se_pct": 3.67,
+          "roi_95ci_pct": [
+            -20.782,
+            -6.397
+          ],
+          "t_stat": -3.7033,
+          "p_value": 0.000213
+        },
+        "0.10": {
+          "n_bets": 1586,
+          "n_fights_with_a_bet": 1396,
+          "staked": 1586.0,
+          "net": -124.204,
+          "roi_pct": -7.831,
+          "roi_se_pct": 5.719,
+          "roi_95ci_pct": [
+            -19.041,
+            3.378
+          ],
+          "t_stat": -1.3693,
+          "p_value": 0.170901
+        }
+      },
+      "per_year": {
+        "2018": {
+          "n": 427,
+          "model_log_loss": 1.6394,
+          "market_log_loss": 1.5131,
+          "delta": 0.1262
+        },
+        "2019": {
+          "n": 459,
+          "model_log_loss": 1.6035,
+          "market_log_loss": 1.5105,
+          "delta": 0.093
+        },
+        "2020": {
+          "n": 407,
+          "model_log_loss": 1.6245,
+          "market_log_loss": 1.5268,
+          "delta": 0.0977
+        },
+        "2021": {
+          "n": 454,
+          "model_log_loss": 1.6587,
+          "market_log_loss": 1.5636,
+          "delta": 0.0951
+        },
+        "2022": {
+          "n": 434,
+          "model_log_loss": 1.6274,
+          "market_log_loss": 1.5319,
+          "delta": 0.0955
+        },
+        "2023": {
+          "n": 383,
+          "model_log_loss": 1.6605,
+          "market_log_loss": 1.5775,
+          "delta": 0.083
+        },
+        "2024": {
+          "n": 326,
+          "model_log_loss": 1.5484,
+          "market_log_loss": 1.4933,
+          "delta": 0.0551
+        }
+      }
+    },
+    "method_three_way": {
+      "n": 2890,
+      "date_range": [
+        "2018-01-14",
+        "2024-12-07"
+      ],
+      "model": {
+        "log_loss": 0.9959,
+        "accuracy": 0.5125,
+        "brier_multiclass": 0.599
+      },
+      "market": {
+        "log_loss": 0.9533,
+        "accuracy": 0.5415,
+        "brier_multiclass": 0.5711
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.0426,
+        "accuracy": -0.029,
+        "brier_multiclass": 0.0279
+      },
+      "paired_log_loss_test": {
+        "n": 2890,
+        "mean_delta": 0.042556,
+        "t_stat": 6.8307,
+        "p_value": 0.0,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "per_year": {
+        "2018": {
+          "n": 427,
+          "model_log_loss": 1.0062,
+          "market_log_loss": 0.9519,
+          "delta": 0.0543
+        },
+        "2019": {
+          "n": 459,
+          "model_log_loss": 0.9548,
+          "market_log_loss": 0.9179,
+          "delta": 0.0369
+        },
+        "2020": {
+          "n": 407,
+          "model_log_loss": 1.0037,
+          "market_log_loss": 0.952,
+          "delta": 0.0517
+        },
+        "2021": {
+          "n": 454,
+          "model_log_loss": 1.006,
+          "market_log_loss": 0.9644,
+          "delta": 0.0416
+        },
+        "2022": {
+          "n": 434,
+          "model_log_loss": 0.9989,
+          "market_log_loss": 0.9588,
+          "delta": 0.0401
+        },
+        "2023": {
+          "n": 383,
+          "model_log_loss": 1.0535,
+          "market_log_loss": 0.9835,
+          "delta": 0.07
+        },
+        "2024": {
+          "n": 326,
+          "model_log_loss": 0.9449,
+          "market_log_loss": 0.9488,
+          "delta": -0.004
+        }
+      }
+    },
+    "six_way_without_the_overround_filter_sensitivity": {
+      "n": 2903,
+      "date_range": [
+        "2018-01-14",
+        "2024-12-07"
+      ],
+      "model": {
+        "log_loss": 1.6251,
+        "accuracy": 0.3259,
+        "brier_multiclass": 0.777
+      },
+      "market": {
+        "log_loss": 1.5328,
+        "accuracy": 0.3734,
+        "brier_multiclass": 0.7423
+      },
+      "delta_model_minus_market": {
+        "log_loss": 0.0923,
+        "accuracy": -0.0475,
+        "brier_multiclass": 0.0347
+      },
+      "paired_log_loss_test": {
+        "n": 2903,
+        "mean_delta": 0.092312,
+        "t_stat": 10.443,
+        "p_value": 0.0,
+        "p_value_method": "normal approximation to the paired t-test"
+      },
+      "roi_vs_offered_price": {
+        "0.00": {
+          "n_bets": 6276,
+          "n_fights_with_a_bet": 2826,
+          "staked": 6276.0,
+          "net": -1326.39,
+          "roi_pct": -21.134,
+          "roi_se_pct": 3.258,
+          "roi_95ci_pct": [
+            -27.519,
+            -14.749
+          ],
+          "t_stat": -6.4876,
+          "p_value": 0.0
+        },
+        "0.05": {
+          "n_bets": 2397,
+          "n_fights_with_a_bet": 1844,
+          "staked": 2397.0,
+          "net": -231.9,
+          "roi_pct": -9.675,
+          "roi_se_pct": 5.235,
+          "roi_95ci_pct": [
+            -19.936,
+            0.587
+          ],
+          "t_stat": -1.8479,
+          "p_value": 0.064614
+        },
+        "0.10": {
+          "n_bets": 854,
+          "n_fights_with_a_bet": 788,
+          "staked": 854.0,
+          "net": 58.93,
+          "roi_pct": 6.9,
+          "roi_se_pct": 9.372,
+          "roi_95ci_pct": [
+            -11.468,
+            25.269
+          ],
+          "t_stat": 0.7363,
+          "p_value": 0.461545
+        }
+      },
+      "roi_vs_devigged_price": {
+        "0.00": {
+          "n_bets": 9145,
+          "n_fights_with_a_bet": 2903,
+          "staked": 9145.0,
+          "net": -1986.41,
+          "roi_pct": -21.721,
+          "roi_se_pct": 2.548,
+          "roi_95ci_pct": [
+            -26.716,
+            -16.727
+          ],
+          "t_stat": -8.5243,
+          "p_value": 0.0
+        },
+        "0.05": {
+          "n_bets": 4028,
+          "n_fights_with_a_bet": 2573,
+          "staked": 4028.0,
+          "net": -510.745,
+          "roi_pct": -12.68,
+          "roi_se_pct": 3.734,
+          "roi_95ci_pct": [
+            -19.999,
+            -5.361
+          ],
+          "t_stat": -3.3958,
+          "p_value": 0.000684
+        },
+        "0.10": {
+          "n_bets": 1597,
+          "n_fights_with_a_bet": 1406,
+          "staked": 1597.0,
+          "net": -103.054,
+          "roi_pct": -6.453,
+          "roi_se_pct": 5.928,
+          "roi_95ci_pct": [
+            -18.072,
+            5.166
+          ],
+          "t_stat": -1.0886,
+          "p_value": 0.276347
+        }
+      }
+    },
+    "hand_verified_examples": [
+      {
+        "fight_id": "73f451d894a1d4ca",
+        "date": "2024-11-09",
+        "corner_a": "Carlos Prates",
+        "corner_b": "Neil Magny",
+        "realised_outcome": "a_ko_tko",
+        "realised_in_words": "Carlos Prates won by ko_tko",
+        "offered_decimals": {
+          "a_ko_tko": 1.25,
+          "a_submission": 9.0,
+          "a_decision": 9.0,
+          "b_ko_tko": 21.0,
+          "b_submission": 17.0,
+          "b_decision": 12.0
+        },
+        "prop_overround": 1.212,
+        "market_six_way_devigged": {
+          "a_ko_tko": 0.6601,
+          "a_submission": 0.0917,
+          "a_decision": 0.0917,
+          "b_ko_tko": 0.0393,
+          "b_submission": 0.0485,
+          "b_decision": 0.0688
+        },
+        "model_six_way": {
+          "a_ko_tko": 0.3336,
+          "a_submission": 0.0797,
+          "a_decision": 0.121,
+          "b_ko_tko": 0.1622,
+          "b_submission": 0.0858,
+          "b_decision": 0.2177
+        }
+      },
+      {
+        "fight_id": "2671de30a1736f51",
+        "date": "2019-08-17",
+        "corner_a": "Khama Worthy",
+        "corner_b": "Devonte Smith",
+        "realised_outcome": "a_ko_tko",
+        "realised_in_words": "Khama Worthy won by ko_tko",
+        "offered_decimals": {
+          "a_ko_tko": 12.0,
+          "a_submission": 19.0,
+          "a_decision": 12.5,
+          "b_ko_tko": 1.273972602739726,
+          "b_submission": 15.25,
+          "b_decision": 6.85
+        },
+        "prop_overround": 1.2125,
+        "market_six_way_devigged": {
+          "a_ko_tko": 0.0687,
+          "a_submission": 0.0434,
+          "a_decision": 0.066,
+          "b_ko_tko": 0.6474,
+          "b_submission": 0.0541,
+          "b_decision": 0.1204
+        },
+        "model_six_way": {
+          "a_ko_tko": 0.0165,
+          "a_submission": 0.0217,
+          "a_decision": 0.0263,
+          "b_ko_tko": 0.502,
+          "b_submission": 0.1606,
+          "b_decision": 0.2729
+        }
+      },
+      {
+        "fight_id": "cbdf29f36b343f6f",
+        "date": "2024-03-09",
+        "corner_a": "Josh Parisian",
+        "corner_b": "Robelis Despaigne",
+        "realised_outcome": "b_ko_tko",
+        "realised_in_words": "Robelis Despaigne won by ko_tko",
+        "offered_decimals": {
+          "a_ko_tko": 6.5,
+          "a_submission": 13.0,
+          "a_decision": 13.0,
+          "b_ko_tko": 1.3333333333333333,
+          "b_submission": 11.0,
+          "b_decision": 17.0
+        },
+        "prop_overround": 1.2074,
+        "market_six_way_devigged": {
+          "a_ko_tko": 0.1274,
+          "a_submission": 0.0637,
+          "a_decision": 0.0637,
+          "b_ko_tko": 0.6212,
+          "b_submission": 0.0753,
+          "b_decision": 0.0487
+        },
+        "model_six_way": {
+          "a_ko_tko": 0.3022,
+          "a_submission": 0.107,
+          "a_decision": 0.1753,
+          "b_ko_tko": 0.198,
+          "b_submission": 0.0749,
+          "b_decision": 0.1426
+        }
+      }
+    ]
+  }
+}
