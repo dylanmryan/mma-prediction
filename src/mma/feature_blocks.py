@@ -279,6 +279,17 @@ register(Block(
 #
 # `nationality` and `gym_id` are not features (high-cardinality strings); the
 # only thing derived from them is the fight-level `same_country` flag.
+#
+# DECAY RE-CHECK (2026-09-09): the block STAYS. Its source is static and its
+# coverage is decaying fast -- `external_missing` is 0.510 over the trailing
+# twelve months, against 0.138 in 2024 -- and SP2's own notes said the gain was
+# entirely historical, so the columns were re-judged under a pre-registered
+# removal rule (docs/superpowers/plans/2026-09-09-external-decay-decision.md).
+# Dropping the six differentials from the DEPLOYED hybrid costs +0.0059 pooled
+# joint log-loss and +0.0041 on the 2024-2025 folds, with every fold worse, and
+# the same at fresh seeds. SP2's "entirely historical" was measured on torch
+# alone; the deployed blend's XGBoost member is where these blocks live (SP2.2).
+# The weekly coverage alarm is scripts/check_snapshot_coverage.py.
 EXTERNAL_BLOCK = "external"
 
 register(Block(
