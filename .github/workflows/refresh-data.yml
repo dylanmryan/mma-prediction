@@ -156,11 +156,25 @@ jobs:
           OMP_NUM_THREADS: "1"
         run: python scripts/grade_predictions.py
 
-      - name: Check walk-forward retrain status (report only)
+      # Replaces the retired promotion gate's dry run (scripts/roll_window.py).
+      # There is no promotion to gate: this Action refits every member on all
+      # data whenever new fights arrive, so the fresh fit IS the incumbent.
+      # What CAN go wrong silently is that the recipe's justification ages --
+      # every walk-forward report behind it was computed on an older table,
+      # and the models keep training past it.
+      #
+      # This step reads dates and fits nothing (a second or two). The full
+      # re-validation (`scripts/revalidate_recipe.py` with no flags) re-runs
+      # six harness runs, takes several minutes on top of an already 45-minute
+      # job, and WRITES A DECISION ARTIFACT -- so running it weekly would both
+      # cost every run a re-measurement almost nothing has changed, and turn a
+      # human's call about the deployed recipe into a side effect of a cron
+      # job. It stays human-triggered; this step is the trigger's signal.
+      - name: Check how stale the deployed recipe's evidence is (report only)
         if: always()
         env:
           OMP_NUM_THREADS: "1"
-        run: python scripts/roll_window.py
+        run: python scripts/revalidate_recipe.py --check-staleness
 
       - name: Commit and push predictions
         if: always()

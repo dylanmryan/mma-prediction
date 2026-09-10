@@ -23,14 +23,14 @@ cannot express -- the hazard rows expand one fight into one row per round and
 carry a ``round_no`` column, and both frames need ``fights.parquet`` for
 ``finish_round``, which the feature table only carries bucketed as '45'. Its
 ``--budget`` also validates exactly the three heads it owns, its split mode
-(which ``scripts/roll_window.py`` drives) has no simulator equivalent, and its
-metrics file is the one the README reads. Folding all of that into one script
+has no simulator equivalent, and its metrics file is the one the README reads. Folding all of that into one script
 would make both harder to read than keeping the simulator's training beside
 the simulator's own modules.
 
 **Refit-through only.** The simulator has no split-protocol form: it was never
-measured in one, and ``scripts/roll_window.py``'s split gate is explicitly not
-a promotion gate for the served scorer. So the only mode here is the deployed
+measured in one, and the split-slice gate that once wanted one
+(``scripts/roll_window.py``, retired) was explicitly not a promotion gate for
+the served scorer. So the only mode here is the deployed
 recipe -- train on every decisive fight dated ``<= --refit-through`` for a
 fixed per-member round budget, with no validation set and no early stopping.
 
