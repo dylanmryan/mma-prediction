@@ -382,6 +382,46 @@ def test_predict_event_predicts_every_fight_on_card():
     assert results[1]["skipped"] is True
 
 
+def test_predict_event_degrades_one_raising_fight_to_a_skip():
+    """One fight that blows up must not take the rest of the card with it.
+
+    `scripts/predict_upcoming.py` has no try/except anywhere between here and
+    `main`, and the workflow's commit step runs `if: always()`, so an
+    exception raised for one matchup would drop every remaining fight AND
+    every later event on the card list -- and then commit the truncated week
+    as though it were complete. A failing scorer is recorded as a skip with a
+    reason, which is the same stub an unmatched name produces and which a
+    later run is allowed to re-attempt.
+    """
+    class _Exploding(_FakeEnsemble):
+        def predict(self, features):
+            if float(features["elo_diff"].iloc[0]) < 0:
+                raise RuntimeError("boom")
+            return super().predict(features)
+
+    event = {"event_name": "UFC Fight Night: Test", "date": "2026-07-18"}
+    wiki_fights = [
+        {"fighter_a_name": "Fighter A", "fighter_b_name": "Fighter B",
+         "weight_class": "Lightweight", "title_fight": False, "main_event": True},
+        {"fighter_a_name": "Fighter A", "fighter_b_name": "Unknown Person",
+         "weight_class": "Lightweight", "title_fight": False, "main_event": False},
+    ]
+    results = predict_event(
+        event, wiki_fights, _name_index(), _snapshots(), _fighters_bio(), _Exploding()
+    )
+    assert len(results) == 2
+    # the raising fight degrades, and carries the same fields a skip carries
+    assert results[0]["skipped"] is True
+    assert "RuntimeError" in results[0]["reason"] and "boom" in results[0]["reason"]
+    assert results[0]["fighter_a_name"] == "Fighter A"
+    assert results[0]["fighter_b_name"] == "Fighter B"
+    assert results[0]["weight_class"] == "Lightweight"
+    assert "p_a_wins" not in results[0]
+    # and the rest of the card is still predicted
+    assert results[1]["skipped"] is True
+    assert "Unknown Person" in results[1]["reason"]
+
+
 # --- idempotent writing ---------------------------------------------------
 
 

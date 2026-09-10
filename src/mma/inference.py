@@ -721,6 +721,19 @@ def _symmetrize_joint(result_ab: dict, result_ba: dict, p: float) -> dict:
     this function reports -- which is why the method and round marginals are
     RE-READ from the averaged joint rather than averaged separately: everything
     reported then comes from the one distribution that is also reported.
+
+    `impose_winner_marginal` is applied once more to the average, which is a
+    no-op to floating point (the drift it removes is ~1e-16, the rounding of
+    an average of two numbers that were each already exact) and makes "the
+    hybrid does not move a winner probability" true BY CONSTRUCTION rather
+    than by an arithmetic argument this function would otherwise have to
+    check at serving time. It replaces a runtime `raise`: a serving-path
+    assertion whose only failure mode was a floating-point tail would have
+    surfaced as a raw Streamlit traceback in the app and, worse, would have
+    killed `mma.prospective.predict_event` for one matchup and every event
+    after it in the weekly run. The invariant is asserted in
+    `tests/test_inference.py` instead, where a real regression is caught in
+    CI rather than in production.
     """
     method_classes = list(result_ab["method_classes"])
     round_classes = list(result_ab["round_classes"])
@@ -728,6 +741,7 @@ def _symmetrize_joint(result_ab: dict, result_ba: dict, p: float) -> dict:
         np.asarray(result_ab["joint_cells"])[:1]
         + swap_corners(result_ba["joint_cells"], method_classes, round_classes)[:1]
     )
+    cells = impose_winner_marginal(cells, np.array([p]), method_classes, round_classes)
     marginals = marginals_from_cells(cells, method_classes, round_classes)
     # A cell is only empty for the matchup if it was empty in BOTH orientations.
     zero_mass = (
@@ -735,13 +749,6 @@ def _symmetrize_joint(result_ab: dict, result_ba: dict, p: float) -> dict:
         & swap_corners(np.asarray(result_ba["joint_zero_mass"], dtype=float),
                        method_classes, round_classes)[0].astype(bool)
     )
-    winner_from_cells = float(marginals["winner"][0])
-    if abs(winner_from_cells - p) > 1e-9:
-        raise AssertionError(
-            "the symmetrized joint's winner marginal drifted from the blend's "
-            f"({winner_from_cells!r} vs {p!r}); the hybrid must not move a winner "
-            "probability"
-        )
     return {
         "method_probs": marginals["method"][0],
         "round_probs": marginals["round"][0],

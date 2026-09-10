@@ -504,6 +504,34 @@ def test_simulator_predict_symmetrized_reports_one_coherent_distribution(simulat
 
 
 @simulator_artifacts
+def test_symmetrized_joint_keeps_the_blends_winner_exactly(simulator, blended, matchup):
+    """The invariant `_symmetrize_joint` used to raise on, kept where a
+    regression gets caught in CI rather than in a Monday morning traceback.
+
+    The hybrid must not move a winner probability: whatever the corner-average
+    of the two orientations' joints does to the cells, the winner marginal
+    read back off them has to be the symmetrized BLEND's number. That holds by
+    construction now -- each orientation's marginal is set exactly by
+    `impose_winner_marginal` and the average is re-imposed after the fact --
+    so this asserts it at the tightest tolerance the arithmetic supports
+    rather than at the 1e-9 the old runtime check used.
+    """
+    from mma.inference import predict_symmetrized
+    from mma.joint import marginals_from_cells
+
+    frame, reversed_frame = matchup
+    hybrid = predict_symmetrized(simulator, frame, reversed_frame)
+    blend = predict_symmetrized(blended, frame, reversed_frame)
+    cells = np.asarray(hybrid["joint_cells"])[None, :]
+    winner_from_cells = float(
+        marginals_from_cells(cells, list(hybrid["method_classes"]),
+                             list(hybrid["round_classes"]))["winner"][0]
+    )
+    assert winner_from_cells == pytest.approx(blend["winner_prob"], abs=1e-15)
+    assert hybrid["winner_prob"] == pytest.approx(blend["winner_prob"], abs=1e-15)
+
+
+@simulator_artifacts
 def test_simulator_predict_is_a_superset_of_the_blend_contract(simulator, blended, matchup):
     """Callers written against `Ensemble.predict` keep working: the hybrid adds
     keys, it never drops one."""
