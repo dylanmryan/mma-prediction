@@ -32,6 +32,14 @@ def encode_targets(features) -> dict[str, torch.Tensor]:
         "three_round": torch.tensor(
             (features["scheduled_rounds"].fillna(3) <= 3).to_numpy(dtype=bool)
         ),
+        # SP5. NaN is the mask and is carried through deliberately -- a table
+        # built before the scorecard parser existed has no column at all, and
+        # reads as entirely unlabelled rather than as an error.
+        "y_margin": torch.tensor(
+            features["y_margin"].to_numpy(dtype=np.float32)
+            if "y_margin" in features
+            else np.full(len(features), np.nan, dtype=np.float32)
+        ),
     }
 
 
@@ -49,6 +57,9 @@ DEFAULT_CONFIG = {
     "lr": 1e-3,
     "weight_decay": 1e-4,
     "method_scale": 0.5,
+    # SP5's auxiliary head, OFF by default: at 0.0 no head is constructed and
+    # the net is the incumbent, parameter for parameter.
+    "margin_scale": 0.0,
     "round_scale": 0.25,
 }
 
@@ -101,6 +112,7 @@ def train_one(seed, x_train, wc_train, targets_train, x_val, wc_val, targets_val
         n_features=x_train.shape[1], n_weight_classes=n_weight_classes,
         embedding_dim=cfg["embedding_dim"], hidden=tuple(cfg["hidden"]),
         dropout=cfg["dropout"],
+        margin_head=cfg.get("margin_scale", 0.0) > 0,
     )
     optimizer = torch.optim.AdamW(
         net.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"]
@@ -134,7 +146,11 @@ def train_one(seed, x_train, wc_train, targets_train, x_val, wc_val, targets_val
         for start in range(0, len(order), batch_size):
             batch = order[start : start + batch_size]
             optimizer.zero_grad()
-            winner, method, rounds = net(x_train_t[batch], wc_train_t[batch])
+            wants_margin = cfg.get("margin_scale", 0.0) > 0
+            heads = net(x_train_t[batch], wc_train_t[batch],
+                        return_margin=wants_margin)
+            winner, method, rounds = heads[:3]
+            margin = heads[3] if wants_margin else None
             loss = multitask_loss(
                 winner, method, rounds,
                 targets_train["y_winner"][batch], targets_train["y_method"][batch],
@@ -142,6 +158,12 @@ def train_one(seed, x_train, wc_train, targets_train, x_val, wc_val, targets_val
                 method_weights, round_weights,
                 method_scale=cfg["method_scale"], round_scale=cfg["round_scale"],
                 sample_weight=None if weight_t is None else weight_t[batch],
+                margin_logits=margin,
+                # `.get`, because callers may hand-build the target dict --
+                # a dict without the key is simply a wholly unlabelled batch.
+                y_margin=(None if targets_train.get("y_margin") is None
+                          else targets_train["y_margin"][batch]),
+                margin_scale=cfg.get("margin_scale", 0.0),
             )
             loss.backward()
             optimizer.step()

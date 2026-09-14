@@ -57,11 +57,22 @@ def test_the_space_is_actually_explored():
     assert len({c["embedding_dim"] for c in configs}) == len(cs.EMBEDDING_CHOICES)
 
 
+#: Knobs `DEFAULT_CONFIG` has gained since SP2.1 fixed its 25 configurations.
+#: The search space is a FROZEN pre-registered artifact -- re-sampling it would
+#: turn SP2.1's two arms into two unrelated searches -- so a knob added later
+#: is legitimately absent from it. Naming them here keeps that deliberate,
+#: so a knob that goes unvaried by ACCIDENT still shows up as a failure.
+KNOBS_ADDED_AFTER_THE_FROZEN_SEARCH = {
+    "margin_scale",  # SP5, 2026-09-13
+}
+
+
 def test_configs_are_the_train_loop_config_keys():
     from mma.models.train_loop import DEFAULT_CONFIG, resolve_config
 
     for config in cs.sample_configs():
-        assert set(config) == set(DEFAULT_CONFIG)
+        assert set(config) <= set(DEFAULT_CONFIG), "sampled a key that is not a knob"
+        assert set(DEFAULT_CONFIG) - set(config) == KNOBS_ADDED_AFTER_THE_FROZEN_SEARCH
         resolve_config(config)  # raises on an unknown key
 
 
