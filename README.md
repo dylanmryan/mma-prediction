@@ -710,6 +710,57 @@ the walk-forward derivation tracks that drift by construction rather than
 averaging it away.
 
 
+### SP5 — teaching the model *how much* a decision was won by
+
+`docs/superpowers/plans/2026-09-13-sp5-scorecard-label.md` →
+`models/walkforward/sp5_decision.json`. **Nothing shipped.**
+
+Every experiment before this one changed what the model is *told*. This one
+changed what it is *trained on*. `data/raw/fight.csv` has carried the judges'
+scorecards in its `details` column since the first scrape and nothing read
+them: 4,451 usable decisions, 573 judges, 13,383 cards. A 30–27 sweep and a
+29–28 split are the same training example today — `y_winner = 1` — and
+`|margin|` separates them 2.29 to 0.54.
+
+Six arms, fixed before anything was built. The net took the margin as a masked
+auxiliary head; the trees, which have no multi-task head, took it as a softened
+label (expanded into the two weighted rows it is *exactly* equivalent to under
+log-loss).
+
+| arm | change | pooled | delta | |
+|---|---|---|---|---|
+| T0 | torch incumbent | 0.6487 | — | |
+| T1 | λ=0.1 | 0.6493 | +0.00060 | fails |
+| **T2** | **λ=0.3** | **0.6484** | **−0.00030** | fails |
+| T3 | λ=1.0 | 0.6497 | +0.00100 | fails |
+| X0 | xgb incumbent | 0.6488 | — | |
+| X1 | soft T=2 | 0.6502 | +0.00140 | fails |
+| X2 | soft T=4 | 0.6542 | +0.00540 | fails |
+
+The bar is 0.003 and the best arm is a tenth of it — and less than half the
+0.00066 that six equivalent arms produce from nothing.
+
+**The pre-registered mechanism was wrong, and wrong backwards.** The gain was
+predicted to land where the model is silent. Paired on `fight_id`, T2 against
+T0: the coin-flip band (|p−0.5| < 0.10, 51.3% of rows) got **worse** by
++0.00074, while the decided band got **better** by −0.00132. The reasoning had
+been that a split decision is ground truth that a fight was close; what the
+label mostly carries is the opposite — how big a blowout was — which sharpens
+the confident end and says nothing about the murky middle.
+
+Two things worth keeping. **T0 reproduced the incumbent bit-for-bit** — every
+pooled metric identical to the committed re-validation figures — so
+`margin_scale = 0` really is the incumbent and the comparison is paired in the
+strongest sense available. And **more softening is monotonically worse on the
+trees** (T=4 loses four times what T=2 loses): flattening a label spends
+discrimination to buy nothing, the same shape as SP2.2's isotonic remediation
+and the calibration audit above.
+
+Judge *identity* is untouched and was deliberately out of scope — it is
+blocked on serving parity (we know the panel historically but do not scrape it
+prospectively), not on this result.
+
+
 ### Is the model's confidence honest, and is there a prize in fixing it?
 
 `scripts/calibration_audit.py` → `models/calibration_audit.json`. Read the

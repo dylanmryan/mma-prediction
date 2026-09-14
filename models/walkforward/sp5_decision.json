@@ -1,0 +1,171 @@
+{
+  "experiment": "SP5 -- the scorecard label",
+  "pre_registration": "docs/superpowers/plans/2026-09-13-sp5-scorecard-label.md",
+  "generated_by": "scripts/sp5_decision.py",
+  "primary_endpoint": "pooled out-of-fold winner log-loss, walk-forward",
+  "n_arms_preregistered": 6,
+  "n_comparisons_made": 5,
+  "expected_best_of_n_under_the_null": {
+    "torch": 0.00066,
+    "xgb": 0.00236,
+    "note": "sigma * sqrt(2 ln N) at the pre-registered N = 6, the selection optimism a best-of-six search carries before any real effect. Five comparisons were actually made; the registered N is reported because recomputing it downward after the fact would weaken the correction."
+  },
+  "arms": [
+    {
+      "arm": "T1",
+      "member": "torch",
+      "what_it_changed": "margin head, lambda=0.1",
+      "report": "t_margin_0.1.json",
+      "paired_incumbent": "t0_incumbent_check.json",
+      "pooled_winner_log_loss": 0.6493,
+      "incumbent_pooled_winner_log_loss": 0.6487,
+      "delta": 0.0006,
+      "bar": 0.003,
+      "sigma_seed": 0.0003464101615137373,
+      "clears_bar": false,
+      "accuracy": 0.6159,
+      "ece": 0.0075,
+      "per_fold_delta": {
+        "2018": -0.0004,
+        "2019": 0.0005,
+        "2020": -0.0004,
+        "2021": -0.0011,
+        "2022": 0.001,
+        "2023": 0.0003,
+        "2024": 0.0008,
+        "2025": 0.0022
+      }
+    },
+    {
+      "arm": "T2",
+      "member": "torch",
+      "what_it_changed": "margin head, lambda=0.3",
+      "report": "t_margin_0.3.json",
+      "paired_incumbent": "t0_incumbent_check.json",
+      "pooled_winner_log_loss": 0.6484,
+      "incumbent_pooled_winner_log_loss": 0.6487,
+      "delta": -0.0003,
+      "bar": 0.003,
+      "sigma_seed": 0.0003464101615137373,
+      "clears_bar": false,
+      "accuracy": 0.619,
+      "ece": 0.0096,
+      "per_fold_delta": {
+        "2018": -0.0022,
+        "2019": 0.0002,
+        "2020": -0.0011,
+        "2021": 0.0012,
+        "2022": 0.0003,
+        "2023": -0.0001,
+        "2024": -0.0001,
+        "2025": -0.0005
+      }
+    },
+    {
+      "arm": "T3",
+      "member": "torch",
+      "what_it_changed": "margin head, lambda=1.0",
+      "report": "t_margin_1.0.json",
+      "paired_incumbent": "t0_incumbent_check.json",
+      "pooled_winner_log_loss": 0.6497,
+      "incumbent_pooled_winner_log_loss": 0.6487,
+      "delta": 0.001,
+      "bar": 0.003,
+      "sigma_seed": 0.0003464101615137373,
+      "clears_bar": false,
+      "accuracy": 0.618,
+      "ece": 0.0096,
+      "per_fold_delta": {
+        "2018": 0.001,
+        "2019": 0.0012,
+        "2020": -0.0013,
+        "2021": 0.0036,
+        "2022": 0.0036,
+        "2023": 0.0027,
+        "2024": 0.0011,
+        "2025": -0.002
+      }
+    },
+    {
+      "arm": "X1",
+      "member": "xgb",
+      "what_it_changed": "soft label, T=2",
+      "report": "x_soft_t2.json",
+      "paired_incumbent": "x0_hard.json",
+      "pooled_winner_log_loss": 0.6502,
+      "incumbent_pooled_winner_log_loss": 0.6488,
+      "delta": 0.0014,
+      "bar": 0.003,
+      "sigma_seed": 0.0012463279397226486,
+      "clears_bar": false,
+      "accuracy": 0.6174,
+      "ece": 0.026,
+      "per_fold_delta": {
+        "2018": 0.0019,
+        "2019": -0.0025,
+        "2020": -0.0027,
+        "2021": 0.0016,
+        "2022": 0.0005,
+        "2023": 0.0021,
+        "2024": 0.0074,
+        "2025": 0.0019
+      }
+    },
+    {
+      "arm": "X2",
+      "member": "xgb",
+      "what_it_changed": "soft label, T=4",
+      "report": "x_soft_t4.json",
+      "paired_incumbent": "x0_hard.json",
+      "pooled_winner_log_loss": 0.6542,
+      "incumbent_pooled_winner_log_loss": 0.6488,
+      "delta": 0.0054,
+      "bar": 0.003,
+      "sigma_seed": 0.0012463279397226486,
+      "clears_bar": false,
+      "accuracy": 0.6081,
+      "ece": 0.0262,
+      "per_fold_delta": {
+        "2018": 0.0045,
+        "2019": 0.0005,
+        "2020": 0.0042,
+        "2021": 0.0014,
+        "2022": 0.006,
+        "2023": 0.0047,
+        "2024": 0.0133,
+        "2025": 0.007
+      }
+    }
+  ],
+  "best_arm": {
+    "arm": "T2",
+    "delta": -0.0003,
+    "bar": 0.003,
+    "clears": false
+  },
+  "arms_clearing_the_bar": [],
+  "fresh_seed_confirmation": "not run: required only for an arm that clears the bar, and none did",
+  "mechanism_secondary": {
+    "n_paired": 4856,
+    "paired_on": "fight_id",
+    "pooled_delta": -0.00027,
+    "bands": {
+      "coin-flip |p-0.5| < 0.1": {
+        "n": 2490,
+        "share_of_rows": 0.5128,
+        "incumbent_log_loss": 0.6862,
+        "candidate_log_loss": 0.687,
+        "delta": 0.00074
+      },
+      "decided |p-0.5| >= 0.1": {
+        "n": 2366,
+        "share_of_rows": 0.4872,
+        "incumbent_log_loss": 0.6092,
+        "candidate_log_loss": 0.6079,
+        "delta": -0.00132
+      }
+    },
+    "mechanism_predicted": "the gain concentrates in the coin-flip band, where the model currently cannot tell a toss-up from a fight it failed to read",
+    "gain_concentrates_in_the_coinflip_band": false
+  }
+}
