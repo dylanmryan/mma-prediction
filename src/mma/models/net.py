@@ -16,6 +16,7 @@ class MultiTaskNet(nn.Module):
         embedding_dim: int = 4,
         hidden: tuple[int, int] = (128, 64),
         dropout: float = 0.3,
+        margin_head: bool = False,
     ) -> None:
         super().__init__()
         self.weight_class_embedding = nn.Embedding(n_weight_classes, embedding_dim)
@@ -33,15 +34,32 @@ class MultiTaskNet(nn.Module):
         self.winner_head = nn.Linear(width, 1)
         self.method_head = nn.Linear(width, 3)
         self.round_head = nn.Linear(width, 4)
+        # SP5's auxiliary scorecard-margin head. Constructed LAST and only when
+        # asked, so a net without it draws exactly the parameters the
+        # incumbent draws and committed checkpoints keep loading: the
+        # `margin_scale = 0` arm is the incumbent, not a re-run of it.
+        self.margin_head = nn.Linear(width, 1) if margin_head else None
 
-    def forward(self, x: torch.Tensor, weight_class: torch.Tensor):
+    def forward(self, x: torch.Tensor, weight_class: torch.Tensor,
+                return_margin: bool = False):
+        """The three shipped heads; the margin only when asked for.
+
+        Opt-in rather than a fourth element of every return, so `mma.inference`
+        -- which unpacks exactly three -- needs no change and the serving path
+        is untouched by SP5.
+        """
         combined = torch.cat([x, self.weight_class_embedding(weight_class)], dim=1)
         hidden = self.trunk(combined)
-        return (
+        heads = (
             self.winner_head(hidden).squeeze(-1),
             self.method_head(hidden),
             self.round_head(hidden),
         )
+        if not return_margin:
+            return heads
+        margin = (self.margin_head(hidden).squeeze(-1)
+                  if self.margin_head is not None else None)
+        return heads + (margin,)
 
     @staticmethod
     def round_probs(round_logits: torch.Tensor, three_round: torch.Tensor):
@@ -70,6 +88,9 @@ def multitask_loss(
     method_weights, round_weights,
     method_scale: float = 0.5, round_scale: float = 0.25,
     sample_weight: torch.Tensor | None = None,
+    margin_logits: torch.Tensor | None = None,
+    y_margin: torch.Tensor | None = None,
+    margin_scale: float = 0.0,
 ) -> torch.Tensor:
     """Winner BCE + method_scale * method CE + round_scale * round CE.
 
@@ -124,4 +145,27 @@ def multitask_loss(
                 sample_weight[round_known], round_weights[targets],
             )
         loss = loss + round_scale * round_loss
+
+    # SP5: the scorecard margin, masked to the rows that HAVE a scorecard.
+    # Every finish and every decision whose cards did not parse carries NaN,
+    # which is 61% of the table, so the mask is the common case rather than
+    # the edge one -- and NaN must never reach the arithmetic, since a single
+    # NaN gradient silently destroys the whole run.
+    if margin_scale > 0 and margin_logits is not None and y_margin is not None:
+        margin_known = torch.isfinite(y_margin)
+        if margin_known.any():
+            # Huber: a 5-round sweep scores |margin| near 7 while most
+            # decisions sit near 1, and squared error would let the handful of
+            # blowouts set the gradient for the whole head.
+            margin_losses = F.smooth_l1_loss(
+                margin_logits[margin_known], y_margin[margin_known],
+                reduction="none",
+            )
+            if sample_weight is None:
+                margin_loss = margin_losses.mean()
+            else:
+                margin_loss = _weighted_mean(
+                    margin_losses, sample_weight[margin_known]
+                )
+            loss = loss + margin_scale * margin_loss
     return loss
