@@ -23,6 +23,7 @@ from mma.feature_blocks import (
     BASE_BLOCK, CONTEXT_BLOCK, EXTERNAL_BLOCK, NOTICE_BLOCK, TRAJECTORY_BLOCK,
     resolve_blocks, state_key_blocks, state_keys,
 )
+from mma.scorecards import signed_margin
 
 # State keys `_side_frame` computes itself rather than merging in from a
 # source table (they need the fight date, the bio row, or another key). The
@@ -136,8 +137,32 @@ def _side_frame(fights, fighters, ratings, history, corner: str,
     return side
 
 
+def _margin_label(decisive, y_winner, scorecards) -> np.ndarray:
+    """SP5's `y_margin`: how decisively the winner won, signed by who won.
+
+    `mma.scorecards` deliberately exposes only a frame-INVARIANT magnitude,
+    because the raw scorecards' two columns are not consistently ordered by
+    corner. The sign therefore has to come from `y_winner`, and `y_winner` is
+    already oriented by the md5-parity swap a few lines above -- so combining
+    them here, after the swap, is the only place the orientation can be
+    correct by construction rather than by a join that could be got wrong.
+
+    The magnitude is joined ON `fight_id` (via `Series.map`), never by
+    position: out-of-fold predictions have been mis-paired positionally twice
+    in this repo. A fight with no usable card -- every finish, plus the 10.9%
+    of decisions whose cards do not parse or contradict the promotion's own
+    subtype -- keeps NaN, which is the auxiliary head's mask.
+    """
+    if scorecards is None or not len(scorecards):
+        return np.full(len(decisive), np.nan)
+    magnitude = decisive["fight_id"].map(
+        scorecards.set_index("fight_id")["abs_mean_margin"]
+    ).to_numpy(dtype=float)
+    return signed_margin(y_winner, magnitude)
+
+
 def build_features(fights, fighters, ratings, history,
-                   blocks=(BASE_BLOCK,)) -> pd.DataFrame:
+                   blocks=(BASE_BLOCK,), scorecards=None) -> pd.DataFrame:
     """Targets, identifiers and one `serving.feature_row` per decisive fight.
 
     The whole table is built in a single vectorised pass: `serving.feature_row`
@@ -164,15 +189,18 @@ def build_features(fights, fighters, ratings, history,
     first.loc[swapped] = side_b.loc[swapped].values
     second.loc[swapped] = side_a.loc[swapped].values
 
+    y_winner = np.where(
+        swapped,
+        (decisive["winner"] == "b").astype(int),
+        (decisive["winner"] == "a").astype(int),
+    )
     identifiers = {
         "fight_id": decisive["fight_id"],
         "date": decisive["date"],
         "swapped": swapped,
-        "y_winner": np.where(
-            swapped,
-            (decisive["winner"] == "b").astype(int),
-            (decisive["winner"] == "a").astype(int),
-        ),
+        "y_winner": y_winner,
+        # SP5 label, not a feature: NaN wherever no usable scorecard exists.
+        "y_margin": _margin_label(decisive, y_winner, scorecards),
         "y_method": decisive["method"],
         "y_finish_round": decisive["finish_round"]
         .map(lambda r: "45" if pd.notna(r) and r >= 4 else (str(int(r)) if pd.notna(r) else None))

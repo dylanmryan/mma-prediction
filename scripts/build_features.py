@@ -66,9 +66,16 @@ def main(argv=None) -> None:
     stats = pd.read_parquet(PROCESSED / "fight_stats.parquet")
     fighters = pd.read_parquet(PROCESSED / "fighters.parquet")
     ratings = pd.read_parquet(PROCESSED / "ratings.parquet")
+    # SP5's label source. Absent on a tree built before the parser existed,
+    # in which case `y_margin` is all-NaN and the margin head trains on
+    # nothing -- the column is always present so the schema does not fork.
+    scorecards_path = PROCESSED / "scorecards.parquet"
+    scorecards = (pd.read_parquet(scorecards_path)
+                  if scorecards_path.exists() else None)
 
     history = build_history(fights, stats, ratings)
-    features = build_features(fights, fighters, ratings, history, blocks=blocks)
+    features = build_features(fights, fighters, ratings, history, blocks=blocks,
+                              scorecards=scorecards)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     features.to_parquet(args.out, index=False)
 

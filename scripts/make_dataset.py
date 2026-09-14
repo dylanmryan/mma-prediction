@@ -32,6 +32,7 @@ import pandas as pd
 from mma.dataset import (
     build_bonuses, build_fight_stats, build_fighters, build_fights, build_round_stats,
 )
+from mma.scorecards import build_scorecards
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from reconcile_sources import reconcile  # noqa: E402
@@ -123,6 +124,9 @@ def main() -> None:
     stats = build_fight_stats(raw_master)
     rounds = build_round_stats(raw_rounds)
     bonuses = build_bonuses(raw_bonuses)
+    # SP5: the judges' scorecards, read frame-invariantly out of `details`.
+    # Built from raw_master so its fight ids are the ones build_fights uses.
+    scorecards = build_scorecards(raw_master)
 
     secondary = secondary_stage(
         fighters, fights, stats, rounds, enabled=not args.no_secondary
@@ -243,6 +247,7 @@ def main() -> None:
     stats.to_parquet(PROCESSED / "fight_stats.parquet", index=False)
     rounds.to_parquet(PROCESSED / "round_stats.parquet", index=False)
     bonuses.to_parquet(PROCESSED / "bonuses.parquet", index=False)
+    scorecards.to_parquet(PROCESSED / "scorecards.parquet", index=False)
     provenance.to_parquet(PROCESSED / "provenance.parquet", index=False)
 
     print(f"fighters:    {len(fighters)} rows")
@@ -252,6 +257,7 @@ def main() -> None:
     )
     print(f"stats:       {len(stats)} rows")
     print(f"round_stats: {len(rounds)} rows covering {len(round_fights)} fights")
+    print(f"scorecards: {len(scorecards)} decisions with usable judge cards")
     print(f"bonuses:     {len(bonuses)} rows")
     from_secondary = provenance["source"] == "secondary"
     print(

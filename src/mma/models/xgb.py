@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-TARGETS = ("y_winner", "y_method", "y_finish_round")
+TARGETS = ("y_winner", "y_method", "y_finish_round", "y_margin")
 # Kept in the feature table, held out of the model matrix: the `external`
 # block's two fight-level flags. `external_missing` has to stay in the table
 # for `mma.walkforward.slice_masks` to report its slice, but modelling it (or
