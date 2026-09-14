@@ -194,3 +194,72 @@ deployment only through the existing refit path.
 ## Completion notes
 
 *(appended after the arms are scored — nothing above this line changes)*
+
+**Scored 2026-09-13. Nothing ships. `models/walkforward/sp5_decision.json`.**
+
+### The primary endpoint: five comparisons, five failures
+
+| arm | member | change | pooled | delta | bar | |
+|---|---|---|---|---|---|---|
+| T0 | torch | incumbent | 0.6487 | — | — | |
+| T1 | torch | λ=0.1 | 0.6493 | +0.00060 | 0.003 | fails |
+| **T2** | torch | **λ=0.3** | **0.6484** | **−0.00030** | 0.003 | fails |
+| T3 | torch | λ=1.0 | 0.6497 | +0.00100 | 0.003 | fails |
+| X0 | xgb | incumbent | 0.6488 | — | — | |
+| X1 | xgb | soft T=2 | 0.6502 | +0.00140 | 0.003 | fails |
+| X2 | xgb | soft T=4 | 0.6542 | +0.00540 | 0.003 | fails |
+
+The best arm is a tenth of the bar. It is also **less than half the selection
+optimism a best-of-six search carries** — σ√(2 ln 6) is 0.00066 for torch —
+so T2's −0.0003 is smaller than what six equivalent arms would produce from
+nothing. The fresh-seed confirmation was therefore not run: §5 requires it of
+an arm that clears, and none did.
+
+### The mechanism was wrong, and it was wrong backwards
+
+§6 pre-registered where the gain was predicted to land. Paired on `fight_id`
+(n=4,856), T2 against T0:
+
+| band | n | share | delta |
+|---|---|---|---|
+| coin-flip, \|p−0.5\| < 0.10 | 2,490 | 51.3% | **+0.00074** |
+| decided, \|p−0.5\| ≥ 0.10 | 2,366 | 48.7% | **−0.00132** |
+
+**The stated mechanism was wrong.** The margin label did not help where the
+model is silent; it helped, very slightly, where the model was already
+confident, and *hurt* in the coin-flip band it was designed for.
+
+That reverses the argument the experiment was built on. The reasoning was
+that a split decision is ground truth that a fight was close, so the label
+should teach the model to tell a genuine toss-up from a fight it failed to
+read. What the label actually carries is mostly the opposite: `|margin|`
+averages 2.29 on unanimous decisions against 0.54 on splits, so most of its
+variance is *how big a blowout was*. Learning to recognise blowouts sharpens
+the decided end. It says nothing about the murky middle, and spending trunk
+capacity on it costs a little there.
+
+### Two things worth keeping
+
+**T0 reproduced the incumbent bit-for-bit** — pooled winner log-loss,
+accuracy, Brier, ECE, joint log-loss and both macro-F1s identical to the
+committed `revalidation_torch_A` figures. The design goal that
+`margin_scale = 0` is the incumbent rather than a re-run of it held exactly,
+so the comparison is paired in the strongest available sense.
+
+**More softening is monotonically worse on the trees**: T=4 (+0.0054) loses
+four times as much as T=2 (+0.0014). Softening a label discards information
+the trees were using, and the amount lost scales with how much you soften —
+the same shape as SP2.2's isotonic result and this month's calibration audit,
+where flattening bought calibration by spending discrimination.
+
+### What this does not say
+
+It does not say the scorecards are worthless — only that `y_margin` as an
+auxiliary regression target and as a softened label both fail. Judge
+*identity* (573 named judges, 13,383 cards) is untouched and was deliberately
+out of scope (§9); it remains blocked on the serving-parity question, not on
+this result.
+
+The label, parser and table stay in the repo. `y_margin` costs nothing when
+unused — `margin_scale` defaults to 0, no head is constructed, and the column
+is in both members' `TARGETS` so neither can model it.
