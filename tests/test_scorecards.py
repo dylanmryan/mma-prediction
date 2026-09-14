@@ -222,3 +222,79 @@ def test_y_margin_is_in_no_registered_feature_block():
 
     for name, block in BLOCKS.items():
         assert "y_margin" not in columns_of(block), f"block {name!r} claims it"
+
+
+# --- the xgb arm's soft label ------------------------------------------------
+
+def test_the_soft_label_never_crosses_against_the_winner():
+    """`y_margin`'s sign IS `y_winner`, so softening can say a win was narrow
+    but can never claim the loser won."""
+    from mma.scorecards import soft_winner_label
+
+    y = np.array([1.0, 1.0, 0.0, 0.0])
+    margin = np.array([3.0, 1 / 3, -1 / 3, -3.0])
+    for temperature in (0.5, 2.0, 4.0, 20.0):
+        soft = soft_winner_label(y, margin, temperature)
+        assert ((soft > 0.5) == (y == 1)).all(), temperature
+
+
+def test_a_fight_with_no_card_keeps_its_hard_label():
+    """Finishes are not close fights we failed to measure; they are fights
+    that ended. Softening them would be imputing the wrong thing."""
+    from mma.scorecards import soft_winner_label
+
+    soft = soft_winner_label([1.0, 0.0], [float("nan")] * 2, 2.0)
+    assert soft.tolist() == [1.0, 0.0]
+
+
+def test_a_narrow_win_softens_further_than_a_sweep():
+    from mma.scorecards import soft_winner_label
+
+    sweep, narrow = soft_winner_label([1.0, 1.0], [3.0, 1 / 3], 2.0)
+    assert 0.5 < narrow < sweep < 1.0
+
+
+def test_soft_temperature_must_be_positive():
+    from mma.scorecards import soft_winner_label
+
+    with pytest.raises(ValueError, match="positive"):
+        soft_winner_label([1.0], [1.0], 0.0)
+
+
+def test_the_expansion_reproduces_the_soft_loss_exactly():
+    """The expansion is the whole reason the xgb arm is runnable: log-loss is
+    linear in the weights, so p*loss(1) + (1-p)*loss(0) IS the soft-label
+    loss. If that ever stopped holding, X1/X2 would be measuring something
+    other than what they claim to."""
+    from mma.scorecards import expand_soft_labels
+
+    rng = np.random.default_rng(0)
+    p = rng.uniform(0.05, 0.95, 50)
+    pred = rng.uniform(0.05, 0.95, 50)
+    x = pd.DataFrame({"pred": pred})
+
+    def logloss(y, q):
+        return -(y * np.log(q) + (1 - y) * np.log(1 - q))
+
+    direct = logloss(p, pred).mean()
+    xs, ys, ws = expand_soft_labels(x, p)
+    expanded = (ws * logloss(ys, xs["pred"].to_numpy())).sum() / ws.sum()
+    assert expanded == pytest.approx(direct)
+
+
+def test_the_expansion_conserves_total_weight():
+    from mma.scorecards import expand_soft_labels
+
+    x = pd.DataFrame({"f": range(6)})
+    p = np.array([1.0, 0.0, 0.7, 0.3, 0.55, 0.9])
+    _, _, ws = expand_soft_labels(x, p, sample_weight=np.full(6, 2.0))
+    assert ws.sum() == pytest.approx(12.0)
+
+
+def test_the_expansion_leaves_hard_rows_unduplicated():
+    from mma.scorecards import expand_soft_labels
+
+    x = pd.DataFrame({"f": [1, 2, 3]})
+    xs, ys, ws = expand_soft_labels(x, np.array([1.0, 0.0, 0.6]))
+    assert len(xs) == 4, "two hard rows stay single, the soft one becomes two"
+    assert sorted(ys.tolist()) == [0, 0, 1, 1]

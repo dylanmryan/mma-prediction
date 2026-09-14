@@ -35,6 +35,7 @@ from mma.models.train_loop import (
     METHOD_CLASSES, ROUND_CLASSES, encode_targets, fit_temperature, predict, train_one,
 )
 from mma.models.xgb import feature_frame, train_binary, train_multiclass
+from mma.scorecards import expand_soft_labels, soft_winner_label
 from mma.simulator import (
     DEFAULT_ALPHA, DEFAULT_N_RUNS, DEFAULT_ROUNDS, DEFAULT_SIM_SEED,
     mean_over_seeds, normalise_rows, simulate_fights,
@@ -98,6 +99,11 @@ class XGBCandidate:
     # to 0.00125, three times the torch ensemble's, which is why the blend
     # candidate below needs this.
     seeds: tuple | None = None
+    # SP5: soften the WINNER head's TRAINING label by the scorecard margin.
+    # `None` is the shipped hard 0/1. Training rows only -- the inner-validation
+    # labels early stopping reads and the evaluation labels stay hard, because
+    # the task being early-stopped on and scored is still "who won".
+    soft_label_temperature: float | None = None
 
     def _head_rounds(self, head: str):
         if isinstance(self.fixed_rounds, dict):
@@ -131,6 +137,13 @@ class XGBCandidate:
         round_rounds = self._head_rounds("round")
 
         y = features["y_winner"]
+        y_fit = y
+        if self.soft_label_temperature is not None:
+            y_fit = pd.Series(
+                soft_winner_label(y, features.get("y_margin"),
+                                  self.soft_label_temperature),
+                index=features.index,
+            )
         ym = features["y_method"]
         known = ym.notna().to_numpy()
         _require_all_classes(ym[train & known], METHOD_CLASSES, "method", fold)
@@ -142,8 +155,17 @@ class XGBCandidate:
         members, iterations = [], []
         for seed in (self.seeds if self.seeds is not None else (None,)):
             params = self._seed_params(seed)
-            winner = train_binary(x[train], y[train], val_slice(x, fold.inner_val), val_slice(y, fold.inner_val),
-                                  params=params, sample_weight=weights(train), fixed_rounds=winner_rounds)
+            if self.soft_label_temperature is None:
+                x_fit, y_fit_rows, w_fit = x[train], y[train], weights(train)
+            else:
+                # XGBClassifier infers its classes from y and rejects a
+                # continuous target, so the soft label is expanded into the
+                # two weighted hard rows it is exactly equivalent to.
+                x_fit, y_fit_rows, w_fit = expand_soft_labels(
+                    x[train], y_fit[train], weights(train)
+                )
+            winner = train_binary(x_fit, y_fit_rows, val_slice(x, fold.inner_val), val_slice(y, fold.inner_val),
+                                  params=params, sample_weight=w_fit, fixed_rounds=winner_rounds)
             method = train_multiclass(x[train & known], ym[train & known],
                                       val_slice(x, fold.inner_val & known), val_slice(ym, fold.inner_val & known),
                                       METHOD_CLASSES, params=params, sample_weight=weights(train & known),

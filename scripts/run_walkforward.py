@@ -292,7 +292,8 @@ def resolve_hazard(args: argparse.Namespace) -> dict | None:
 
 def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | None,
                     drop_columns: tuple[str, ...] = (), blend: dict | None = None,
-                    fights: pd.DataFrame | None = None, hazard: dict | None = None):
+                    fights: pd.DataFrame | None = None, hazard: dict | None = None,
+                    soft_label_temperature: float | None = None):
     """``budget`` is None in early-stopping mode; otherwise the dict from
     resolve_budget, which must carry the key this learner consumes
     (fixed_rounds for xgb, fixed_epochs for torch) -- a budget derived from
@@ -361,7 +362,8 @@ def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | No
     if kind == "xgb":
         return XGBCandidate(name=name, params=config, fixed_rounds=budget.get("fixed_rounds"),
                             drop_columns=drop_columns,
-                            seeds=None if seeds is None else tuple(seeds))
+                            seeds=None if seeds is None else tuple(seeds),
+                            soft_label_temperature=soft_label_temperature)
     return TorchCandidate(name=name, seeds=tuple(seeds), config=config,
                          fixed_epochs=budget.get("fixed_epochs"), temperature=budget.get("temperature"),
                          drop_columns=drop_columns)
@@ -470,6 +472,11 @@ def main() -> None:
                              "back on the joint (SP3's fallback branch, a diagnostic)")
     parser.add_argument("--no-blend-calibration", action="store_true",
                         help="blend candidate: skip the post-average temperature (diagnostic)")
+    parser.add_argument(
+        "--soft-label-temperature", type=float, default=None,
+        help="SP5: soften the xgb winner head's TRAINING label by the scorecard "
+             "margin, sigmoid(y_margin / T). Training rows only; early stopping "
+             "and evaluation keep the hard 0/1 label. Ignored by other candidates.")
     parser.add_argument("--drop-columns", default=None,
                         help="comma-separated feature columns to hold out of the model matrix "
                              "(they stay in the table, so slices keyed on them still report)")
@@ -498,7 +505,8 @@ def main() -> None:
     fights = (pd.read_parquet(PROCESSED / "fights.parquet")
               if args.candidate in NEEDS_FIGHTS else None)
     candidate = build_candidate(args.candidate, args.name, seeds, config, budget, drop_columns,
-                                blend, fights, hazard)
+                                blend, fights, hazard,
+                                soft_label_temperature=args.soft_label_temperature)
     budget = budget or {}  # report shape: always a dict
 
     fold_results = []
