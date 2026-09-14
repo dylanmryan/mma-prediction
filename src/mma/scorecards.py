@@ -169,3 +169,68 @@ def signed_margin(y_winner, abs_mean_margin_values):
     y = np.asarray(y_winner, dtype=float)
     magnitude = np.asarray(abs_mean_margin_values, dtype=float)
     return (2.0 * y - 1.0) * magnitude
+
+
+def soft_winner_label(y_winner, y_margin, temperature: float):
+    """SP5's XGBoost arm: the binary label softened by how the fight was scored.
+
+    XGBoost has no multi-task head, so the trees cannot take the margin as an
+    auxiliary TARGET the way the net does. They can take it in the label
+    itself: ``binary:logistic`` accepts a continuous target in [0, 1], so a
+    fight the judges nearly scored level enters as 0.54 rather than 1.0 and a
+    sweep enters as 0.82.
+
+    ``temperature`` sets how much softening: larger is flatter. It never
+    crosses 0.5, because ``y_margin``'s sign IS ``y_winner`` -- so the soft
+    label can say a win was narrow but can never claim the loser won.
+
+    A fight with no usable scorecard -- every finish, plus the decisions whose
+    cards do not parse -- keeps its hard 0/1. Finishes are not close fights
+    that we failed to measure; they are fights that ended, and softening them
+    on the grounds of missing data would be imputing the wrong thing.
+    """
+    if temperature <= 0:
+        raise ValueError(f"temperature must be positive, got {temperature!r}")
+    hard = np.asarray(y_winner, dtype=float)
+    if y_margin is None:
+        return hard
+    margin = np.asarray(y_margin, dtype=float)
+    soft = 1.0 / (1.0 + np.exp(-margin / float(temperature)))
+    return np.where(np.isfinite(margin), soft, hard)
+
+
+def expand_soft_labels(x, y_soft, sample_weight=None):
+    """A soft label as two weighted hard rows -- exactly, not approximately.
+
+    ``XGBClassifier`` infers its classes from the unique values of ``y`` and
+    rejects anything that is not a discrete label, so the soft target cannot
+    be handed to it directly. It does not need to be: log-loss is linear in
+    the weights, so
+
+        p * loss(y=1) + (1 - p) * loss(y=0)
+
+    IS the soft-label loss for that row. Emitting the row twice -- once as a
+    win with weight ``p``, once as a loss with weight ``1 - p`` -- therefore
+    gives the identical objective rather than a stand-in for it.
+
+    Rows already hard (every finish, and any decision whose card did not
+    parse) are emitted once, so the expansion only pays for the rows that
+    carry a scorecard. Any existing per-row weight multiplies through.
+
+    Returns ``(x, y, weight)`` ready for ``train_binary``.
+    """
+    x = pd.DataFrame(x)
+    p = np.asarray(y_soft, dtype=float)
+    base = (np.ones(len(p), dtype=float) if sample_weight is None
+            else np.asarray(sample_weight, dtype=float))
+    hard = np.isclose(p, 0.0) | np.isclose(p, 1.0)
+
+    hard_x, soft_x = x[hard], x[~hard]
+    frames = [hard_x, soft_x, soft_x]
+    ys = [np.round(p[hard]), np.ones((~hard).sum()), np.zeros((~hard).sum())]
+    ws = [base[hard], base[~hard] * p[~hard], base[~hard] * (1.0 - p[~hard])]
+    return (
+        pd.concat(frames, axis=0),
+        np.concatenate(ys).astype(int),
+        np.concatenate(ws),
+    )
