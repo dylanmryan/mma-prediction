@@ -57,7 +57,15 @@
       "elo_b": 1516.5707906786668,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "792be9a24df82ed6",
+      "correct": true,
+      "log_loss_contribution": 0.3125829956651768,
+      "brier_contribution": 0.0720627660548756,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Tommy McMillen",
@@ -93,7 +101,15 @@
       "elo_b": 1623.0929312044439,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "e8b731feff72294b",
+      "correct": false,
+      "log_loss_contribution": 0.8693653364660109,
+      "brier_contribution": 0.3373082810454129,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Waldo Cortes-Acosta",
@@ -120,7 +136,15 @@
       "elo_b": 1751.617213242449,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "fa6796c55d6c5440",
+      "correct": true,
+      "log_loss_contribution": 0.4592749970856753,
+      "brier_contribution": 0.13561432728528278,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "David Mart\u00ednez",
@@ -147,7 +171,15 @@
       "elo_b": 1616.2805688953017,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "9a97acbfd5a08bfa",
+      "correct": false,
+      "log_loss_contribution": 0.6987542634267784,
+      "brier_contribution": 0.25280351217611496,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Tim Elliott",
@@ -174,7 +206,15 @@
       "elo_b": 1520.359929268661,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "c96d9178c9ed9e62",
+      "correct": true,
+      "log_loss_contribution": 0.6759143770145333,
+      "brier_contribution": 0.24138446227658505,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Ignacio Bahamondes",
@@ -201,7 +241,15 @@
       "elo_b": 1671.4726735572908,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:41Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "e4a47b07044ddd72",
+      "correct": true,
+      "log_loss_contribution": 0.4458149860502106,
+      "brier_contribution": 0.12938248865840962,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Yousri Belgaroui",
