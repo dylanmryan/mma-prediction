@@ -239,7 +239,8 @@ def test_training_table_and_served_row_have_the_same_columns(tables):
         **_card_facts(target, past),
     )
     trained = pd.read_parquet(PROCESSED / "features.parquet")
-    identifiers = {"fight_id", "date", "swapped", "y_winner", "y_method", "y_finish_round"}
+    identifiers = {"fight_id", "date", "swapped", "y_winner", "y_method",
+                   "y_finish_round", "y_margin"}
     assert set(served.columns) == set(trained.columns) - identifiers
     # Column SETS matching is not enough -- a registry reorder would
     # silently change the committed parquet's physical column order with a

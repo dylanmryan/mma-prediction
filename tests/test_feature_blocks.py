@@ -105,6 +105,7 @@ def test_registry_columns_match_the_committed_feature_table():
     blocks = json.loads((processed / "features_blocks.json").read_text())["blocks"]
     table = pd.read_parquet(processed / "features.parquet")
     identifiers = {"fight_id", "date", "swapped", "y_winner", "y_method", "y_finish_round",
+                   "y_margin",
                    "weight_class", "title_fight", "scheduled_rounds"}
     assert set(columns_for(blocks)) == set(table.columns) - identifiers
     # Column SETS matching is not enough -- a registry reorder would

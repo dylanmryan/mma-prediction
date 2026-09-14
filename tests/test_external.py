@@ -444,6 +444,11 @@ def test_no_modelled_column_identifies_the_unmapped_corner(monkeypatch):
     rebuilt = build_features(
         fights, fighters, ratings, build_history(fights, stats, ratings),
         blocks=table_blocks(),
+        # y_margin is a LABEL read from the fight's own scorecard. Passing it
+        # to both builds keeps this comparison about the snapshot, so the
+        # canary below still fires on a genuinely new membership-derived
+        # column instead of on a column one build simply did not populate.
+        scorecards=pd.read_parquet(PROCESSED / "scorecards.parquet"),
     )
 
     def key(series):

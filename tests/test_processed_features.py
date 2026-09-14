@@ -40,6 +40,10 @@ def test_no_leakage_truncation_invariance():
     truncated = build_features(
         old_fights, fighters, ratings, build_history(old_fights, stats, ratings),
         blocks=table_blocks(),
+        # A fight's own scorecard is truncation-invariant by construction, so
+        # it belongs in both builds; omitting it here would compare a NaN
+        # column against a populated one and say nothing about leakage.
+        scorecards=pd.read_parquet(PROCESSED / "scorecards.parquet"),
     )
     full = pd.read_parquet(PROCESSED / "features.parquet")
     full_old = full[full["fight_id"].isin(truncated["fight_id"])]

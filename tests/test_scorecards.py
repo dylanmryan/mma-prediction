@@ -182,3 +182,43 @@ def test_split_decisions_really_are_closer_than_unanimous_ones():
     split = out.loc[out["judges_disagreed"], "abs_mean_margin"].mean()
     unanimous = out.loc[~out["judges_disagreed"], "abs_mean_margin"].mean()
     assert unanimous > 3 * split, f"unanimous {unanimous:.3f} vs split {split:.3f}"
+
+
+# --- the label must never become a feature (SP5 pre-registration, guard 2) ---
+
+def test_y_margin_is_excluded_from_both_members_feature_matrices():
+    """`y_margin`'s SIGN IS `y_winner`. A model given it as an input would
+    read the answer off its own input row, so both members' exclusion sets
+    have to carry it -- and they key off their own TARGETS tuples, which is
+    where it was missing when this was first wired: four guard tests caught
+    it, and this is the direct assertion they were standing in for.
+    """
+    from mma.models.xgb import NON_FEATURES, TARGETS as XGB_TARGETS
+    from mma.tensors import TARGETS as TORCH_TARGETS
+
+    assert "y_margin" in XGB_TARGETS
+    assert "y_margin" in TORCH_TARGETS
+    assert "y_margin" in NON_FEATURES
+
+
+def test_y_margin_is_absent_from_the_built_feature_matrices():
+    """The exclusion, exercised rather than asserted about."""
+    import numpy as np
+    import pandas as pd
+    from mma.models.xgb import feature_frame
+    from mma.tensors import Preprocessor
+
+    features = pd.read_parquet("data/processed/features.parquet")
+    if "y_margin" not in features.columns:
+        pytest.skip("feature table predates SP5")
+    assert "y_margin" not in feature_frame(features).columns
+    prep = Preprocessor.fit(features,
+                            train_mask=np.ones(len(features), dtype=bool))
+    assert "y_margin" not in prep.numeric_columns
+
+
+def test_y_margin_is_in_no_registered_feature_block():
+    from mma.feature_blocks import BLOCKS, columns_of
+
+    for name, block in BLOCKS.items():
+        assert "y_margin" not in columns_of(block), f"block {name!r} claims it"

@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-TARGETS = ("y_winner", "y_method", "y_finish_round")
+TARGETS = ("y_winner", "y_method", "y_finish_round", "y_margin")
 IDENTIFIERS = ("fight_id", "date", "swapped")
 # Columns that stay in the feature TABLE but are held out of every model
 # matrix. Both entries are measured ablations, not style choices, and both
