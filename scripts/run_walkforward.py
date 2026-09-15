@@ -37,8 +37,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mma.candidates import (  # noqa: E402
-    CALIBRATORS, BlendCandidate, EloCandidate, HazardCandidate, HybridCandidate,
-    TorchCandidate, XGBCandidate,
+    CALIBRATORS, BlendCandidate, BradleyTerryCandidate, EloCandidate,
+    HazardCandidate, HybridCandidate, LogisticCandidate, TorchCandidate,
+    XGBCandidate,
 )
 from mma.models.train_loop import METHOD_CLASSES, ROUND_CLASSES  # noqa: E402
 from mma.walkforward import build_report, make_folds, pool, recency_weights  # noqa: E402
@@ -52,10 +53,12 @@ DEFAULT_SEEDS = (0, 1, 2, 3, 4)
 # the blend's are, and a single fit's seed noise is three times the ensemble's
 # (SP2.1), which is more than the bar it is judged against.
 SEEDED = ("torch", "blend", "hazard", "hybrid")
-CANDIDATES = ("elo", "xgb", "torch", "blend", "hazard", "hybrid")
+CANDIDATES = ("elo", "xgb", "torch", "blend", "hazard", "hybrid",
+              "bt", "logistic")
 #: Candidates that read the exact finish round, which only the fights table
 #: carries (the feature table buckets rounds 4 and 5 together as '45').
-NEEDS_FIGHTS = ("hazard", "hybrid")
+#: "bt" joins fighter ids, which the feature table does not carry.
+NEEDS_FIGHTS = ("hazard", "hybrid", "bt")
 
 
 def fixed_budget_from(report: dict) -> dict:
@@ -264,6 +267,16 @@ def resolve_blend(args: argparse.Namespace) -> dict | None:
             f"combined with --blend-calibrator {args.blend_calibrator}"
         )
     out = {"blend_weight": weight, "blend_calibrated": not args.no_blend_calibration}
+    # getattr, because the tests build a Namespace by hand and a namespace
+    # without the flag is simply a run that did not ask for extra members.
+    blend_extra = getattr(args, "blend_extra", None)
+    if blend_extra:
+        names = [n.strip() for n in blend_extra.split(",") if n.strip()]
+        unknown = [n for n in names if n not in ("logistic", "bt")]
+        if unknown:
+            raise SystemExit(f"--blend-extra: unknown member(s) {unknown}; "
+                             "expected 'logistic' and/or 'bt'")
+        out["blend_extra"] = names
     if args.blend_calibrator != "temperature":  # keep the committed reports' config shape
         out["blend_calibrator"] = args.blend_calibrator
     if args.blend_joint_cells:  # ditto: default runs keep their config shape
@@ -351,7 +364,9 @@ def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | No
         return BlendCandidate(name=name, seeds=tuple(seeds), weight=blend["blend_weight"],
                               calibrate=blend["blend_calibrated"], drop_columns=drop_columns,
                               calibrator=blend.get("blend_calibrator", "temperature"),
-                              emit_joint_cells=bool(blend.get("blend_joint_cells")))
+                              emit_joint_cells=bool(blend.get("blend_joint_cells")),
+                              extra=tuple(blend.get("blend_extra") or ()),
+                              fights=fights)
     needed = "fixed_rounds" if kind == "xgb" else "fixed_epochs"
     if budget is not None and needed not in budget:
         raise SystemExit(
@@ -364,6 +379,10 @@ def build_candidate(kind: str, name: str, seeds, config: dict, budget: dict | No
                             drop_columns=drop_columns,
                             seeds=None if seeds is None else tuple(seeds),
                             soft_label_temperature=soft_label_temperature)
+    if kind == "bt":
+        return BradleyTerryCandidate(name=name, fights=fights)
+    if kind == "logistic":
+        return LogisticCandidate(name=name, drop_columns=drop_columns)
     return TorchCandidate(name=name, seeds=tuple(seeds), config=config,
                          fixed_epochs=budget.get("fixed_epochs"), temperature=budget.get("temperature"),
                          drop_columns=drop_columns)
@@ -473,6 +492,10 @@ def main() -> None:
     parser.add_argument("--no-blend-calibration", action="store_true",
                         help="blend candidate: skip the post-average temperature (diagnostic)")
     parser.add_argument(
+        "--blend-extra", default=None,
+        help="SP6: comma-separated winner-only members averaged into the blend "
+             "at equal weight with xgb and torch (logistic, bt). Blend only.")
+    parser.add_argument(
         "--soft-label-temperature", type=float, default=None,
         help="SP5: soften the xgb winner head's TRAINING label by the scorecard "
              "margin, sigmoid(y_margin / T). Training rows only; early stopping "
@@ -502,8 +525,10 @@ def main() -> None:
     # The simulator-backed candidates need the exact finish round, which only
     # the fights table carries; no other candidate reads it, so no other run
     # pays for the read.
-    fights = (pd.read_parquet(PROCESSED / "fights.parquet")
-              if args.candidate in NEEDS_FIGHTS else None)
+    wants_fights = args.candidate in NEEDS_FIGHTS or (
+        args.candidate == "blend"
+        and "bt" in (getattr(args, "blend_extra", None) or ""))
+    fights = pd.read_parquet(PROCESSED / "fights.parquet") if wants_fights else None
     candidate = build_candidate(args.candidate, args.name, seeds, config, budget, drop_columns,
                                 blend, fights, hazard,
                                 soft_label_temperature=args.soft_label_temperature)

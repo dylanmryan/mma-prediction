@@ -35,6 +35,7 @@ from mma.models.train_loop import (
     METHOD_CLASSES, ROUND_CLASSES, encode_targets, fit_temperature, predict, train_one,
 )
 from mma.models.xgb import feature_frame, train_binary, train_multiclass
+from mma.bradley_terry import ALPHA_GRID, BradleyTerry, select_alpha
 from mma.scorecards import expand_soft_labels, soft_winner_label
 from mma.simulator import (
     DEFAULT_ALPHA, DEFAULT_N_RUNS, DEFAULT_ROUNDS, DEFAULT_SIM_SEED,
@@ -349,6 +350,29 @@ class BlendCandidate:
     # committed blend report keeps its shape.
     emit_joint_cells: bool = False
 
+    #: SP6: extra WINNER-ONLY members, averaged in at equal weight with the
+    #: two incumbents. Empty -- the default -- is SP2.2's two-member blend
+    #: exactly, so every committed blend report keeps its meaning. `weight`
+    #: continues to govern the method and round heads, which these members do
+    #: not produce; only the winner head becomes an equal-weight mean of
+    #: (xgb, torch, *extra). Equal and never fitted: see the class docstring.
+    extra: tuple = ()
+    fights: pd.DataFrame | None = None   # the `bt` member needs fighter ids
+
+    def extra_members(self):
+        built = []
+        for kind in self.extra:
+            if kind == "logistic":
+                built.append(LogisticCandidate(name="logistic",
+                                               drop_columns=self.drop_columns))
+            elif kind == "bt":
+                built.append(BradleyTerryCandidate(name="bt", fights=self.fights))
+            else:
+                raise ValueError(
+                    f"unknown extra blend member {kind!r}; expected 'logistic' or 'bt'"
+                )
+        return tuple(built)
+
     def members(self):
         """The two members, each with the blend's seed list and drop-columns."""
         return (
@@ -380,6 +404,17 @@ class BlendCandidate:
         torch_pred, torch_info = torch_member.fit_predict(features, wide, sample_weight)
 
         blended = blend_heads(xgb_pred, torch_pred, w)
+        extra_info = {}
+        if self.extra:
+            # Equal weight across every member, including the two incumbents:
+            # (xgb + torch + ...) / n, NOT the `w`-weighted pair averaged again
+            # with the newcomers, which would give the pair 1/2 between them.
+            streams = [xgb_pred["winner"], torch_pred["winner"]]
+            for member in self.extra_members():
+                member_pred, member_fit = member.fit_predict(features, wide, sample_weight)
+                streams.append(np.asarray(member_pred["winner"], dtype=float))
+                extra_info[member.name] = member_fit
+            blended = dict(blended, winner=np.mean(np.vstack(streams), axis=0))
         three_round = (features.loc[scored, "scheduled_rounds"].fillna(3) <= 3).to_numpy(dtype=bool)
         blended["round"] = mask_round_45(blended["round"], three_round)
 
@@ -404,6 +439,8 @@ class BlendCandidate:
                 pred["winner"], pred["method"], pred["round"], METHOD_CLASSES, ROUND_CLASSES)
         info = {
             "blend_weight": w,
+            **({"extra_members": list(self.extra), "extra_fit": extra_info}
+               if self.extra else {}),
             "temperature": float(temperature),  # 1.0 when the calibrator is not a temperature
             "calibrated": bool(self.calibrate),
             "n_train": int(fold.train.sum()),
@@ -750,3 +787,126 @@ class HybridCandidate:
             "hazard": hazard_info,
         }
         return pred, info
+
+
+@dataclass
+class BradleyTerryCandidate:
+    """SP6's latent-skill member: sees who fought whom, and nothing else.
+
+    Every other scorer here reads the 87-column matrix. This one reads only
+    the comparison graph, which is the point -- the blend needs a member that
+    is differently wrong, and the least correlated thing available is one that
+    never sees the features at all.
+
+    `fights` supplies the fighter ids, which the feature table does not carry.
+    They are oriented through the SAME `swapped` flag the feature table's own
+    labels use, so corner A here is corner A there; getting that backwards
+    would silently invert every prediction.
+    """
+    name: str = "bt"
+    fights: pd.DataFrame | None = None
+    alpha: float | None = None          # None selects on the fold's inner val
+    alpha_grid: tuple = ALPHA_GRID
+
+    def _corners(self, features: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+        if self.fights is None:
+            raise ValueError("BradleyTerryCandidate needs the fights table")
+        ids = self.fights.set_index("fight_id")[["fighter_a_id", "fighter_b_id"]]
+        joined = ids.reindex(features["fight_id"].to_numpy())
+        raw_a = joined["fighter_a_id"].to_numpy(dtype=object)
+        raw_b = joined["fighter_b_id"].to_numpy(dtype=object)
+        swapped = features["swapped"].to_numpy(dtype=bool)
+        return (np.where(swapped, raw_b, raw_a), np.where(swapped, raw_a, raw_b))
+
+    def fit_predict(self, features: pd.DataFrame, fold: Fold, sample_weight=None):
+        a_ids, b_ids = self._corners(features)
+        y = features["y_winner"].to_numpy(dtype=float)
+
+        def won_lost(mask):
+            m = np.asarray(mask, dtype=bool)
+            a, b, yy = a_ids[m], b_ids[m], y[m]
+            return np.where(yy == 1, a, b), np.where(yy == 1, b, a)
+
+        train = np.asarray(fold.train, dtype=bool)
+        win_ids, lose_ids = won_lost(train)
+        w = None if sample_weight is None else np.asarray(
+            sample_weight, dtype=float)[train]
+
+        alpha, scores = self.alpha, {}
+        if alpha is None:
+            inner = np.asarray(fold.inner_val, dtype=bool)
+            alpha, scores = select_alpha(
+                win_ids, lose_ids, a_ids[inner], b_ids[inner], y[inner],
+                grid=self.alpha_grid,
+            )
+        model = BradleyTerry(alpha=alpha).fit(win_ids, lose_ids, weights=w)
+        ev = np.asarray(fold.eval, dtype=bool)
+        winner = model.predict_pairs(a_ids[ev], b_ids[ev])
+        return ({"winner": winner, "method": None, "round": None},
+                {"alpha": alpha, "alpha_scores": scores,
+                 "n_fighters": len(model.fighter_index)})
+
+
+@dataclass
+class LogisticCandidate:
+    """SP6's linear member: the canonical third of a linear/trees/net trio.
+
+    Expected to be clearly worse standalone than either incumbent -- it cannot
+    represent the interactions they live on. The only question SP6 asks of it
+    is whether it is differently wrong.
+
+    Trees tolerate NaN natively and a linear model does not, so this imputes
+    and standardises; `weight_class` is one-hot rather than category-coded,
+    because a linear model would read a category CODE as an ordered number.
+    """
+    name: str = "logistic"
+    drop_columns: tuple = ()
+    C: float | None = None              # None selects on the fold's inner val
+    C_grid: tuple = (0.003, 0.01, 0.03, 0.1, 0.3, 1.0)
+
+    def _matrix(self, features: pd.DataFrame) -> np.ndarray:
+        x = feature_frame(features, self.drop_columns).copy()
+        categorical = [c for c in x.columns
+                       if str(x[c].dtype) in ("category", "object")]
+        if categorical:
+            x = pd.get_dummies(x, columns=categorical, dummy_na=True)
+        return x.to_numpy(dtype=float)
+
+    def fit_predict(self, features: pd.DataFrame, fold: Fold, sample_weight=None):
+        from sklearn.impute import SimpleImputer
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.pipeline import make_pipeline
+        from sklearn.preprocessing import StandardScaler
+
+        x = self._matrix(features)
+        y = features["y_winner"].to_numpy(dtype=float)
+        train = np.asarray(fold.train, dtype=bool)
+        inner = np.asarray(fold.inner_val, dtype=bool)
+        ev = np.asarray(fold.eval, dtype=bool)
+        w = None if sample_weight is None else np.asarray(sample_weight, dtype=float)
+
+        def build(c):
+            return make_pipeline(
+                SimpleImputer(strategy="median"), StandardScaler(),
+                LogisticRegression(C=c, max_iter=2000, solver="lbfgs"),
+            )
+
+        chosen, scores = self.C, {}
+        if chosen is None:
+            for c in self.C_grid:
+                model = build(c)
+                model.fit(x[train], y[train],
+                          **({} if w is None
+                             else {"logisticregression__sample_weight": w[train]}))
+                p = np.clip(model.predict_proba(x[inner])[:, 1], 1e-9, 1 - 1e-9)
+                yy = y[inner]
+                scores[c] = float(-np.mean(yy * np.log(p) + (1 - yy) * np.log(1 - p)))
+            chosen = min(scores, key=scores.get)
+
+        model = build(chosen)
+        model.fit(x[train], y[train],
+                  **({} if w is None
+                     else {"logisticregression__sample_weight": w[train]}))
+        return ({"winner": model.predict_proba(x[ev])[:, 1],
+                 "method": None, "round": None},
+                {"C": chosen, "C_scores": scores})
