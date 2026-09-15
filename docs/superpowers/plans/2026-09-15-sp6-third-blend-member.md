@@ -168,3 +168,79 @@ becomes a deployment only through the existing refit path.
 ## Completion notes
 
 *(appended after the arms are scored — nothing above this line changes)*
+
+**Scored 2026-09-15. Nothing ships. `models/walkforward/sp6_decision.json`.**
+
+### The mechanism gate predicted all three results before they were run
+
+This is the part worth keeping. §1 fixed **0.8518** — the incumbent pair's own
+prediction correlation — as the reference, *before either new member existed*.
+Measured afterwards:
+
+| member | standalone | corr w/ torch | corr w/ xgb | disagrees w/ torch |
+|---|---|---|---|---|
+| torch | 0.6487 | — | 0.8518 | — |
+| xgb | 0.6488 | 0.8518 | — | 14.5% |
+| **logistic** | 0.6507 | **0.9110** | 0.8543 | 9.6% |
+| **bt** | 0.7069 | **0.1846** | 0.1819 | 41.6% |
+
+The two members landed at opposite corners and **neither is in the sweet
+spot**: logistic is nearly as strong as the incumbents but *more correlated
+with torch than xgb is*, so it is a near-copy; bt is radically decorrelated but
+0.058 worse standalone. From those two numbers alone, before any blend ran,
+C1 was predictable as ~nothing and C2 as clearly negative.
+
+### The primary endpoint agreed
+
+| arm | added | pooled | delta | |
+|---|---|---|---|---|
+| C0 | *(incumbent: xgb + torch)* | 0.6459 | — | |
+| **C1** | logistic | 0.6456 | **−0.00030** | fails |
+| **C2** | bt | 0.6533 | **+0.00740** | fails |
+| **C3** | logistic + bt | 0.6501 | **+0.00420** | fails |
+
+Bar 0.003; selection optimism across three candidates is 0.00015, so for once
+multiplicity is not the story. C1 is a tenth of the bar — a redundant member
+contributes nothing. C2 and C3 are *worse than doing nothing*, which is what
+equal-weighting a member that is 0.058 behind does.
+
+C0 reproduced the deployed blend at 0.6459 exactly, so every comparison here
+is paired against the real incumbent rather than a re-run of it.
+
+### Why bt is weak, which is the substantive finding
+
+**20.5% of bt's predictions are exactly 0.5**, and 34.7% fall within 0.01 of
+it. With 4,590 fighters over 11,290 fights the comparison graph averages 2.5
+fights per fighter, which is far too sparse to identify a latent skill: the
+ridge term correctly shrinks most fighters to the population mean, and the
+model has no opinion. Its inner-validation curve tops out around 0.685 at every
+fold — barely inside a coin flip — and it is beaten by plain Elo (0.6827),
+which is already a feature both incumbents read.
+
+So the latent-skill idea is not merely unhelpful here; **it is dominated by a
+column the model already has**. A Bayesian version with uncertainty would fit
+the same sparse graph and inherit the same problem; the constraint is the data,
+not the estimator.
+
+### Deviation from the pre-registration, and why
+
+§2 specified "partial pooling toward a per-division mean". That is **not
+identified**: Bradley-Terry skills are fixed only up to an additive constant
+within each connected component of the comparison graph, divisions are very
+nearly disconnected, and a free per-division mean would wander. Global
+shrinkage toward zero is the identified version of the same idea and costs
+nothing, because every matchup this model is asked about is within-division,
+where the constant cancels. No arm was added or removed.
+
+### What this closes
+
+The blend's own history was 1 → 2 members for 0.0028. **2 → 3 is worth nothing
+from either direction available**: a strong third member is redundant with what
+we have, and a decorrelated third member is too weak to carry a third of the
+weight. Fitted weights are not the escape — `BlendCandidate`'s docstring
+records that they lost to a plain average, and fitting them on these folds is
+this project's known selection failure.
+
+The members stay in the tree. Both are off by default (`extra=()`), the blend
+is byte-identical without them, and `bt`'s correlation number is the cheapest
+diagnostic this project has for whether any future member has anything to add.
