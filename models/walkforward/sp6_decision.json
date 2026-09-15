@@ -1,0 +1,171 @@
+{
+  "experiment": "SP6 -- a structurally different third blend member",
+  "pre_registration": "docs/superpowers/plans/2026-09-15-sp6-third-blend-member.md",
+  "generated_by": "scripts/sp6_decision.py",
+  "primary_endpoint": "pooled out-of-fold winner log-loss, walk-forward",
+  "paired_incumbent": {
+    "report": "c0_incumbent.json",
+    "what": "the deployed two-member blend, xgb + torch",
+    "pooled_winner_log_loss": 0.6459
+  },
+  "n_candidates": 3,
+  "expected_best_of_n_under_the_null": 0.00015,
+  "arms": [
+    {
+      "arm": "C1",
+      "extra_members": [
+        "logistic"
+      ],
+      "what": "equal-weight xgb + torch + logistic",
+      "report": "c1_logistic.json",
+      "pooled_winner_log_loss": 0.6456,
+      "incumbent_pooled_winner_log_loss": 0.6459,
+      "delta": -0.0003,
+      "bar": 0.003,
+      "clears_bar": false,
+      "accuracy": 0.6215,
+      "ece": 0.0109,
+      "per_fold_delta": {
+        "2018": -0.0021,
+        "2019": -0.0008,
+        "2020": 0.0022,
+        "2021": -0.0043,
+        "2022": -0.0017,
+        "2023": 0.0004,
+        "2024": 0.0008,
+        "2025": 0.0017
+      }
+    },
+    {
+      "arm": "C2",
+      "extra_members": [
+        "bt"
+      ],
+      "what": "equal-weight xgb + torch + bt",
+      "report": "c2_bt.json",
+      "pooled_winner_log_loss": 0.6533,
+      "incumbent_pooled_winner_log_loss": 0.6459,
+      "delta": 0.0074,
+      "bar": 0.003,
+      "clears_bar": false,
+      "accuracy": 0.6143,
+      "ece": 0.0117,
+      "per_fold_delta": {
+        "2018": 0.0063,
+        "2019": 0.0067,
+        "2020": -0.0007,
+        "2021": 0.0051,
+        "2022": 0.0023,
+        "2023": 0.0255,
+        "2024": 0.0045,
+        "2025": 0.008
+      }
+    },
+    {
+      "arm": "C3",
+      "extra_members": [
+        "logistic",
+        "bt"
+      ],
+      "what": "equal-weight xgb + torch + logistic + bt",
+      "report": "c3_both.json",
+      "pooled_winner_log_loss": 0.6501,
+      "incumbent_pooled_winner_log_loss": 0.6459,
+      "delta": 0.0042,
+      "bar": 0.003,
+      "clears_bar": false,
+      "accuracy": 0.6168,
+      "ece": 0.0086,
+      "per_fold_delta": {
+        "2018": 0.0017,
+        "2019": 0.0034,
+        "2020": 0.0014,
+        "2021": -0.0006,
+        "2022": -0.0007,
+        "2023": 0.0173,
+        "2024": 0.0028,
+        "2025": 0.0063
+      }
+    }
+  ],
+  "best_arm": {
+    "arm": "C1",
+    "delta": -0.0003,
+    "clears": false
+  },
+  "arms_clearing_the_bar": [],
+  "fresh_seed_confirmation": "not run: required only of an arm that clears the bar, and none did",
+  "mechanism_secondary": {
+    "n": 4856,
+    "reference": {
+      "incumbent_pair_correlation": 0.8518,
+      "meaning": "a member more correlated with the incumbents than they are with each other has less to add than the second member did"
+    },
+    "standalone": {
+      "torch": {
+        "winner_log_loss": 0.6487,
+        "accuracy": 0.6209
+      },
+      "xgb": {
+        "winner_log_loss": 0.6488,
+        "accuracy": 0.6153
+      },
+      "logistic": {
+        "winner_log_loss": 0.6507,
+        "accuracy": 0.6205
+      },
+      "bt": {
+        "winner_log_loss": 0.7069,
+        "accuracy": 0.5187
+      }
+    },
+    "prediction_correlation": {
+      "torch": {
+        "torch": 1.0,
+        "xgb": 0.8518,
+        "logistic": 0.911,
+        "bt": 0.1846
+      },
+      "xgb": {
+        "torch": 0.8518,
+        "xgb": 1.0,
+        "logistic": 0.8543,
+        "bt": 0.1819
+      },
+      "logistic": {
+        "torch": 0.911,
+        "xgb": 0.8543,
+        "logistic": 1.0,
+        "bt": 0.1721
+      },
+      "bt": {
+        "torch": 0.1846,
+        "xgb": 0.1819,
+        "logistic": 0.1721,
+        "bt": 1.0
+      }
+    },
+    "winner_disagreement_rate": {
+      "torch": {
+        "xgb": 0.1448,
+        "logistic": 0.0956,
+        "bt": 0.4164
+      },
+      "xgb": {
+        "torch": 0.1448,
+        "logistic": 0.1472,
+        "bt": 0.4096
+      },
+      "logistic": {
+        "torch": 0.0956,
+        "xgb": 0.1472,
+        "bt": 0.409
+      },
+      "bt": {
+        "torch": 0.4164,
+        "xgb": 0.4096,
+        "logistic": 0.409
+      }
+    }
+  }
+}

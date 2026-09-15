@@ -710,6 +710,59 @@ the walk-forward derivation tracks that drift by construction rather than
 averaging it away.
 
 
+### SP6 — a third member for the blend, and why 2 → 3 is worth nothing
+
+`docs/superpowers/plans/2026-09-15-sp6-third-blend-member.md` →
+`models/walkforward/sp6_decision.json`. **Nothing shipped.**
+
+The blend is the only thing that has ever cleared a bar here, and it worked
+because two learners were wrong in different places. Both read the same 87
+columns, so SP6 asked whether a member different *in kind* adds more.
+
+**The mechanism was pre-registered as a number, before either member existed.**
+A fixed-weight average can only gain when its members disagree, and
+disagreement is measurable without the outcome — so the incumbent pair's own
+prediction correlation, **0.8518**, went into the plan as the reference a third
+member must beat. Measured afterwards:
+
+| member | standalone | corr w/ torch | corr w/ xgb | disagrees w/ torch |
+|---|---|---|---|---|
+| torch | 0.6487 | — | 0.8518 | — |
+| xgb | 0.6488 | 0.8518 | — | 14.5% |
+| **logistic** | 0.6507 | **0.9110** | 0.8543 | 9.6% |
+| **bt** (Bradley–Terry) | 0.7069 | **0.1846** | 0.1819 | 41.6% |
+
+They land at opposite corners and **neither is in the sweet spot**: the linear
+model is nearly as strong as the incumbents but *more correlated with torch
+than xgb is*, so it is a near-copy; the latent-skill model is radically
+decorrelated but 0.058 worse. Both outcomes were predictable from those two
+numbers alone. The primary endpoint agreed:
+
+| arm | added | pooled | delta | |
+|---|---|---|---|---|
+| C0 | *(incumbent: xgb + torch)* | 0.6459 | — | |
+| C1 | logistic | 0.6456 | −0.00030 | fails |
+| C2 | bt | 0.6533 | +0.00740 | fails |
+| C3 | logistic + bt | 0.6501 | +0.00420 | fails |
+
+Bar 0.003, selection optimism across three candidates 0.00015 — for once
+multiplicity is not the story. A redundant member adds a tenth of the bar; a
+weak one at a third of the weight makes the blend actively worse.
+
+**Why the latent-skill member is weak is the substantive finding.** 20.5% of
+its predictions are *exactly* 0.5. With 4,590 fighters over 11,290 fights the
+comparison graph averages 2.5 fights per fighter — far too sparse to identify a
+latent skill — so the ridge term correctly shrinks most fighters to the
+population mean and the model has no opinion. It is beaten by plain Elo
+(0.6827), which is already a feature both incumbents read. A Bayesian version
+would fit the same sparse graph: the constraint is the data, not the estimator.
+
+So the blend's arc is 1 → 2 members for 0.0028 and **2 → 3 for nothing**, from
+either direction available. Fitted weights are not the escape — they lost to a
+plain average in the model-v2 session, and fitting them on these folds is this
+project's known selection failure.
+
+
 ### SP5 — teaching the model *how much* a decision was won by
 
 `docs/superpowers/plans/2026-09-13-sp5-scorecard-label.md` →
