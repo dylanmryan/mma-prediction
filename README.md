@@ -1,48 +1,118 @@
 # MMA Fight Prediction
 
 ![Weekly data refresh](https://github.com/dylanmryan/mma-prediction/actions/workflows/refresh-data.yml/badge.svg)
+![Tests](https://github.com/dylanmryan/mma-prediction/actions/workflows/tests.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 **[▶ Try the live app](https://mma-prediction-lxqvmgheqvzccdpyord3q9.streamlit.app/)** — pick any two UFC fighters, get calibrated win probabilities with uncertainty.
 
-Predicting UFC fight winners, method of victory, and finish round —
-an Elo rating system, a gradient-boosted ensemble, a multi-task
-neural-network ensemble, and the calibrated **blend of the two that now
-serves**, each evaluated honestly by expanding-window walk-forward over
-2018–2026, plus an interactive Streamlit matchup explorer.
+A UFC fight predictor that says who wins, how, and in which round — as one
+coherent probability distribution — built under the rule that **nothing ships
+without clearing a bar fixed before the number was measured**.
 
-**Highlights**
+It does not beat the betting market. That is stated up front because it is the
+honest headline, it is measured rather than assumed, and the measuring is most
+of what this project is.
 
-- **Point-in-time discipline, machine-verified**: every feature is built only
-  from data available before each fight; a truncation-invariance test proves
-  no feature can see the future.
-- **Baseline ladder**: coin flip → Elo (0.553 acc, 0.683 log-loss) →
-  5-seed XGBoost ensemble (0.616, 0.646) → 5-seed calibrated neural
-  ensemble (0.622, 0.648) → **the calibrated blend of those two, which is
-  what ships** (0.622, 0.644) on 4,804 walk-forward fights, each scored by a
-  model that had never seen its year.
-- **Features earned, not assumed**: eight feature blocks measured against a
-  pre-registered bar. Exactly one ever cleared it on its own; four more ship
-  only because a *second model family* turned out to use what the neural net
-  could not, and three ship in no form at all ([Features](#features)). A
-  selection leak in per-corner missingness flags was found and removed along
-  the way.
-- **Uncertainty done properly**: spread across the five per-seed blends
-  (booster *i* paired with net *i*), MC dropout from the neural member, a
-  temperature fitted on held-out data *after* the blend average. The method
-  and round probabilities used to be rescaled to historical base rates before
-  display; since the simulator ships they are marginals of one coherent joint
-  distribution and are shown raw, with the calibration measured weekly
-  (`models/display_calibration.json`) rather than corrected.
-- **Self-updating**: a weekly GitHub Action refreshes the dataset and rebuilds
-  every artifact; the entire pipeline reproduces byte-for-byte.
-- **Prospective evaluation**: real upcoming UFC events get predicted and
-  committed to git *before* they happen, then auto-graded afterward — see
-  [Prospective track record](#prospective-track-record) below.
+---
 
-Design doc: `docs/superpowers/specs/2026-07-10-mma-prediction-design.md` ·
-Phase plans: `docs/superpowers/plans/`
+## The engine, in one page
+
+Predictions come from a **hybrid**: one model decides *who wins*, a second
+decides *how and when*, and the two compose into a joint distribution over
+every (winner × method × round) outcome.
+
+```
+                   ┌─ 5-seed XGBoost ensemble ─┐
+ 87 features ──────┤                           ├── average ── temperature ──►  P(A wins)
+ (6 blocks)        └─ 5-seed neural ensemble ──┘        (fitted on held-out data)
+                                                                   │
+                   ┌─ per-round hazard model (KO / sub / survive) ─┐│
+ fight context ────┤                                              ├┴──►  P(method, round │ winner)
+                   └─ 40,000 Monte Carlo simulated fights ────────┘
+                                                                   │
+                                      joint = P(winner) × P(method, round │ winner)
+```
+
+- **The winner half is a blend** because two model families are wrong in
+  different places. Alone they score 0.6487 (net) and 0.6488 (trees); averaged
+  and re-calibrated they score **0.6459**. Their predictions correlate 0.85 and
+  they disagree on the winner in 14.5% of fights — that disagreement is the
+  entire gain.
+- **The method/round half is a simulator.** A discrete-time hazard model gives
+  per-round finish probabilities; 40,000 simulated fights per matchup turn
+  those into a distribution. It improved the joint by 5.8× its bar.
+- **One feature builder serves both training and inference** (`mma.serving`),
+  so a feature cannot exist at training time and be missing or different at
+  prediction time.
+
+Deployed model version `18d1a70777ea`. Every artifact rebuilds byte-for-byte.
+
+## How well it works
+
+Expanding-window walk-forward, **4,856 fights over fold years 2018–2025**, each
+scored by a model that never saw its year:
+
+| Model | Accuracy | Log-loss |
+|---|---|---|
+| Coin flip | 0.500 | 0.693 |
+| Elo baseline | — | 0.6827 |
+| 5-seed XGBoost ensemble | 0.6153 | 0.6488 |
+| 5-seed neural ensemble | 0.6209 | 0.6487 |
+| **The deployed blend** | **0.6199** | **0.6459** |
+
+On the 3,310 fights with odds, out of fold: **model 0.6463, closing line
+0.6099.** The market wins by 0.036, and beats us on seven of eight
+pre-registered subsets. ROI is negative at every threshold tested.
+
+**Prospective**: 86 fights predicted before the event and committed to git,
+57 graded — 0.5965 accuracy, 0.6602 log-loss, against a coin flip at 0.5088
+and a higher-Elo-wins dummy at 0.4386. Every one belongs to the *July* model;
+the hybrid has not yet made a graded prediction, and at ~13 graded fights a
+month the confidence interval ([0.458, 0.724]) will not resolve a small
+improvement for years.
+
+## What was tried, and what it cost
+
+Almost everything failed. That is the finding, and each row links to the
+numbers:
+
+| Experiment | Verdict |
+|---|---|
+| **8 feature blocks** measured individually | 1 cleared its own bar (`external`, −0.0034) |
+| 4 more blocks, dead to the net | **alive to the trees** — they ship inside the blend |
+| `rankings`, `in_fight` | neutral-to-negative on both members |
+| **25-configuration capacity search** | winner cleared at −0.0039, **fresh seeds re-scored it to −0.0024** |
+| **Two model families blended** | **shipped** — the project's one real win |
+| **Monte Carlo fight simulator** | **shipped** — joint log-loss 2.143 vs 2.201 |
+| Calibration remedies (temperature, Platt, isotonic) | 0 of 7 bands miscalibrated; best oracle repair 0.0004 vs a 0.003 bar |
+| **Scorecard margin** as a training label | fails; the stated mechanism was *backwards* |
+| A third, structurally different blend member | fails; 2 → 3 members is worth nothing |
+| **Accumulated damage** (incl. knockdowns suffered, which the model never had) | no signal, at a floor that *could* have seen one |
+| Ten pre-registered looks for any edge over the market | ten losses |
+
+**→ [The full record, with every number](docs/EXPERIMENTS.md)**
+
+Three things make those verdicts trustworthy: every bar was fixed in a
+committed document *before* measuring; every noise floor was measured rather
+than assumed (σ ranges from 0.0001 for the blend to 0.00125 for a single
+XGBoost fit); and a search of *N* arms is judged against the σ√(2 ln N) a
+best-of-*N* produces from nothing.
+
+## Honest limitations
+
+- **It loses to the market by 0.036 log-loss**, and no subset flips that.
+- **The odds-free constraint is self-imposed** and costs roughly what the
+  literature says devigged opening odds are worth. Public models that beat this
+  one do it by using odds as a feature.
+- **Three of six shipped feature blocks are decaying.** Their source snapshot
+  froze at 2024-12-14: `external` is 53% unknown on 2026 fights, and `notice`
+  is **100%** unknown — it contributes nothing to any prediction made today.
+- **The prospective sample is too small to conclude anything** (n=57), and it
+  measures a superseded model.
+- Method and round are genuinely hard. The simulator improved them; they are
+  still the weakest part.
 
 ## Quickstart
 
@@ -55,506 +125,27 @@ python3 -m venv .venv
 .venv/bin/pytest
 ```
 
-Interactive app: `streamlit run app.py` (pick any two fighters, get win
-probability with uncertainty, method and finish-round tendencies, and a
-"Why this prediction?" breakdown of the top factors behind the call).
-
-Data bootstraps from the [Kaggle UFC dataset](https://www.kaggle.com/datasets/neelagiriaditya/ufc-datasets-1994-2025)
-via `kagglehub` and auto-refreshes weekly from the same maintained mirror
-(`scripts/refresh_data.py`). The upstream dataset was rebuilt in August 2026
-with a new file layout — `master.csv` (one row per fight, including fight
-totals), `fighter.csv`, `round.csv` (per-round stats, including head/body/leg
-and distance/clinch/ground strike splits), and `fighter_bonus.csv`, plus
-referees. Ingestion switched to this layout in September 2026;
-`scripts/reconcile_sources.py` audits the swap and confirmed the new source
-is a strict superset of the old one — all 8,337 previously ingested fights
-are present with identical labels (one 2025 result was relabelled draw vs.
-no-contest by the source itself), and the new source adds 3,104 fights,
-concentrated in 1997–2011 (hundreds per year in 2004–2011, mostly fights the
-earlier scrape had dropped) plus 40–80 per year from 2017 onward and the
-September 2025 – August 2026 refresh. Every artifact in this repo was
-retrained on the resulting 11,441 fights. A direct ufcstats.com scraper was
-planned but dropped — the site gates automated clients behind an anti-bot
-challenge; `src/mma/parsing.py` now supplies the string parsers the new
-layout needs. The `.github/workflows/refresh-data.yml` Action runs this
-refresh weekly and commits any rebuilt artifacts automatically.
-
-### Two sources, one union
-
-The Kaggle mirror is rebuilt whenever its maintainer gets round to it, which
-in practice means the tables can trail real events by a month. On 2026-09-09
-its newest fight was dated 2026-08-08 while four UFC cards had happened
-since — and because grading a prospective prediction needs the result to be
-*in* `fights.parquet`, that lag was holding 24 already-made predictions
-ungraded. Nothing about it was a modelling problem.
-
-So the pipeline reads a **second** source: [`Greco1899/scrape_ufc_stats`](https://github.com/Greco1899/scrape_ufc_stats),
-which scrapes the same ufcstats.com pages daily and publishes plain CSVs.
-It is used strictly as **data** — `scripts/refresh_secondary.py` fetches the
-published CSVs over HTTPS and no GPL-licensed code is vendored into this
-repo — and it is a **standing stage of every rebuild**, not an occasional
-write:
-
-- **Every rebuild fetches both and builds from the union.** That is the
-  whole design. A one-off write would have put fights into the committed
-  tables that the next Kaggle-only rebuild then dropped, firing
-  `make_dataset.py`'s regression guard and turning the weekly Action red
-  until Kaggle caught up. Because the merge happens on every rebuild, no
-  rebuild can drop what a previous one added and the guard keeps its meaning.
-- **The primary always wins.** On any fight both sources have, the Kaggle
-  row survives even where the two disagree — it is the reconciled, tested
-  source. The secondary can only ever append.
-- **The merge is gated.** Winner agreement on the fights both sources have
-  must reach 0.99 or the merge is refused; the measured figure is printed
-  every run (0.9999 on the 8,768-fight overlap today). A fight is merged only
-  if it brings the whole shape of record the primary provides — the fight
-  row, both fight-total stat rows, a complete per-round record, and a named
-  fighter in each corner. Anything less is rejected and counted, which is why
-  none of `make_dataset.py`'s integrity checks had to be relaxed to let the
-  new rows through.
-- **It is fail-soft.** An unreachable host, a renamed upstream column, a
-  truncated CSV or a source that disagrees with ours all degrade to a
-  primary-only build with a loud warning, never a half-built table and never
-  a red Action. If a later rebuild loses fights the scrape had supplied, the
-  regression guard says so and continues — a lost source is not a corrupted
-  one.
-- **Every row records where it came from.** `data/processed/provenance.parquet`
-  carries one row per `fights` and per `fighters` row (`table`, `row_id`,
-  `source` ∈ `primary`/`secondary`); `fight_stats` and `round_stats` are
-  keyed by `fight_id` and inherit their fight's entry. It is a **sidecar
-  rather than a column** on purpose: provenance is a near-perfect proxy for
-  recency, and `secondary` today means "in the last few weeks", so keeping it
-  out of the tables `build_features.py` reads means no future feature block
-  can pick it up by iterating columns and quietly learn the calendar.
-
-The first run of the standing stage added **52 fights and 9 fighters**,
-moving the tables from 11,441 fights through 2026-08-08 to **11,493 through
-2026-09-05**. The 9 are UFC debutants whose fights the earlier report-only
-runs had to reject for having no biographical row to build features from;
-the scrape publishes the same ufcstats fighter pages, so they now arrive with
-their fights. Nothing is rejected today: no fight, no fighter.
-
-Freshness is decided by asking both sources (`scripts/refresh_data.py`).
-Since the processed tables now run *ahead* of the Kaggle mirror by design,
-the Kaggle comparison is made against the primary-sourced rows only — that is
-the provenance sidecar's first real job — and the scrape's own event list is
-probed for anything later than the tables. Either source running ahead
-triggers a rebuild.
-
-Two consecutive full rebuilds produce byte-identical parquet for all six
-processed tables, including a rebuild that went primary-only in between and
-then came back.
-
-## Features
-
-The feature table is assembled from named **blocks** (`src/mma/feature_blocks.py`,
-`scripts/build_features.py --blocks`). The table on disk is
-**11,238 fights × 87 columns**, built from
-`base,external,trajectory,notice,context,opponent_adjusted`
-(`data/processed/features_blocks.json` records which blocks produced it, and the
-serving path reads the same sidecar so a trained column cannot go missing at
-prediction time). Run bare, `scripts/build_features.py` rebuilds *those* blocks
-— it reads the sidecar rather than defaulting to `base`, which is what the
-weekly Action depends on.
-
-Only two of those six blocks ever cleared the pre-registered bar as a block.
-`base` is the v1 contract; `external` cleared on its own; the other four were
-measured, rejected, re-tested and rejected again, and ship only as part of the
-feature table the **blend** was scored on — see
-[the blend](#two-model-families-one-scorer--and-the-gate-that-had-to-be-amended)
-below, which is where the honest accounting for that lives.
-
-- **`base`** — the v1 feature set: career volume and win/finish rates,
-  per-fight and per-minute striking, takedown and control rates, streak and
-  layoff, last-5 form and strength of schedule, the three Elo ratings
-  (overall / striking / grappling) and Elo-tracked experience, plus physical
-  differentials (height, reach, age), per-corner age and fight count, and the
-  stance / debut / missingness flags. All built inside the chronological
-  accumulators in `src/mma/history.py`, so every value is strictly pre-fight.
-- **`external`** — what each fighter brought *into* the UFC, from the
-  `ehan03/jds-mma-data` snapshot joined by ufcstats fighter id and never by
-  name: `pre_ufc_wins`, `pre_ufc_losses`, `pre_ufc_finish_rate`,
-  `pre_ufc_finish_loss_rate`, `pre_ufc_avg_opp_wins` and
-  `days_since_pro_debut` as A-minus-B differentials. This is the only signal
-  in the table that is not a recombination of the fight history: it is the
-  regional career the UFC record cannot see. Worth **−0.0034** pooled
-  log-loss to the neural net, and **−0.0043** on fresh seeds.
-- **`trajectory`** — rating *dynamics* on top of the base block's rating
-  *levels*: Glicko-2 deviation and volatility, recent Elo momentum, drawdown
-  from a fighter's own peak, tenure, and two age interactions.
-- **`notice`** — short-notice replacement and missed weight, from the same
-  `ehan03/jds-mma-data` snapshot. Its bout list stops at 2024-12-14, so
-  `notice_unknown` is the served state for every future fight.
-- **`context`** — the fight's setting rather than either record: referee
-  tendency, home advantage, and post-fight bonus history.
-- **`opponent_adjusted`** — each core rate priced against what that fight's
-  opponent had historically *allowed*, plus mean opponent Elo in wins and
-  losses.
-
-The last four never cleared the bar as blocks and are not claimed to have.
-They are in the table because they are worth something **to the XGBoost
-member of the deployed blend** and nothing to the neural one; the size of
-that contribution is measured and reported below.
-
-Five columns live in the table and are held out of **both** model matrices
-(`mma.tensors.DROPPED`, `mma.models.xgb.MODEL_EXCLUDED`) as leak guards:
-`external_missing`, `same_country`, `notice_unknown`, `home_country_a` and
-`home_country_b`. The first is the coverage-selection leak described below;
-the `home_country` pair is the same leak in a second channel.
-
-### Block results
-
-Eight blocks were measured against the bar; **one cleared it**. Every
-rejected block's harness report is committed under `models/walkforward/` —
-negative results are deliverables here, not deleted branches. Pooled winner
-log-loss, torch deciding (the scorer deployed at the time), against that
-block's incumbent:
-
-| Block | What it added | XGB | torch | Δ vs incumbent | Ships? |
-|---|---|---|---|---|---|
-| `external` | pre-UFC career and origin | 0.6506 | **0.6476** | **−0.0034** | **cleared the bar** |
-| `recency` | training window + recency weights | 0.6525 | 0.6499 | −0.0011 | no |
-| `notice` | short-notice replacement, missed weight | 0.6501 | 0.6472 | −0.0004 | in the table (SP2.2) |
-| `trajectory` | Glicko-2, Elo momentum, peak-minus-current | 0.6486 | 0.6472 | −0.0004 | in the table (SP2.2) |
-| `context` | referee rates, home country, bonus history | 0.6499 | 0.6474 | −0.0002 | in the table (SP2.2) |
-| `rankings` | official weekly divisional rank | 0.6499 | 0.6487 | +0.0011 | no |
-| `in_fight` | per-round and strike-target profile | 0.6540 | 0.6528 | +0.0018 | no |
-| `opponent_adjusted` | rates versus what opponents allowed | 0.6519 | 0.6532 | +0.0022 | in the table (SP2.2) |
-
-Seven of eight fail, and mostly in the same shape: the tree ensemble is
-roughly neutral or slightly better while the neural net — the scorer that
-decides — is worse. A tree can ignore a correlated column that is NaN on most
-rows; the MLP has to impute a median for it on every one of those rows and
-spend capacity on the result. `in_fight`, `opponent_adjusted`, `trajectory`
-and `rankings` are all recombinations of information the base table already
-carries. The box score, in other words, is close to tapped out.
-
-That shape — *the tree is fine with these columns and the deployed net is
-not* — was read twice as a reason to reject, and the second reading turned
-out to be the interesting one. It is what the blend below exploits.
-
-Two blocks failed a *serving* gate rather than the accuracy bar, which is
-worth recording separately: `context`'s referee columns are present on 97.7%
-of training rows and **0%** of the rows the deployed model will ever score
-(Wikipedia cards do not name a referee), and `notice`'s source stops at
-2024-12-14, so "unknown" is the served state for every future fight by
-construction.
-
-### The leak in the `external` block
-
-The most interesting finding in this pass is a bug we shipped past. As
-specified, the block carried a **per-corner** missingness flag. Measured that
-way it looked spectacular — torch 0.6367, Δ −0.0143, the debut slice −0.0846
-— and it was wrong.
-
-Membership of the snapshot's cross-source fighter mapping is a function of how
-long a fighter's UFC career turned out to be: among fighters debuting
-2013–2022, the mapped share is 0.241 for those with one UFC bout ever, 0.813
-at two, 0.940 at three and 1.000 at eleven or more. So "this corner is missing
-from the external table" means "this fighter did not go on to have a career."
-Over the 1,445 fights where exactly one corner is unmapped, that corner loses
-**76%** of the time — and 90% in the debut slice. Meanwhile the actual pre-UFC
-differentials carry almost nothing on their own.
-
-The walk-forward signature is what a leak looks like when the harness catches
-it: folds 2018–2023 improved by −0.026 to −0.046 while **2025 cost +0.0487**,
-because in 2025 missingness stops meaning "short career" and starts meaning
-"debuted after the snapshot". `no_fold_regression` failed and the variant did
-not ship.
-
-The fix keeps the flags in the **table** and out of both **model matrices**
-(`mma.tensors.DROPPED`, `mma.models.xgb.MODEL_EXCLUDED`): without
-`external_missing` in the table there is no `external_missing` evaluation
-slice, and the coverage decay below becomes unmeasurable. The differentials
-are NaN whenever either corner is unmapped, so no per-corner channel survives
-— and the property asserted is a data-level one, not a rule about column
-names: over those 1,445 rows the block's eight columns take **exactly one
-distinct value tuple**, so the selection effect is unreachable rather than
-merely unmodelled (`tests/test_external.py`).
-
-**Coverage caveat, and why the block is provisional.** The snapshot is static
-(UFC coverage ends 2024-12-14). `external_missing` is 0.201 of all rows but
-0.359 of 2025 and 0.534 of 2026, and the block's gain follows: −0.0047
-row-weighted on 2018–2023 against −0.0006 on 2024–2025. It pays where the
-snapshot has seen the fighters and does nothing where it has not, and the
-share it has not seen only grows. Keeping this block paying needs a
-refreshable source — an SP4 follow-up, not a solved problem.
-
-### Were the rejected blocks capacity-limited? A pre-registered re-test
-
-The table above has a suspicious pattern: on the blocks with the most new
-columns, the tree ensemble improves while the neural net — the scorer that
-decides — gets worse. That is what a *capacity* limit looks like, not
-necessarily an absence of information. A gradient-boosted ensemble can pick
-the better-conditioned member of a correlated pair per split; a fixed-width
-MLP must spend capacity on all of them, and the deployed MLP's shape was tuned
-when the table had 46 columns. So the rejections might have been measuring the
-architecture rather than the features.
-
-That was written down as a hypothesis and tested, with the design, the arms,
-the search space and the decision rule **pre-registered before anything ran**
-(`docs/superpowers/plans/2026-09-08-sp2-1-capacity-experiment.md`). The four
-rejected blocks whose numbers fit the capacity story — `trajectory`, `notice`,
-`context`, `opponent_adjusted` — were restored (each first verified to
-reproduce its committed SP2 number exactly, so a "gain" could not be a
-restoration bug) into a combined 87-column table, and a 25-configuration torch
-architecture search was run over it.
-
-**The control arm is the point.** The identical 25 configurations were also
-searched over the *shipped* 54-column table. Without that arm, any improvement
-would have been credited to the features when it might have been the
-architecture all along.
-
-| Arm | Features | Architecture | Pooled | Δ vs deployed 0.6476 | Ships? |
-|---|---|---|---|---|---|
-| A1 | combined | deployed | 0.6475 | −0.0001 | no |
-| **C** (control) | **shipped** | searched, best of 25 | 0.6463 | −0.0013 | no |
-| **T** (treatment) | **combined** | searched, best of 25 | 0.6464 | −0.0012 | no |
-
-**Neither arm cleared the 0.003 bar, and T − C = +0.0001 is inside the seed
-noise floor of 0.00035.** The pre-registered rule's fourth branch applied
-verbatim — *the blocks are dead and the architecture is adequate; record and
-revert* — so the blocks were unregistered again and **nothing was deployed**.
-Neither hypothesis survived: the extra columns are not worth 0.003 even at
-higher capacity, and a search across five architecture families and five
-hyper-parameters could not move the control arm a third of the bar either. The
-box score and the fixed-width MLP are both at their ceiling.
-
-Two findings are worth keeping regardless of the verdict:
-
-- **A result that looked like a ship, and was seed luck.** On the combined
-  table XGBoost improved by −0.0039 with every evaluation slice better — over
-  the bar, `ships: true`. The pre-registration required a fresh-seed re-score
-  before that could count. Re-run at three fresh seeds it averaged **−0.0024**,
-  under the bar. Had the confirmation step been optional, this project would
-  have shipped a coin flip.
-- **XGBoost's seed noise, measured here for the first time: σ ≈ 0.0009–0.0013,
-  about 3× the torch ensemble's 0.00035.** A single boosted fit is a much
-  noisier measurement than a 5-seed average, which is exactly why the −0.0039
-  looked real. No earlier rejection rests on a single-seed XGB number alone —
-  the screen never dropped a block without a torch run — but XGB screening
-  should use ≥3 seeds from here on, and `--model-seed` plus
-  `scripts/noise_floor.py --candidate xgb` now exist for that.
-
-Everything measured is committed (`models/walkforward/search/`,
-`models/walkforward/sp2_1_decision.json`), including the strongest lead the
-experiment turned up and could not act on: an equal-weight **blend** of the
-two scorers reads 0.6459 on the shipped table and 0.6436 on the combined one,
-with every slice improving. A blend was not one of the five pre-registered
-arms, so shipping it on these numbers would be the exact after-the-fact
-search-widening the pre-registration forbids. It gets its own experiment.
-
-### Two model families, one scorer — and the gate that had to be amended
-
-That blend got its own pre-registered experiment
-(`docs/superpowers/plans/2026-09-08-sp2-2-blend-experiment.md`,
-`models/walkforward/sp2_2_decision.json`) and **it ships**. The deployed
-scorer is no longer the neural ensemble on its own: it is the equal-weight
-(0.5/0.5) average of a **5-seed XGBoost ensemble** and the **5-seed neural
-ensemble**, temperature-scaled *after* averaging, on the 87-column table.
-
-**The design was fixed before anything ran.** Two candidates and nothing
-else: **B0**, the blend on the shipped `base,external` table, and **B1**, the
-identical construction on the 87-column table SP2.1 had built and reverted.
-Fitted or searched blend weights, three-model blends, stacking and per-slice
-weighting were all explicitly out of scope — the 2026-07-15 model-v2 session
-had already found a fitted logistic stack *worse* than either model alone,
-and fitting weights on the same folds that judge the candidate is the
-selection failure this project keeps getting burned by. The 0.3 / 0.5 / 0.7
-weight sweep (0.6456 / 0.6453 / 0.6462 on S0) exists only to show the surface
-is flat near 0.5; the shipped weight is 0.5 whichever cell won.
-
-**The blend needed a noise floor of its own, and got one first.** Built three
-times from disjoint seed sets on *both* members — {0–4}, {5–9}, {10–14} — it
-scores 0.6453 / 0.6451 / 0.6452, i.e. **σ_blend = 0.0001**: the most stable
-scorer measured anywhere in this repo, against 0.00035 for the 5-seed neural
-ensemble and 0.00087–0.00125 for a single XGBoost fit. Averaging two
-independent families cancels seed noise from both. The bar stayed
-`max(0.003, 2σ)` = **0.003**, fixed by that measurement before any candidate
-was scored against it.
-
-| Candidate | Feature table | Pooled | Δ vs deployed 0.6476 | Fresh seeds 5–9 | Ships? |
-|---|---|---|---|---|---|
-| B0 | `base,external` | 0.6453 | −0.0023 | −0.0022 | no |
-| **B1** | 87-column | **0.6437** | **−0.0039** | **−0.0037** | **yes** |
-
-B1 clears at seeds 0–4 and clears again on the fresh-seed re-score at seeds
-5–9 against its own paired incumbent — the confirmation step that caught
-SP2.1's false positive. Worst fold is +0.0061 and +0.0064 against the 0.01
-fold-regression tolerance. All four evaluation slices improve at seeds 0–4
-(debut −0.0127, `external_missing` −0.0150, womens −0.0092, five_round
-−0.0016); on fresh seeds three of four improve and five_round is +0.0012.
-B0 never clears, so the pre-registered rule for choosing *between* two
-winners never fired.
-
-The blend also beats both of its own members on the same table: XGBoost
-0.6462, the neural ensemble 0.6475, the blend 0.6437 (all three on the harness
-form, so the comparison is like for like; the deployed fixed-temperature blend
-reads 0.6432). Calibrating after the
-average is doing real work on calibration and nothing on log-loss — the
-uncalibrated blend reads 0.6455 with ECE 0.0162 against 0.6453 / 0.0091
-calibrated.
-
-#### The weakness: a pre-registered gate was amended after the numbers were seen
-
-This is the least comfortable paragraph in this README, and it is here
-because leaving it out would make everything else in the file worth less.
-
-Rule 4 of the pre-registration was an ECE gate: *a shipping candidate must
-not have a worse pooled ECE than the incumbent (0.0088).* B1's pooled ECE is
-**0.0124** on the harness form, so it **failed that gate as written**. (Every
-ECE in this subsection is the harness form's — see "the gate judged a form
-that does not ship" below, which is a second, separate weakness.) The rule
-reserved that case
-for a human call, and the human's call was to **re-specify the gate** — after
-seeing the numbers. That is exactly the kind of move this project's whole
-protocol exists to prevent, and calling it anything softer than a weakness
-would be dishonest.
-
-What the re-specification rested on, all of it measured and committed
-(`models/walkforward/noise_floor_ece.json`):
-
-- **The gate compared one number to one number, with no known precision.**
-  The incumbent's own pooled ECE across three disjoint seed sets is
-  0.0088 / 0.0160 / 0.0101 — mean 0.0116, sd **0.0038**. The 0.0088 the rule
-  named was the incumbent's *best* of the three. The 0.0036 gap the gate
-  turned on is smaller than one standard deviation of the metric doing the
-  testing.
-- **The gap does not survive a different binning of the same predictions.**
-  At 10 bins B1 is worse by +0.0037; at 5, 15 and 20 bins it is *better*
-  (−0.0023, −0.0064, −0.0049). Ten bins is only the default of the ECE
-  helper; nothing in the pre-registration justified it.
-- **The reliability curves show no systematic miscalibration on either
-  side** — a couple of bins over on one side and under on the other, not a
-  slope.
-
-The replacement is the form every other bar in this project uses: *mean
-pooled ECE across three disjoint seed sets, tolerance 2σ of the pooled
-spread*. It demands more than the original (three seed sets, not one), and
-B1 passes it — 0.01337 ± 0.00100 against the incumbent's 0.01163 ± 0.00384,
-a difference of **+0.0017** against a 2σ tolerance of **≈0.0056**.
-
-The mitigations are mitigations, not a defence: the amendment is written
-down, dated, and marked as post-hoc inside the pre-registration itself; the
-original wording is preserved verbatim there and in the decision artifact;
-the replacement is the project's standard form rather than a threshold picked
-to fit; and **the log-loss bar B1 actually cleared was never touched**. A
-reader who thinks the ECE gate should have stood has every number needed to
-say so.
-
-And the mitigation list needs one correction of its own. The replacement gate
-is stricter on one axis — three seed sets rather than one — but it is
-**looser on the axis that decided the outcome**: it introduced a ±2σ
-tolerance where the original had none. B1 fails the original gate outright
-(0.0124 against 0.0088) and also fails a mean-vs-mean comparison with no
-tolerance (0.01337 against 0.01163, +0.0017 the wrong way). It passes only
-because the amendment allows a candidate to be worse by up to 0.0056.
-"Stricter in what it demands" was the wrong summary and is corrected here and
-in the plan's amendment block.
-
-#### The gate judged a form that does not ship
-
-Both versions of the ECE gate compared numbers taken from walk-forward
-reports, and every walk-forward report scores the **harness** form — one
-temperature refit on each fold's inner-validation year. The deployed scorer
-applies a single fixed temperature and cannot fit per fold, so no version of
-the gate was ever applied to the model that ships. (One limit on the
-correction: the deployed form can only be re-scored where a per-row prediction
-dump was committed, and that is B1 at seeds 0–4 alone — so its ECE below is a
-single measurement, not the three-seed-set mean the amended gate's arms use.)
-
-Re-scoring the committed per-row dump under the deployed form gives pooled
-**log-loss 0.6432 and ECE 0.0108** (5/10/15/20 bins: 0.0034 / 0.0108 / 0.0108
-/ 0.0155) against the harness form's 0.6437 and 0.0124 — better on both, and
-comfortably inside the amended gate's own threshold of **0.017241** (the
-incumbent mean plus its 2σ tolerance), which it clears by 0.0064. The gate
-was not re-run on this form: rule 4 was resolved on the harness numbers, and
-re-applying a gate to a different form afterwards would be a second post-hoc
-move on top of the one already recorded. What is recorded instead is where
-the shipped scorer falls against the same threshold
-(`deployed_form.against_the_amended_ece_gate` in the decision artifact).
-
-This is not a cosmetic distinction, because the fixed temperature the project
-originally shipped was **the wrong one**. It was 0.80, the median of the eight
-per-fold fits — a rule borrowed from *training-budget* derivation, where a
-median epoch count is a defensible central tendency of a budget. A median
-temperature has no calibration justification and no harness run ever measured
-it. Re-scored, 0.80 gives pooled ECE **0.0177**: worse than the published
-0.0124, and *over* the amended gate's own threshold. The deployed value is now
-the walk-forward one (0.85), the only rule that is both fixed at serving time
-and validated without using the evaluation rows to choose it, and the
-alternatives are all scored side by side in
-`models/walkforward/blend_temperature.json`.
-
-One remediation was tried and failed decisively. If a single scalar cannot
-fix a *shape* mismatch between two differently-calibrated probability
-streams, an isotonic regression fitted on the same inner-validation year
-should. It is far worse on both axes: **0.7049** log-loss against B1's
-0.6437, ECE 0.0289 against 0.0124, all eight folds worse and five of them
-beyond the 0.01 fold-regression tolerance (2019 alone by +0.195). It does not
-ship in any form, and it is evidence that temperature scaling was never the
-binding constraint.
-
-#### Four dead blocks, alive through the other member
-
-SP2.1 declared `trajectory`, `notice`, `context` and `opponent_adjusted`
-dead. That verdict was reached against the MLP alone, and it still stands as
-stated: the neural arm reads 0.6475 on the 87-column table against 0.6476 on
-the shipped one, which is nothing. The XGBoost arm reads **0.6462 against
-0.6490** — the blocks were never dead to the trees, and a blend is how that
-reaches the served prediction.
-
-The honest magnitude, though, is small. **B1 (0.6437) against B0 (0.6453) —
-the same blend on the previous table — is −0.0016**, which does not clear a
-bar of its own. *The blend* is what cleared the bar; the four blocks are a
-fraction of it that would have shipped nothing alone. They are in the table
-because they came free with a candidate that cleared, not because they
-earned their own row.
-
-They are not free to maintain. Three of the six shipped blocks draw on the
-static `ehan03/jds-mma-data` snapshot, whose UFC coverage ends 2024-12-14:
-`external`, whose `external_missing` is already **0.534 of 2026 rows**;
-`notice`, whose columns are unknown on **100%** of 2025–2026 rows by
-construction; and `context`'s nationality half. `trajectory` and
-`opponent_adjusted` are fight-history recombinations and do not decay. Every
-year that passes without a refreshable source moves more of this table to
-"unknown".
-
-#### Two deployment bugs the shipping work found
-
-Neither would have raised an alarm on its own, which is why both are recorded
-here.
-
-1. **The weekly refresh would have silently rebuilt the shipped table with
-   five blocks missing.** `scripts/build_features.py` defaulted to `base`
-   only, and `.github/workflows/refresh-data.yml` invokes it bare. Nothing
-   would have crashed — the preprocessor and the XGBoost matrix are both
-   fitted on whatever columns exist — so the next retrain would simply have
-   deployed a worse model with no error anywhere. The default is now the
-   blocks recorded in the sidecar next to the committed table; a named
-   `--blocks` still wins, so experiments are unaffected.
-2. **One unseen weight class would have killed a whole card's predictions.**
-   XGBoost 3.x matches categoricals by value, and a served row's
-   `weight_class` is categorised from the one value present. A division the
-   models never trained on — a "Catchweight" off a Wikipedia card — raised
-   `XGBoostError` rather than becoming a missing value, and
-   `prospective.predict_fight` did not catch it. `mma.models.xgb.align_to_booster`
-   now rebuilds a served frame's categoricals from each booster's own
-   category list, so an unseen value becomes missing — which is what the
-   neural member already did with it. The XGBoost floor moved to `>=3.0` for
-   the same reason: under 2.x categoricals match by *code*, which would have
-   made a served weight class silently wrong instead of loud.
-
-Everything measured is committed: `models/walkforward/blend_b*.json`, the two
-noise floors (`noise_floor_blend.json`, `noise_floor_ece.json`),
-`blend_temperature.json` — the deployed temperature's derivation, every
-candidate rule scored side by side, and the round-trip check that the re-score
-reproduces `blend_b1.json`'s own pooled numbers — and `sp2_2_decision.json`,
-which quotes the rules and the amendment verbatim from the plan file, carries
-the deployed form's metrics in `deployed_form`, and is regenerable by
-`scripts/sp2_2_decision.py`.
-
-### Data sources and licences
+Interactive app: `streamlit run app.py` — win probability with uncertainty,
+method and finish-round tendencies, and a "Why this prediction?" breakdown.
+
+**What runs weekly.** `.github/workflows/refresh-data.yml` refreshes the
+dataset, rebuilds every artifact, predicts upcoming events *before* they
+happen, grades past ones, and commits the result. `scripts/` holds twelve
+operational scripts it invokes; the rest are the experiments above.
+
+## Repository map
+
+| Path | What it is |
+|---|---|
+| `src/mma/` | the library: features, ratings, models, simulator, serving, inference |
+| `scripts/` | operational pipeline (12 run weekly) plus one script per recorded experiment |
+| `tests/` | 1,270 tests, including point-in-time and leak guards |
+| `models/` | deployed artifacts, walk-forward reports, decision artifacts |
+| `predictions/` | timestamped pre-event predictions and the graded track record |
+| `docs/EXPERIMENTS.md` | the full experimental record |
+| `docs/superpowers/plans/` | pre-registrations, written before each measurement |
+
+## Data sources and licences
 
 | Source | Used for | Licence |
 |---|---|---|
@@ -568,823 +159,6 @@ the deployed form's metrics in `deployed_form`, and is regenerable by
 Only *derived*, compact tables are committed (a few MB); the raw snapshots
 are never vendored and are regenerated by `scripts/build_external.py` and
 `scripts/build_rankings.py`.
-
-## Results so far
-
-Every model is evaluated by **expanding-window walk-forward** over
-2018–2026 (`scripts/run_walkforward.py`, reports in `models/walkforward/`),
-and both members of the deployed blend are then **refit on every decisive
-fight through the latest event** — there is no longer a historical year held
-out from the model the app serves. The [prospective track record](#prospective-track-record) —
-predictions committed to git before the fights happen — is the only true
-holdout. The [Final held-out test results](#final-held-out-test-results-2024)
-are a one-time artifact from July 2026 and are left as recorded. The
-[market benchmark](#model-vs-the-betting-market) has been recomputed
-against the deployed model using its walk-forward out-of-fold predictions;
-the July 2026 market artifact is kept, frozen, as the historical record of
-the model it described.
-
-### Walk-forward evaluation (2018–2026)
-
-Protocol: for each fold year *Y* from 2018 to 2025, train on every fight
-dated before *Y−1*, early-stop (and, for the neural net, fit per-seed
-temperatures) on *Y−1*, and score *Y*; the last fold also absorbs the
-2026 fights. Each fight is scored exactly once, by a model that never saw
-its year, and the eight folds pool to **4,804 fights**. Elo carries no
-tuning step: its ratings are recomputed point-in-time and scored directly.
-
-**Winner prediction** (4,804 pooled walk-forward fights, 2018–2026), on the
-shipped 87-column feature table. The blend is the deployed scorer; the two
-rows above it are its own members, measured on the same folds:
-
-| Model | Accuracy | Log-loss | Brier | ECE |
-|---|---|---|---|---|
-| Elo baseline | 0.553 | 0.683 | 0.245 | 0.030 |
-| XGBoost (5-seed ensemble) | 0.616 | 0.646 | 0.228 | 0.019 |
-| Neural net (5-seed ensemble, calibrated) | 0.622 | 0.648 | 0.228 | 0.011 |
-| **Blend — the deployed form** (0.5/0.5, one fixed post-average T = 0.85) | **0.622** | **0.643** | **0.226** | **0.0108** |
-| Blend — the harness form (a temperature refit on every fold) | 0.622 | 0.644 | 0.226 | 0.0124 |
-
-(`models/walkforward/{xgb_ens5_s1,torch_a1_combined,blend_b1,elo}.json`; the
-deployed row from `models/walkforward/blend_temperature.json`. The two blend
-rows carry a fourth decimal of ECE because that is where they differ.)
-
-**Why the blend has two rows.** The harness fits one temperature per fold on
-that fold's inner-validation year. The deployed scorer has no held-out year
-and applies a single fixed temperature to every prediction it will ever make,
-so it is a different scorer, and the row a reader of this table cares about is
-the deployed one. The fixed value is derived by re-scoring the harness's own
-committed per-row predictions under a **walk-forward rule** — fold *Y* gets a
-temperature fitted on the pooled out-of-fold predictions of the folds strictly
-*before* Y, which is exactly the information deployment has; at serving time
-every fold is "before", so the served value is fitted on all of them
-(**T = 0.85**, `scripts/derive_blend_temperature.py`). Pooling those folds is
-what makes the deployed row an out-of-sample measurement rather than a
-temperature scored on the rows that chose it. Everything else — the other
-three rows, the candidate table above, the bar B1 cleared — is the harness
-form, which is the right basis for comparing *recipes*.
-
-Pooled method macro-F1: XGBoost 0.331, neural net 0.373, blend 0.339;
-finish-round macro-F1 (finishes only, 2,446 fights): XGBoost 0.187, neural
-net 0.307, blend 0.279. The blend's non-winner heads sit between its
-members, which is the cost of averaging: the class-weighted neural heads
-identify submissions and early finishes where the trees default toward the
-majority class, and averaging pulls that back. Winner log-loss is the
-pre-registered headline metric and the blend is better on it than either
-member.
-
-For continuity with the earlier record: on the previously shipped
-`base,external` table the same protocol gave the neural ensemble 0.6476 and
-a single XGBoost fit 0.6506, and on the v1 46-column table 0.6510 and 0.6537
-(`models/walkforward/{xgb,torch}_v1.json`) — so `external` is worth −0.0034
-to the neural scorer, and the blend a further −0.0039 on top of it.
-
-**Noise floor and pre-registered bar.** Re-running the neural walk-forward
-with three disjoint 5-seed sets gives pooled log-losses of 0.6510 / 0.6516 /
-0.6510, i.e. **σ_seed ≈ 0.00035** (an n=3 estimate; 95% CI roughly
-0.00018–0.0022, `models/walkforward/noise_floor.json`). The same measurement
-on the deployed blend gives 0.6453 / 0.6451 / 0.6452, **σ_blend = 0.0001**
-(`noise_floor_blend.json`), and on a single XGBoost fit 0.00087
-(`noise_floor_xgb.json`). The pre-registered bar for a challenger to
-*replace* the incumbent is **0.003 pooled log-loss** — roughly 9σ for the
-neural ensemble and 30σ for the blend, so a change has to be far larger than
-seed-to-seed wobble, and must not regress any single fold by more than 0.01,
-before it ships.
-
-**Fresh-seed re-score.** Every shipped change is confirmed on seeds it was
-never chosen on, against a paired incumbent built the same way. The
-`external` block: pooled **0.6516 → 0.6473, Δ −0.0043**, worst fold +0.0006,
-against a paired incumbent that reproduces `torch_v1_seeds5.json`
-bit-exactly. The blend: pooled **0.6471 → 0.6434, Δ −0.0037**, worst fold
-+0.0064. Both clear the bar on fresh seeds by about what they cleared it by
-on seeds 0–4 — and the step is not a formality, since it is what caught
-SP2.1's XGBoost false positive.
-
-**Refit strategy.** The harness then asked whether early-stopping on a
-held-out year (protocol A) is actually necessary, or whether a fixed budget
-taken from those early-stopping runs, trained on *all* data through the
-newest year (protocol B), does as well. On the same folds and the shipped
-87-column table: XGBoost 0.6462 → 0.6455, neural net 0.6475 → 0.6473 — both
-within the noise floor (`models/walkforward/refit_decision_b1.json`). Since
-B is not worse and uses every available fight, both members of the deployed
-blend are trained on all **11,238 decisive fights through 2026-08-08** with
-that fixed budget — the feature table now holds 11,290 rows through
-2026-09-05, 52 of them contributed by the daily scrape and none of them yet
-seen by the deployed model, because a retrain changes the model hash and
-opens a new track-record section and is therefore a deliberate step rather
-than a side effect of a data refresh — (neural net: 6 epochs, temperature 1.15 on every seed;
-XGBoost: 109/73/71 trees for the winner/method/round heads, on each of five
-seeds). The budget belongs to a *feature table*, not to the recipe: the
-previous table's budget was 10 epochs at temperature 1.07 and 105/61/75
-trees (`refit_decision_v3.json`) and the v1 table's was 14 epochs at 1.1 and
-82/80/76 (`refit_decision.json`); every file records which table it was
-taken on. `models/torch/metrics_val.json` and `models/xgb_metrics_val.json`
-record the recipe and quote the harness numbers as their evidence. A
-fresh-seed re-score of the recipe (seeds 5–9 instead of 0–4) reproduced the
-same result — Δ +0.0003, still inside σ_seed — confirming the recipe choice
-wasn't a seed-lucky fluke (`fresh_seed_rescore` in
-`refit_decision_b1.json`).
-
-**One thing the refit decision does not cover, deliberately.** The blend's
-*own* post-average temperature cannot be derived in fixed-budget mode: the
-harness fits it on each fold's inner-validation year, which protocol B trains
-on, so a refit-mode blend report cannot exist by construction. It is derived
-instead by re-scoring the harness's committed per-row predictions — a
-**walk-forward temperature**, fitted for fold *Y* on the pooled out-of-fold
-predictions of the folds before *Y*, and at serving time on all of them:
-**T = 0.85** (`scripts/derive_blend_temperature.py`,
-`models/walkforward/blend_temperature.json`). Because each fold is scored by a
-temperature that never saw it, the pooled result is a genuine out-of-sample
-measurement of the *fixed*-temperature form — 0.6432 log-loss, ECE 0.0108,
-against the per-fold-fitted harness form's 0.6437 and 0.0124.
-
-This replaced **T = 0.80**, the median of B1's eight per-fold fitted
-temperatures (0.73, 0.76, 0.93, 0.76, 1.00, 0.78, 0.88, 0.82), which shipped
-until 2026-09-09. That median is the rule the refit recipe uses for a training
-*budget*; nothing justified it for a temperature and no run had measured it.
-Measured at last, it scores pooled ECE **0.0177** — worse than the number the
-project was publishing, and over the amended ECE gate's own threshold. The
-fitted values still trend upward across folds (0.73 in 2018 to 0.82–1.00 in
-the recent ones), the same temperature drift SP2 recorded as its follow-up 6;
-the walk-forward derivation tracks that drift by construction rather than
-averaging it away.
-
-
-### Accumulated damage — including the one signal the model never had
-
-`scripts/residual_probe.py` → `models/residual_probes.json`. **No signal.**
-
-Every feature the model has about *being hit* is a **rate**:
-`sig_absorbed_pm_diff` is strikes absorbed per minute, and a rate normalises
-exposure away — two fighters at the same absorbed-per-minute are identical to
-the model whether one has 40 career minutes or 400. The wear hypothesis is
-that the cumulative quantity matters on its own, because damage does not
-reset.
-
-One column here was not a rate-versus-total question at all. **Knockdowns
-suffered is absent from the model entirely**: `mma.history` accumulates `kd`
-(knockdowns *scored*) and never the opponent's, so the clearest durability
-signal the scrape records had never been a feature.
-
-Screened on fold years 2018–2021 with the deployed hybrid's own out-of-fold
-logit as a **pinned** offset — pinned, because a free coefficient could earn a
-"gain" by re-calibrating the deployed model and credit it to the new columns.
-Asked twice, linearly and with gradient-boosted trees, each against a shuffled
-null:
-
-| group | n | linear | trees |
-|---|---|---|---|
-| knockdowns suffered | 1,542 | −0.3 sd *(floor 0.0022 ✓)* | −0.9 sd *(0.0041)* |
-| cumulative absorbed punishment | 2,006 | +0.0 sd *(floor 0.0021 ✓)* | −0.2 sd *(0.0045)* |
-| recent wear + age interaction | 2,006 | +0.4 sd *(floor 0.0015 ✓)* | −0.3 sd *(0.0067)* |
-
-**The ✓ is the point.** Three of the linear floors sit *below* the 0.003 bar,
-so this probe could have resolved a shippable effect and did not find one —
-unlike an earlier screen whose floor was 0.0045, above the bar, where the
-clean-looking negative was worth much less than it appeared. The tree arm is
-noisier on this sample and rules out only a large effect.
-
-The likely reason there is nothing to find: cumulative damage is approximately
-`absorbed_rate × minutes`, and the model already reads `sig_absorbed_pm_diff`
-and `career_fights_diff`. A tree ensemble can form that product, so the "new"
-construct is largely derivable from columns already present.
-
-The script is deliberately general — one instrument for *"does this column
-group add anything on top of what we deploy?"*, rather than a throwaway per
-idea. Adding a group is a registration; the offset, the shuffled null and the
-detection floor come for free, and the held-back years stay untouched so a
-group that ever does show something can still be confirmed honestly.
-
-
-### SP6 — a third member for the blend, and why 2 → 3 is worth nothing
-
-`docs/superpowers/plans/2026-09-15-sp6-third-blend-member.md` →
-`models/walkforward/sp6_decision.json`. **Nothing shipped.**
-
-The blend is the only thing that has ever cleared a bar here, and it worked
-because two learners were wrong in different places. Both read the same 87
-columns, so SP6 asked whether a member different *in kind* adds more.
-
-**The mechanism was pre-registered as a number, before either member existed.**
-A fixed-weight average can only gain when its members disagree, and
-disagreement is measurable without the outcome — so the incumbent pair's own
-prediction correlation, **0.8518**, went into the plan as the reference a third
-member must beat. Measured afterwards:
-
-| member | standalone | corr w/ torch | corr w/ xgb | disagrees w/ torch |
-|---|---|---|---|---|
-| torch | 0.6487 | — | 0.8518 | — |
-| xgb | 0.6488 | 0.8518 | — | 14.5% |
-| **logistic** | 0.6507 | **0.9110** | 0.8543 | 9.6% |
-| **bt** (Bradley–Terry) | 0.7069 | **0.1846** | 0.1819 | 41.6% |
-
-They land at opposite corners and **neither is in the sweet spot**: the linear
-model is nearly as strong as the incumbents but *more correlated with torch
-than xgb is*, so it is a near-copy; the latent-skill model is radically
-decorrelated but 0.058 worse. Both outcomes were predictable from those two
-numbers alone. The primary endpoint agreed:
-
-| arm | added | pooled | delta | |
-|---|---|---|---|---|
-| C0 | *(incumbent: xgb + torch)* | 0.6459 | — | |
-| C1 | logistic | 0.6456 | −0.00030 | fails |
-| C2 | bt | 0.6533 | +0.00740 | fails |
-| C3 | logistic + bt | 0.6501 | +0.00420 | fails |
-
-Bar 0.003, selection optimism across three candidates 0.00015 — for once
-multiplicity is not the story. A redundant member adds a tenth of the bar; a
-weak one at a third of the weight makes the blend actively worse.
-
-**Why the latent-skill member is weak is the substantive finding.** 20.5% of
-its predictions are *exactly* 0.5. With 4,590 fighters over 11,290 fights the
-comparison graph averages 2.5 fights per fighter — far too sparse to identify a
-latent skill — so the ridge term correctly shrinks most fighters to the
-population mean and the model has no opinion. It is beaten by plain Elo
-(0.6827), which is already a feature both incumbents read. A Bayesian version
-would fit the same sparse graph: the constraint is the data, not the estimator.
-
-So the blend's arc is 1 → 2 members for 0.0028 and **2 → 3 for nothing**, from
-either direction available. Fitted weights are not the escape — they lost to a
-plain average in the model-v2 session, and fitting them on these folds is this
-project's known selection failure.
-
-
-### SP5 — teaching the model *how much* a decision was won by
-
-`docs/superpowers/plans/2026-09-13-sp5-scorecard-label.md` →
-`models/walkforward/sp5_decision.json`. **Nothing shipped.**
-
-Every experiment before this one changed what the model is *told*. This one
-changed what it is *trained on*. `data/raw/fight.csv` has carried the judges'
-scorecards in its `details` column since the first scrape and nothing read
-them: 4,451 usable decisions, 573 judges, 13,383 cards. A 30–27 sweep and a
-29–28 split are the same training example today — `y_winner = 1` — and
-`|margin|` separates them 2.29 to 0.54.
-
-Six arms, fixed before anything was built. The net took the margin as a masked
-auxiliary head; the trees, which have no multi-task head, took it as a softened
-label (expanded into the two weighted rows it is *exactly* equivalent to under
-log-loss).
-
-| arm | change | pooled | delta | |
-|---|---|---|---|---|
-| T0 | torch incumbent | 0.6487 | — | |
-| T1 | λ=0.1 | 0.6493 | +0.00060 | fails |
-| **T2** | **λ=0.3** | **0.6484** | **−0.00030** | fails |
-| T3 | λ=1.0 | 0.6497 | +0.00100 | fails |
-| X0 | xgb incumbent | 0.6488 | — | |
-| X1 | soft T=2 | 0.6502 | +0.00140 | fails |
-| X2 | soft T=4 | 0.6542 | +0.00540 | fails |
-
-The bar is 0.003 and the best arm is a tenth of it — and less than half the
-0.00066 that six equivalent arms produce from nothing.
-
-**The pre-registered mechanism was wrong, and wrong backwards.** The gain was
-predicted to land where the model is silent. Paired on `fight_id`, T2 against
-T0: the coin-flip band (|p−0.5| < 0.10, 51.3% of rows) got **worse** by
-+0.00074, while the decided band got **better** by −0.00132. The reasoning had
-been that a split decision is ground truth that a fight was close; what the
-label mostly carries is the opposite — how big a blowout was — which sharpens
-the confident end and says nothing about the murky middle.
-
-Two things worth keeping. **T0 reproduced the incumbent bit-for-bit** — every
-pooled metric identical to the committed re-validation figures — so
-`margin_scale = 0` really is the incumbent and the comparison is paired in the
-strongest sense available. And **more softening is monotonically worse on the
-trees** (T=4 loses four times what T=2 loses): flattening a label spends
-discrimination to buy nothing, the same shape as SP2.2's isotonic remediation
-and the calibration audit above.
-
-Judge *identity* is untouched and was deliberately out of scope — it is
-blocked on serving parity (we know the panel historically but do not scrape it
-prospectively), not on this result.
-
-
-### Is the model's confidence honest, and is there a prize in fixing it?
-
-`scripts/calibration_audit.py` → `models/calibration_audit.json`. Read the
-4,856 out-of-fold predictions from the favoured side — the probability the
-model put on whichever corner it picked, against whether that corner won,
-because a symmetrised model averages its own error away when read per corner —
-and test each confidence band against what happened.
-
-| Band | n | predicted | observed | binomial *p* | oracle repair |
-|---|---|---|---|---|---|
-| [0.50,0.55) | 1,120 | 0.524 | 0.512 | 0.437 | −0.00029 |
-| [0.55,0.60) | 1,063 | 0.575 | 0.574 | 0.951 | −0.00022 |
-| [0.60,0.65) | 876 | 0.623 | 0.612 | 0.508 | −0.00020 |
-| [0.65,0.70) | 696 | 0.674 | 0.647 | 0.135 | +0.00016 |
-| [0.70,0.75) | 494 | 0.723 | 0.739 | 0.451 | −0.00010 |
-| [0.75,0.80) | 314 | 0.773 | 0.780 | 0.788 | −0.00043 |
-| **[0.80,1.00]** | 293 | **0.843** | **0.785** | **0.010** | +0.00037 |
-
-Seven bands is seven looks, so the threshold is **p < 0.0071** and it is set by
-the band count in the source, not chosen after the p-values existed. **Zero
-bands survive it.** The extreme band is nominally off at p=0.010 and its
-per-year gap changes sign (+0.075 in 2018, −0.112 in 2021), which is what one
-marginal flag in seven looks tends to look like.
-
-**The part worth keeping is what the fix would be worth.** Repair that band
-using the realised rate *itself* — hindsight no model can have — and pooled
-log-loss moves **+0.0004**, against a shipping bar of **0.003**. The band is 6%
-of the rows and log-loss is not sensitive enough there for any remedy to clear.
-Repairing *every* band that way makes the model **worse (−0.00070)**: flattening
-a band buys calibration by spending discrimination.
-
-That bound covers band-level repair, not every calibrator — a smooth remedy
-keeps the ordering a constant destroys, and a fitted temperature beats the
-bound outright on synthetic data (pinned in `tests/test_calibration_audit.py`,
-where the assertion failed when first written the other way round). So the
-question was also asked directly, fitting calibrators on four fifths of the
-rows and scoring the fifth they had not seen:
-
-| Calibrator | CV gain over what is deployed |
-|---|---|
-| Temperature (1 param) | −0.00001 |
-| Platt on the favoured axis (2 params) | −0.00021 |
-| Isotonic on the favoured axis | −0.00413 |
-
-Nothing helps. Two things fall out of the negative: the deployed post-average
-temperature of **0.85 is confirmed** — refitting it out of sample moves nothing
-— and the isotonic result reproduces SP2.2's rejected remediation (0.7049
-against the temperature form's 0.6437) for the same reason it failed then.
-
-This audit exists because the reliability table alone would have justified
-building something. A 68-fight bin in the odds-matched subset read as a real
-overconfidence to go and fix; on the full out-of-fold set it is one marginal
-flag whose best possible repair is an eighth of the bar. The cost of finding
-that out was an afternoon rather than a sprint.
-
-
-### Original validation window (2021–2023, for continuity)
-
-The numbers below described models trained on pre-2021 fights only and
-scored on 2021–2023 (1,709 fights); they no longer describe the deployed
-models, which train through 2026, and are kept for continuity with earlier
-write-ups.
-
-**Winner prediction** (1,709 validation fights, pre-2021 models):
-
-| Model | Accuracy | Log-loss | Brier |
-|---|---|---|---|
-| Coin flip | 0.500 | 0.693 | 0.250 |
-| Higher-Elo-wins dummy | 0.559 | — | — |
-| Elo baseline | 0.559 | 0.680 | 0.243 |
-| XGBoost (46 features) | 0.606 | 0.660 | 0.234 |
-| **Neural net** (5-seed ensemble, calibrated) | **0.608** | **0.651** | **0.230** |
-
-**Method of victory** (3 classes): XGBoost 0.489 accuracy vs 0.477 majority-class
-baseline, macro-F1 0.303. The neural net's class-weighted method head makes a
-different trade: 0.437 accuracy but **macro-F1 0.390** — it actually identifies
-submissions and KOs instead of defaulting to "decision". **Finish round**
-(R1/R2/R3/R4-5, finishes only, 891 validation fights): XGBoost 0.495 accuracy
-vs 0.495 majority baseline, macro-F1 0.169. Predicting *how* fights end is
-genuinely hard; these numbers are reported honestly rather than hidden.
-
-## Final held-out test results (2024+)
-
-*This artifact is frozen from the July 2026 model: computed once on
-2026-07-13 against the pre-2021-trained models and 8,337-fight dataset of
-that date, and never recomputed. The 2024+ years are now part of both the
-walk-forward evaluation above and the deployed model's training data, so
-this holdout cannot be repeated — `scripts/final_test_eval.py` refuses to
-run against a refit model.*
-
-These numbers were computed exactly once, by `scripts/final_test_eval.py`,
-after all development was frozen — at that point the 2024+ fights had never
-been read by any training, tuning, or calibration code (the per-seed
-temperatures were fit on 2021–2023 validation and reused as-is).
-
-**Winner prediction** (873 test fights):
-
-| Model | Accuracy | Log-loss | Brier |
-|---|---|---|---|
-| Coin flip | 0.472 | 0.693 | 0.250 |
-| Higher-Elo-wins dummy | 0.558 | — | — |
-| Elo baseline | 0.553 | 0.670 | 0.239 |
-| XGBoost | 0.642 | 0.635 | 0.222 |
-| **Neural net** (5-seed ensemble, calibrated) | **0.645** | **0.633** | **0.221** |
-
-(The coin flip's 0.472 is just the test split's class balance: p = 0.5
-ties break toward "A wins", and corner A won 47.2% of test rows.)
-
-**Method of victory** (871 test fights): XGBoost 0.535 accuracy /
-macro-F1 0.298; the neural ensemble 0.434 accuracy / **macro-F1 0.380**;
-majority-class ("decision") baseline 0.540 accuracy / macro-F1 0.234 —
-the same trade-off each model made on validation. **Finish round**
-(401 test finishes): XGBoost 0.494 accuracy / macro-F1 0.169 vs a
-majority ("round 1") baseline of 0.499 / 0.166 — still barely
-distinguishable from the base rate.
-
-The validation results held up on test: the learned models actually
-improved out of sample (XGBoost 0.595 → 0.642 accuracy, neural net
-0.606 → 0.645, both with better log-loss) while the Elo baseline slipped
-slightly (0.576 → 0.553), and the ladder's ordering was preserved.
-
-The neural net is a multi-task network (shared trunk; winner, method, and
-finish-round heads) trained as a deterministic 5-seed ensemble with per-seed
-temperature scaling — in the original split protocol the fitted temperatures
-all landed near 1.0, i.e. the raw model was already well calibrated; the
-deployed refit applies the harness-derived temperature 1.15 to every seed.
-Since SP2.2 it is one of two members of the deployed blend rather than the
-scorer on its own, and a second temperature (0.85, the walk-forward value) is
-applied to the blend *after* the two members are averaged. Uncertainty comes from ensemble spread
-(mean 0.087 on the original validation window) and MC dropout; the app's
-seed band is now the spread of the five per-seed blends, and the MC-dropout
-histogram is the neural member's parameter uncertainty re-centred on the
-blend's mean — XGBoost has no dropout. Per the Phase 3 ablation, the
-era-proxy `*_missing` flags are excluded from its inputs.
-
-What predicts the winner? Reach and age differentials, Elo differential, and
-opponent-quality-adjusted activity rates top the feature importances. A caveat
-worth knowing: reach-*missingness* indicators rank highly, which likely proxies
-for era and fighter obscurity rather than physiology.
-
-The Elo system: fighters start at 1500; K = 64 for a fighter's first 5 UFC
-fights then 48 (tuned by grid search on pre-2020 log-loss); KO/sub wins get a
-1.4× update bonus; separate striking and grappling Elos update in proportion
-to how striking-dominated each fight was.
-
-All-time peak Elo (through 2025-09):
-
-| # | Fighter | Peak Elo |
-|---|---|---|
-| 1 | Jon Jones | 1985 |
-| 2 | Islam Makhachev | 1938 |
-| 3 | Georges St-Pierre | 1916 |
-| 4 | Anderson Silva | 1912 |
-| 5 | Kamaru Usman | 1907 |
-| 6 | Charles Oliveira | 1877 |
-| 7 | Max Holloway | 1872 |
-| 8 | Francis Ngannou | 1870 |
-| 9 | Khabib Nurmagomedov | 1867 |
-| 10 | Tony Ferguson | 1867 |
-
-## Prospective track record
-
-Every result above is a backtest: the model already knows the outcome of
-every fight it's scored on, and it's possible (even with honest time
-splits) to unconsciously tune a project until it looks good in hindsight.
-So this project also makes **public, timestamped predictions for real
-upcoming UFC events, committed to git before those events happen, and
-graded automatically afterward.**
-
-This is the strongest evaluation in the repo, for one reason: a prediction
-committed to git history with a timestamp *cannot be edited after the fact*
-to look better than it was. Every Monday, `.github/workflows/refresh-data.yml`
-runs `scripts/predict_upcoming.py`, which:
-
-1. Fetches the "List of UFC events" page from Wikipedia (MediaWiki API,
-   polite rate limit) and keeps events in the next 30 days.
-2. Fetches each event's fight card and matches fighter names against
-   `fighters.parquet` in two tiers: an exact unicode-normalized match
-   first, then (only if the exact match finds nothing) an accent-folded
-   match — Wikipedia writes "Rakić" where the dataset stores "Rakic".
-   Either tier must find exactly **one** fighter; a name matching zero or
-   multiple fighters is **skipped with a logged reason** rather than
-   guessed, and every prediction records which tier matched it
-   (`match_tier`). If the scheduled-events parse ever returns nothing at
-   all — which can only mean Wikipedia's page structure changed, since the
-   UFC always has future events booked — this step fails loudly instead of
-   reporting an empty success. That failure only stops *new* predictions;
-   the Action's grading, retrain-check, and commit steps are wired with
-   `if: always()` so a broken Wikipedia parser can't stall grading of
-   predictions already committed to git.
-3. Predicts every matched fight with the exact committed blend
-   (`mma.inference.predict_symmetrized` over `BlendedPredictor`) and writes one JSON record per
-   event to `predictions/`, stamped with the prediction time and the git
-   sha of the model that made it.
-4. Writing is idempotent: re-running never overwrites an existing
-   prediction, even if the fighters' stats or the model itself have since
-   changed. Fights announced later are appended with their own timestamp.
-   One deliberate exception: a fight previously recorded as *skipped*
-   contains no prediction, only a failure reason — so re-runs re-attempt
-   it, and if it now matches (a debuting fighter entering the dataset, a
-   matcher improvement), the skip stub is replaced by a real prediction
-   with a fresh timestamp. That's still strictly pre-event, so the
-   integrity guarantee holds; actual predictions remain immutable.
-
-A second step, `scripts/grade_predictions.py`, runs every week too: once an
-event's date has passed, it looks up the actual result in
-`data/processed/fights.parquet` — which, since the daily scrape became a
-standing stage, reaches within days of the card rather than within weeks —
-(matched on the fighter pair + date within 3 days) and appends grading fields — never touching the original
-prediction — to the same file. Two comparison baselines are graded
-alongside the model on every fight: a coin flip and a "higher Elo wins"
-dummy (using the Elo ratings recorded at prediction time, so the dummy
-stays gradeable even as ratings keep moving). Aggregate stats land in
-[`predictions/track_record.json`](predictions/track_record.json).
-
-**Current status**:
-
-| Model version | Fights predicted | Fights graded | Accuracy | Log-loss |
-|---|---|---|---|---|
-| `40df77ec43c7` | 86 | 45 | 0.578 | 0.682 |
-
-45 of the 86 predicted fights have been graded (events through 2026-09-05):
-0.578 accuracy, 0.682 log-loss, 0.244 Brier — against a coin-flip baseline of
-0.467 accuracy and a higher-Elo-wins dummy at 0.422 on the same fights.
-
-The graded count more than doubled on 2026-09-09, from 21 to 45, and not
-because anything was predicted or retrained: it is what happened when the
-daily ufcstats scrape became a standing part of the pipeline and the tables
-stopped trailing real events by a month. Four events from 2026-08-15 to
-2026-09-05 had happened and simply were not in `fights.parquet` yet. The
-fuller sample is **less** flattering than the small one it replaced —
-accuracy 0.667 → 0.578, log-loss 0.616 → 0.682 — which is the ordinary
-behaviour of a 21-fight sample growing up, and exactly why waiting for the
-results rather than reporting the early ones mattered. Five past-event
-predictions remain ungraded and none of them is data lag: one is from
-2026-07-25, well inside the primary source's own coverage, so these are
-bouts that did not happen as carded.
-
-Those 86 predictions
-were made by model `40df77ec43c7`, the SP1 model trained on the 46-column
-table. Four redeployments have happened since: the SP2 feature set and
-re-derived budget (`b617b96dae45`), the SP2.2 blend (`5aa33460ef40`), and two
-pre-merge fixes to that blend's own deployment. First, its mixing weight and
-post-average temperature used to be module constants the model hash never
-covered, so editing either one would have silently changed every recorded
-probability under an unchanged hash; both now live in a committed artifact,
-`models/blend.json`, hashed alongside the model weights
-(**`6207d19d615b`** — that number itself, and every prediction, was unchanged,
-since only where the two constants live moved). Second, the temperature in
-that artifact was the *wrong* fixed value: the median of the harness's
-per-fold fits, a training-budget rule with no calibration justification, which
-re-scores to ECE 0.0177. It is now the walk-forward value 0.85
-(**`b863389f1760`**), and unlike the previous redeployment this one **does**
-change every probability the model will make: each moves exactly as
-σ(logit(p)·0.80/0.85), a small shrink toward 0.5 — slightly less confident and
-measurably better calibrated (pooled ECE 0.0177 → 0.0108). Predictions already
-recorded under an older hash are left as they were made. The next weekly run opens a
-new section for the current hash rather than mixing different scorers'
-predictions into one row. 36 further
-predictions cover events that haven't happened yet. Grading used to lag a
-finished event by days to weeks, because it waited on the Kaggle mirror
-picking up the result; since the daily scrape became a standing stage of
-every rebuild that wait is down to days. Nothing here is cherry-picked:
-every prediction this pipeline ever makes gets a row, win or lose.
-
-There used to be a promotion gate here (`scripts/roll_window.py`): once 150
-graded prospective fights had accumulated it would retrain the torch ensemble
-on a pushed-forward cutoff and promote it over the incumbent if it won on a
-held-forward two-year slice. It is **retired**, and the file is kept as the
-record of why — read its module docstring before building another one. Two
-independent faults, both of which it detected and aborted on itself rather
-than reporting a biased number: it retrained **one member of four** (since SP3
-the served scorer is the hybrid, so a torch-only number is half the winner
-probability and none of the joint distribution), and its held-forward slice
-was **in-sample for the incumbent**, because the deployed recipe trains
-through the latest event. That second one is not a bug: it is the recipe
-working. Under refit-through-latest the weekly Action retrains every member on
-all data whenever new fights arrive, so the fresh fit *is* the incumbent and
-there is no candidate-versus-incumbent choice left for a gate to make.
-
-What replaced it asks the question that stays open once nothing is competing
-to ship. The deployed recipe — feature blocks, held-out columns, blend weight
-and temperature, fit budgets, the hybrid composition — was justified by
-walk-forward evidence computed on a table that ends **2026-08-08**, while the
-models now train through **2026-09-05** and further every week. Nothing
-re-checked that the recipe still clears its bars on the data it is actually
-deployed on. `scripts/revalidate_recipe.py` does: it re-runs the deployed
-hybrid and every paired comparison its bars need on the current table (six
-harness runs, a few minutes), then re-applies the bars **already recorded in
-the committed decision artifacts** — SP3's joint bar and σ_seed from
-`sp3_decision.json`, the deployment-recipe rule from `refit_decision_b1.json`,
-SP2.2's amended ECE gate from `sp2_2_decision.json` — reading every threshold
-out of those artifacts rather than retyping it, so a bar that drifts is a loud
-failure. Run configurations come out of the committed reports' own `config`
-blocks, and the refit B runs take their budget from the *freshly re-run* A,
-because a budget derived on a smaller table is a budget for a different table.
-It writes `models/walkforward/recipe_revalidation.json` and exits non-zero
-only when a gated bar is no longer met.
-
-**First run, 2026-09-09** (`models/walkforward/recipe_revalidation.json`), on
-the 11,290-row table through 2026-09-05 against evidence computed on 11,238
-rows through 2026-08-08: **every bar still clears.** SP3's joint bar by
-−0.0580 against a required 0.01 — 5.8x the margin, negative in every fold
-year — with the winner delta exactly 0.000000, so the clause that holds by
-construction still does. The refit rule by −0.0002 against σ_seed 0.000346 on
-torch (−0.0008 on the XGB member, reported but not gated: the recorded rule
-gates on torch). The blend's ECE gate at 0.0146 against a threshold of
-0.017241. One margin moved materially, and it is the calibration one: the
-blend's harness-form pooled ECE went 0.0124 → 0.0146 on 52 new fights, more
-than halving its headroom (0.0056 → 0.0026). Nothing to act on — the gate
-passes — but it is the number to read first next time.
-
-Like the gate it replaces, it promotes nothing: it deploys no model, stages no
-artifact and makes no git write. A bar that no longer clears is a finding for
-a human. The weekly Action runs only its cheap `--check-staleness` mode, which
-reads dates and fits nothing — the full re-validation would cost every weekly
-run several minutes of re-measuring a table that barely moved, and would turn
-a call about the deployed recipe into a side effect of a cron job. Retraining
-still changes the artifact hash (`mma.versioning.model_version`, computed over
-every artifact that scores — the torch weights and preprocessing stats, the
-twenty-five per-seed XGBoost boosters, `models/blend.json` and
-`models/simulator.json`) and starts a fresh `track_record.json` section
-automatically.
-
-## Model vs. the betting market
-
-Every metric above compares the model to other models (or to itself).
-The real question for any prediction system is whether it beats the
-market — professional bookmaker lines are one of the sharpest, most
-efficient forecasts that exist for a sporting event, built from liquid
-money and constant correction, and closing lines in particular are
-close to the ceiling of what's knowable pre-fight. So `scripts/build_odds_benchmark.py`
-pulls historical UFC moneylines ([`jerzyszocik/ufc-betting-odds-daily-dataset`](https://www.kaggle.com/datasets/jerzyszocik/ufc-betting-odds-daily-dataset),
-CC0, via kagglehub) and scores the model against the devigged
-market-implied probability on the same fights. **The odds are used only as
-an evaluation comparator — they are never a model feature**; nothing in
-this benchmark touches training, tuning, or inference.
-
-### Which predictions get compared, and why it matters
-
-The July 2026 version of this benchmark restricted to fights from 2021 on
-because the model of that date trained on pre-2021 data only, so 2021+ was
-genuinely held out. That is no longer true. The deployed model is refit on
-every decisive fight through the latest event (`models/torch/metrics_val.json`
-records `mode: refit_through`, `train_through: 2026-09-05`, `n_train: 11290`
-— the whole feature table), so those fights are now *in its training set*.
-
-Re-running the old comparison against the deployed model would therefore
-put an in-sample model against an out-of-sample market. It is worth seeing
-exactly what that buys, because the answer is not subtle. On the 3,310
-odds-matched fights, scored with the deployed model's own predictions:
-
-| Scored in-sample (**not a real result**) | Accuracy | Log-loss | Brier |
-|---|---|---|---|
-| Model (deployed, trained on these fights) | **0.677** | **0.602** | **0.207** |
-| Market (devigged consensus odds) | 0.660 | 0.610 | 0.211 |
-
-That reads as *the model beats the market on every metric*, and the
-flat-stake backtest that goes with it returns **+16.9%** at the 10%
-edge threshold. Both numbers are worthless. All 3,310 of those fights are
-inside the model's training window (the artifact records the count), so
-this is a model being asked about answers it was fitted on.
-
-Two things are worth pulling out of that. The script's honesty gate — which
-refuses to report clean numbers if the model beats the market by more than
-0.02 log-loss — **does not catch it**: the in-sample edge is 0.0082, well
-inside tolerance. A gate calibrated on "is this edge implausibly large"
-cannot detect "this model trained on the evaluation set." And a
-+16.9% ROI is exactly the kind of number a project like this exists not to
-publish.
-
-So the honest comparison uses the **walk-forward out-of-fold predictions**
-(`scripts/run_walkforward.py --dump-predictions`, dumped to
-[`models/walkforward/preds/hybrid_e2_cells.json`](models/walkforward/preds/hybrid_e2_cells.json)):
-fold year *Y*'s probabilities come from a model fitted on fights before
-*Y−1* and early-stopped on *Y−1*, so **no fight is scored by a model that
-saw it**. Those 4,856 rows are joined to the aligned odds on the shared
-fight id alone. (`hybrid_e2_cells` is the walk-forward reported above,
-re-run on the current feature table — same candidate, same seeds, same model
-matrix, and the same out-of-fold probabilities to *zero* difference on the
-4,804 rows the two runs share. It carries 52 fights more because the table
-has grown since, and it is the dump the market-edge analysis below reads
-too, so both market artifacts describe one set of predictions.)
-
-### The result
-
-Alignment uses the shared 16-hex ufcstats fight id embedded in both
-datasets' URLs, with each fight's two bookmaker-quoted fighters matched to
-our `fighter_a`/`fighter_b` convention by their ufcstats fighter ids
-(present for every fight in this dataset, so the name-based accent-folding
-fallback — reused from the prospective pipeline — never had to fire: 6,274
-fights aligned by id, 0 by name, 238 skipped for having no usable odds
-rows). Alignment is sanity-checked against five famous fights with known,
-independently-verifiable betting favorites — including two where the
-favorite *lost* (Holly Holm over Ronda Rousey, Chris Weidman over Anderson
-Silva) and one rematch where the odds file lists the same two fighters in
-reversed column order (proving this isn't a "column 1 is always the
-favorite" bug) — before any aggregate numbers are trusted. The prediction
-dump names the fight each row scores, so pairing it to the feature table is
-that same id join, and a table that has grown under a committed dump is a
-smaller intersection rather than a failure. (It used to be three parallel
-lists in the harness's pooled row order, paired by position — which meant a
-routine data refresh, 52 fights, left the benchmark unable to regenerate at
-all.) What is still checked before a single probability is read: every fight
-in the dump must be a walk-forward evaluation row of the *current* table,
-with the same fold year and the same realised outcome. The artifact records
-both tables' fingerprints and how many of today's walk-forward rows the dump
-does not cover.
-
-On the **3,310 fights** that are both walk-forward evaluation rows and
-odds-matched (fold years 2018–2025):
-
-| | Accuracy | Log-loss | Brier |
-|---|---|---|---|
-| **Model** (deployed hybrid, out of fold) | 0.621 | 0.646 | 0.228 |
-| **Market** (devigged consensus odds) | **0.660** | **0.610** | **0.211** |
-
-The market wins on every metric, by a comfortable but not suspicious
-margin (Δlog-loss = **+0.036** in the market's favor). **This is the
-expected, correct outcome, not a disappointing one** — a model built from
-box-score-derived features losing to a market that also prices in
-injuries, weight cuts, camp changes, and everything else the betting
-public knows the morning of the fight is exactly what a well-behaved
-evaluation should show.
-
-### Has the gap moved since July 2026?
-
-Yes, slightly, in the model's favor — and the comparison is exactly
-like-for-like rather than approximately so. The walk-forward's fold years
-start in 2018, so every odds-matched 2021+ fight is also an evaluation row:
-the 2021+ cut is **the same 1,956 fights** the July artifact used. The
-script checks this rather than assuming it — the market's accuracy,
-log-loss and Brier on that cut reproduce the July artifact's to four
-decimals, which they can only do if the row set is identical, since the
-market block doesn't depend on the model.
-
-| On the same 1,956 fights from 2021 on | Model log-loss | Market log-loss | Market's edge |
-|---|---|---|---|
-| July 2026: pre-refit neural ensemble, out of sample | 0.644 | 0.606 | +0.0379 |
-| Now: deployed hybrid, out of fold | 0.638 | 0.606 | **+0.0321** |
-
-The market's log-loss edge **narrowed by 0.0058** — about 15% of it. That
-is a real improvement and it is a small one, and it does not change the
-finding: **the model still loses to the market on every metric, on every
-cut, in both the 2021+ comparison and the full 2018–2025 out-of-fold set.**
-
-### Is there anywhere it wins? Ten pre-registered looks, ten losses
-
-A model that loses on average can still win somewhere, so
-`scripts/market_edge_analysis.py` went looking — out of fold, with the slice
-list and the markets fixed in
-[the plan doc](docs/superpowers/plans/2026-09-09-market-edge-analysis.md)
-before the first number existed. **Eight moneyline slices and two prop
-markets: ten looks, Bonferroni α = 0.005.** The correction never had to do any
-work. **No look came in below a nominal p of 0.05 in the model's favour.**
-
-The prop market is the substantive one, because it is the market SP3's
-simulator was built for: the book prices each corner by KO/TKO, submission and
-decision (overrounding around 1.22 to do it), and the simulator emits a
-coherent joint over exactly those outcomes. On 2,890 out-of-fold fights it
-loses the six-way comparison by **+0.094** log-loss — in all seven years, with
-accuracy and Brier agreeing. The three-way test is what settles it: collapse
-the winner axis away and score **method alone**, isolating whatever method
-skill the joint has from the winner deficit already known, and the book is
-still ahead by **+0.0426** (in six of the seven years; 2024 is a −0.004 wash).
-The hope was that the six-way loss would decompose into "loses the winner half,
-wins the method half". It does not. **A coherent joint does not out-price a
-crude prop book.** On the moneyline it is the same story, **seven slices of
-eight to the market** — including both slices chosen because the 2026 economics
-literature flags them as residually mispriced, a five-year-plus age gap
-(+0.0336) and one corner travelling while the other is home (+0.0327), each
-losing by roughly the pooled +0.0364. Whatever the model knows about youth and
-travel is already in the line. The one slice where it leads on log-loss is
-`external_missing`: **54 fights at p = 0.69**, which is not an edge.
-
-All of it is retrospective — these fights have been reused across five
-experiments, so the slice list was pre-registered but the *fights* were not
-fresh, and a positive here would have needed prospective confirmation before it
-meant anything. There was no positive, and that is the direction in which
-reuse is harmless: mining biases towards spurious findings, not spurious nulls.
-Full numbers — every slice and market, paired tests, ROI with intervals, and
-the multiple-comparisons arithmetic — are in
-[`models/market_edge_analysis.json`](models/market_edge_analysis.json).
-
-### Caveats and the rest of the numbers
-
-**Odds coverage is not uniform.** 68.2% of the walk-forward rows have
-matched odds, but that falls to 21.5% in the 2025 fold because the odds
-dataset lags — so the pooled cut is weighted toward the earlier fold years.
-The artifact reports, for every fold year, the model's out-of-fold log-loss
-on the covered rows *and* on the uncovered ones, so the covered subset can
-be checked for being an easier sample rather than assumed neutral. It is
-mostly close (2019: 0.662 covered vs 0.695 uncovered; 2022: 0.645 vs
-0.647), with 2025 the notable exception in the other direction (0.587
-covered vs 0.647 uncovered).
-
-**Calibration**: both are well-behaved across probability deciles — mean
-predicted probability tracks the empirical win rate bin-by-bin for both
-the model and the market — but the market's predictions spread further
-into the confident tails (480 fights priced above 0.7, against the model's
-319), while the model stays comparatively conservative in the middle of
-the range. That extra confidence, where warranted, is a big part of where
-the market's sharper log-loss comes from.
-
-**Simulated ROI** (flat 1-unit stake, betting whenever the model's
-probability exceeds the market's devigged implied probability by a
-threshold, settled at that fighter's actual decimal odds) is negative at
-every threshold tested out of fold, for both the favorite-edge and
-underdog-edge variants (−6.5% to −10.0% on favorite edges,
-−3.7% to −5.8% on underdog edges) — consistent
-with a sharp market and a model that doesn't beat it. This is an
-**in-sample-of-the-market backtest, not a strategy claim**: no bankroll
-management, no line-shopping or timing realism, no transaction costs, and
-it's evaluated on the same historical lines used for the log-loss
-comparison above.
-
-Full numbers — n_fights, per-metric breakdowns, 10-bin calibration tables,
-the ROI sweep at 0%/5%/10% thresholds, the labelled in-sample diagnostic,
-the per-fold-year coverage table, and the provenance (which prediction dump,
-which walk-forward report, the deployed model hash) — are in
-[`models/market_benchmark_oof.json`](models/market_benchmark_oof.json).
-[`models/market_benchmark.json`](models/market_benchmark.json) is kept
-**frozen** as the July 2026 record: it describes the pre-refit neural
-ensemble, a model that no longer exists, and `build_odds_benchmark.py`
-refuses to overwrite it without `--force`.
 
 ## Development notes
 
