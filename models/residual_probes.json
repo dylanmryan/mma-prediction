@@ -1,0 +1,142 @@
+{
+  "experiment": "residual probes -- does a column group add on top of the deployed model?",
+  "generated_by": "scripts/residual_probe.py",
+  "offset": "models/walkforward/preds/hybrid_e2_cells.json",
+  "exploration_years": [
+    2018,
+    2019,
+    2020,
+    2021
+  ],
+  "held_back_years": [
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "bar": 0.003,
+  "note": "a SCREEN, not a decision. A group that showed signal would still have to clear the bar through run_walkforward.py with the bar fixed in advance.",
+  "groups": {
+    "accumulated_damage": {
+      "n_exploration_rows": 2113,
+      "n_held_back_and_untouched": 2743,
+      "subgroups": {
+        "knockdowns suffered (absent from the model entirely)": {
+          "n": 1542,
+          "n_columns": 2,
+          "baseline_log_loss": 0.6618,
+          "columns": [
+            "kd_suffered_diff",
+            "kd_suffered_pf_diff"
+          ],
+          "linear": {
+            "gain": -0.0015,
+            "shuffled_null_mean": -0.00114,
+            "shuffled_null_sd": 0.00112,
+            "sd_from_null": -0.32,
+            "detection_floor": 0.00224,
+            "floor_resolves_the_bar": true,
+            "signal": false
+          },
+          "trees": {
+            "gain": -0.00551,
+            "shuffled_null_mean": -0.00356,
+            "shuffled_null_sd": 0.00205,
+            "sd_from_null": -0.95,
+            "detection_floor": 0.0041,
+            "floor_resolves_the_bar": false,
+            "signal": false
+          }
+        },
+        "cumulative absorbed punishment": {
+          "n": 2006,
+          "n_columns": 3,
+          "baseline_log_loss": 0.6555,
+          "columns": [
+            "head_absorbed_diff",
+            "sig_absorbed_diff",
+            "career_minutes_diff"
+          ],
+          "linear": {
+            "gain": -0.00147,
+            "shuffled_null_mean": -0.00147,
+            "shuffled_null_sd": 0.00104,
+            "sd_from_null": 0.0,
+            "detection_floor": 0.00207,
+            "floor_resolves_the_bar": true,
+            "signal": false
+          },
+          "trees": {
+            "gain": -0.00646,
+            "shuffled_null_mean": -0.00596,
+            "shuffled_null_sd": 0.00224,
+            "sd_from_null": -0.22,
+            "detection_floor": 0.00447,
+            "floor_resolves_the_bar": false,
+            "signal": false
+          }
+        },
+        "recent wear and the age interaction": {
+          "n": 2006,
+          "n_columns": 2,
+          "baseline_log_loss": 0.6555,
+          "columns": [
+            "head_absorbed_365d_diff",
+            "age_x_head_absorbed_diff"
+          ],
+          "linear": {
+            "gain": -0.00109,
+            "shuffled_null_mean": -0.00135,
+            "shuffled_null_sd": 0.00073,
+            "sd_from_null": 0.36,
+            "detection_floor": 0.00147,
+            "floor_resolves_the_bar": true,
+            "signal": false
+          },
+          "trees": {
+            "gain": -0.0054,
+            "shuffled_null_mean": -0.00436,
+            "shuffled_null_sd": 0.00335,
+            "sd_from_null": -0.31,
+            "detection_floor": 0.0067,
+            "floor_resolves_the_bar": false,
+            "signal": false
+          }
+        },
+        "every damage column at once": {
+          "n": 1542,
+          "n_columns": 7,
+          "baseline_log_loss": 0.6618,
+          "columns": [
+            "kd_suffered_diff",
+            "kd_suffered_pf_diff",
+            "head_absorbed_diff",
+            "sig_absorbed_diff",
+            "career_minutes_diff",
+            "head_absorbed_365d_diff",
+            "age_x_head_absorbed_diff"
+          ],
+          "linear": {
+            "gain": -0.00272,
+            "shuffled_null_mean": -0.00262,
+            "shuffled_null_sd": 0.00158,
+            "sd_from_null": -0.06,
+            "detection_floor": 0.00317,
+            "floor_resolves_the_bar": false,
+            "signal": false
+          },
+          "trees": {
+            "gain": -0.00861,
+            "shuffled_null_mean": -0.00881,
+            "shuffled_null_sd": 0.00445,
+            "sd_from_null": 0.04,
+            "detection_floor": 0.0089,
+            "floor_resolves_the_bar": false,
+            "signal": false
+          }
+        }
+      },
+      "any_signal": false
+    }
+  }
+}

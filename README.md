@@ -710,6 +710,52 @@ the walk-forward derivation tracks that drift by construction rather than
 averaging it away.
 
 
+### Accumulated damage — including the one signal the model never had
+
+`scripts/residual_probe.py` → `models/residual_probes.json`. **No signal.**
+
+Every feature the model has about *being hit* is a **rate**:
+`sig_absorbed_pm_diff` is strikes absorbed per minute, and a rate normalises
+exposure away — two fighters at the same absorbed-per-minute are identical to
+the model whether one has 40 career minutes or 400. The wear hypothesis is
+that the cumulative quantity matters on its own, because damage does not
+reset.
+
+One column here was not a rate-versus-total question at all. **Knockdowns
+suffered is absent from the model entirely**: `mma.history` accumulates `kd`
+(knockdowns *scored*) and never the opponent's, so the clearest durability
+signal the scrape records had never been a feature.
+
+Screened on fold years 2018–2021 with the deployed hybrid's own out-of-fold
+logit as a **pinned** offset — pinned, because a free coefficient could earn a
+"gain" by re-calibrating the deployed model and credit it to the new columns.
+Asked twice, linearly and with gradient-boosted trees, each against a shuffled
+null:
+
+| group | n | linear | trees |
+|---|---|---|---|
+| knockdowns suffered | 1,542 | −0.3 sd *(floor 0.0022 ✓)* | −0.9 sd *(0.0041)* |
+| cumulative absorbed punishment | 2,006 | +0.0 sd *(floor 0.0021 ✓)* | −0.2 sd *(0.0045)* |
+| recent wear + age interaction | 2,006 | +0.4 sd *(floor 0.0015 ✓)* | −0.3 sd *(0.0067)* |
+
+**The ✓ is the point.** Three of the linear floors sit *below* the 0.003 bar,
+so this probe could have resolved a shippable effect and did not find one —
+unlike an earlier screen whose floor was 0.0045, above the bar, where the
+clean-looking negative was worth much less than it appeared. The tree arm is
+noisier on this sample and rules out only a large effect.
+
+The likely reason there is nothing to find: cumulative damage is approximately
+`absorbed_rate × minutes`, and the model already reads `sig_absorbed_pm_diff`
+and `career_fights_diff`. A tree ensemble can form that product, so the "new"
+construct is largely derivable from columns already present.
+
+The script is deliberately general — one instrument for *"does this column
+group add anything on top of what we deploy?"*, rather than a throwaway per
+idea. Adding a group is a registration; the offset, the shuffled null and the
+detection floor come for free, and the held-back years stay untouched so a
+group that ever does show something can still be confirmed honestly.
+
+
 ### SP6 — a third member for the blend, and why 2 → 3 is worth nothing
 
 `docs/superpowers/plans/2026-09-15-sp6-third-blend-member.md` →
