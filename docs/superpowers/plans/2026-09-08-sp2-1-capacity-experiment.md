@@ -80,7 +80,9 @@ Each has a commented-out registration in `feature_blocks.py` and its supporting 
 
 - [x] **Step 3: Restore `opponent_adjusted` from git history**
 
-Its accumulators were fully reverted; recover them from commit `2ad725c` (`git show 2ad725c^:src/mma/history.py` etc. — note that commit *is* the revert, so the implementation is in its parent's tree or in the diff). Restore the block and its unit tests.
+Its accumulators were fully reverted; recover them from commit `7e1d88c`
+(was `2ad725c` before the 2026-09-16 history rewrite that stripped co-author
+trailers; the tree is unchanged) (`git show 7e1d88c^:src/mma/history.py` etc. — note that commit *is* the revert, so the implementation is in its parent's tree or in the diff). Restore the block and its unit tests.
 
 - [x] **Step 4: Verify each restoration reproduces its SP2 measurement**
 
@@ -211,7 +213,7 @@ all eight fold metrics, all slice metrics and the per-fold fit budgets
 
 `opponent_adjusted` is measured on `base` alone because that is the feature
 set its SP2 report was computed on, before `external` shipped. Its code was
-never committed in a working state (`2ad725c` committed the *reverted* tree,
+never committed in a working state (`7e1d88c` committed the *reverted* tree,
 so the accumulators are in no git tree at all) and had to be rebuilt from the
 SP2 plan's implementation contract, then pinned by the committed number. Two
 details are only recoverable that way and both are load-bearing: a fight with
