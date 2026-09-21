@@ -30,7 +30,15 @@
       "elo_b": 1783.4625477589293,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "17e97649403ba428",
+      "correct": false,
+      "log_loss_contribution": 0.757271892674961,
+      "brier_contribution": 0.28202046120242485,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Arman Tsarukyan",
@@ -57,7 +65,15 @@
       "elo_b": 1577.6130433389599,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "eae48ff31db420c2",
+      "correct": true,
+      "log_loss_contribution": 0.2479309693531604,
+      "brier_contribution": 0.04821809313076303,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Patr\u00edcio Pitbull",
@@ -138,7 +154,15 @@
       "elo_b": 1560.456405795544,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "7c7332319c14094c",
+      "correct": true,
+      "log_loss_contribution": 0.43208579584209955,
+      "brier_contribution": 0.12309314053169462,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Tai Tuivasa",
@@ -165,7 +189,15 @@
       "elo_b": 1468.418904086524,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "140567899d98978a",
+      "correct": false,
+      "log_loss_contribution": 0.9855580443034089,
+      "brier_contribution": 0.39283951795269645,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Edmen Shahbazyan",
@@ -192,7 +224,15 @@
       "elo_b": 1590.7654169365946,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "4144798612ef96e5",
+      "correct": true,
+      "log_loss_contribution": 0.4908774716055954,
+      "brier_contribution": 0.15047489139977532,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Giga Chikadze",
@@ -219,7 +259,15 @@
       "elo_b": 1628.698675939084,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "791c8437b341fba5",
+      "correct": true,
+      "log_loss_contribution": 0.6600997565714989,
+      "brier_contribution": 0.23348245478612117,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Casey O'Neill",
@@ -246,7 +294,15 @@
       "elo_b": 1574.8405107388787,
       "skipped": false,
       "predicted_at_utc": "2026-08-24T13:03:46Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "04835018f90b118c",
+      "correct": false,
+      "log_loss_contribution": 0.7170124609163314,
+      "brier_contribution": 0.26193041486092117,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Ryan Gandra",
