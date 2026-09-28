@@ -30,7 +30,15 @@
       "elo_b": 1638.445697894828,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "fe2babf95de24fb1",
+      "correct": true,
+      "log_loss_contribution": 0.48173260216930247,
+      "brier_contribution": 0.14614395087435583,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Melissa Amaya",
@@ -75,7 +83,15 @@
       "elo_b": 1644.324152588966,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "cc1a8b4b38b92c6d",
+      "correct": true,
+      "log_loss_contribution": 0.42772612863164294,
+      "brier_contribution": 0.1211109936970447,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Rodolfo Bellato",
@@ -111,7 +127,15 @@
       "elo_b": 1522.284610507996,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "260e9e0d4954aea6",
+      "correct": true,
+      "log_loss_contribution": 0.48664012715384136,
+      "brier_contribution": 0.14846518110868545,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Brady Hiestand",
@@ -138,7 +162,15 @@
       "elo_b": 1590.6362455767044,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "7af33fc4435017f1",
+      "correct": true,
+      "log_loss_contribution": 0.6602494714589229,
+      "brier_contribution": 0.23355722810960433,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "John Casta\u00f1eda",
@@ -183,7 +215,15 @@
       "elo_b": 1613.7723627055925,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "06e4245d16fc5315",
+      "correct": true,
+      "log_loss_contribution": 0.6856751728205569,
+      "brier_contribution": 0.2462640660494566,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Vanessa Demopoulos",
@@ -210,7 +250,15 @@
       "elo_b": 1492.1504854116292,
       "skipped": false,
       "predicted_at_utc": "2026-08-31T19:03:43Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "40cb680ae1cd331f",
+      "correct": true,
+      "log_loss_contribution": 0.33684958732907155,
+      "brier_contribution": 0.08178671732442044,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     }
   ]
 }
