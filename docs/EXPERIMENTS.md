@@ -806,6 +806,81 @@ blocked on serving parity (we know the panel historically but do not scrape it
 prospectively), not on this result.
 
 
+### What should the bar have been? The harness's own detection floor
+
+`scripts/bar_audit.py` → `models/bar_audit.json`. Every decision in this
+project was taken against `max(0.003, 2σ_seed)`, and σ_seed for the deployed
+blend is **0.0001** — so the operative bar has always been thirty times the
+only noise anyone measured. The premise going in was that this was far too
+conservative and had been rejecting real gains. **It was not. The measurement
+came back the other way.**
+
+σ_seed answers *"would a refit land here again?"* — it holds the fights fixed
+and varies the fit. A shipping decision asks the other question: *will this
+delta hold on the next four thousand fights?* That one is a sampling question,
+it had never been measured here, and it is much the larger of the two.
+
+The estimand is the **paired** per-fight log-loss difference — paired because
+both candidates are scored on identical fights, so log-loss's enormous
+fight-to-fight variance cancels and only the difference is resampled —
+bootstrapped with **whole fold years as the resampling unit**, because the
+harness fits one model per fold and the fights inside a fold share it. Seed
+noise is then carried alongside rather than instead of it: the two are
+orthogonal, so `se = √(se_sampling² + σ_seed²)`.
+
+| Pair | Δ log-loss | se (clustered) | se (iid) | 2 se bar | verdict |
+|---|---|---|---|---|---|
+| **blend_b1 vs torch incumbent** (SP2.2, shipped) | **−0.00391** | 0.00219 | 0.00176 | **0.00438** | **inside noise** |
+| blend_b1 vs blend_b1 seeds 5–9 (true zero) | +0.00022 | 0.00033 | 0.00061 | 0.00067 | inside noise ✓ |
+| hybrid_e2 vs hybrid_e2 seeds 5–9 (true zero) | +0.00022 | 0.00033 | 0.00061 | 0.00067 | inside noise ✓ |
+| blend_b1_isotonic vs blend_b1 (large, undisputed) | +0.06124 | 0.02118 | 0.01479 | 0.04236 | clears ✓ |
+
+The two null pairs and the isotonic pair are there to show the instrument
+works in both directions: it must not resolve one recipe against itself at a
+different seed set, and it must resolve an effect nobody disputes. It does
+both. The reference pair is deliberately **not** used as a sanity check,
+because whether that 0.0039 survives is the question being asked.
+
+**The headline: the harness's detection floor is 0.0044, and the bar in force
+was 0.003.** The bar was not six times too strict, as the seed-noise
+arithmetic suggested — it was, if anything, slightly *lenient*.
+
+**SP2.2's blend, the project's one shipped win, sits right on the boundary.**
+It does not clear its own two-standard-error bar (0.89× of it). The readings
+that disagree are worth quoting together, because an effect at the edge is
+exactly where a single statistic misleads:
+
+- clustered 95% CI **[−0.00818, +0.00036]** — barely includes zero
+- one-sided bootstrap **p = 0.040** — clears a conventional 5% test
+- **6 of 8 fold years** favour the blend; 2021 (+0.0062) and 2022 (+0.0036)
+  favour the incumbent. A sign test on that is p = 0.14.
+
+So the blend is not refuted — it was confirmed on fresh seeds, and it wins
+most folds — but the claim it supports is weaker than the recorded −0.0039
+makes it sound, and it is fair to say the evidence for it is marginal.
+
+**What this means for every rejected block.** `recency` measured −0.0011.
+`opponent_adjusted` measured −0.0018 on one member and +0.0022 on the other.
+The capacity-search winner re-scored to −0.0024. Every one of those sits
+*below the floor of the instrument that judged them* — they were not gains
+that failed a conservative bar, they were **questions this dataset cannot
+answer either way**. Re-adjudicating them under a lower bar, which is what
+this audit was opened to explore, would not be recovering lost signal; it
+would be shipping coin flips.
+
+**The binding constraint is n, not the bar.** Holding the clustering
+structure fixed, resolving a 0.002 effect at two standard errors needs
+roughly **23,000 pooled fights** — 4.8× what the harness scores today, and
+more than the 11,290 that exist in the entire dataset. Even a 0.003 effect
+needs about 10,200. That figure is optimistic, too: more fights spread over
+the same eight folds shrink within-fold noise but not the between-fold
+heterogeneity that dominates the clustered error, so the real requirement is
+more years, not merely more rows.
+
+The practical consequence is that **any future experiment here should be
+pre-registered against ~0.0044, not 0.003**, and that effects smaller than
+that are not worth the harness's time however plausible their mechanism.
+
 ### Is the model's confidence honest, and is there a prize in fixing it?
 
 `scripts/calibration_audit.py` → `models/calibration_audit.json`. Read the
