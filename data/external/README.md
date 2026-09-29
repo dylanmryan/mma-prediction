@@ -6,6 +6,17 @@ table in this directory, `rankings.parquet`, comes from a different source
 under a different licence and is documented in
 [`RANKINGS.md`](RANKINGS.md) (built by `scripts/build_rankings.py`).
 
+**`market_odds.parquet` is not a feature table and must never become one.**
+It holds one column — the devigged closing-line probability for the feature
+table's corner A — for 6,273 fights, written by
+`scripts/build_odds_benchmark.py --dump-market` from the
+`jerzyszocik/ufc-betting-odds-daily-dataset` mirror (CC0), joined on the
+16-hex ufcstats `fight_id` and oriented through `features.parquet`'s own
+`swapped` flag. It exists so `scripts/residual_probe.py` can ask what the
+model adds on top of the line **offline and reproducibly**; every other market
+number in this repo is an aggregate that required the download. `src/mma/odds.py`
+carries the evaluation-only rule, and it applies here unchanged.
+
 | | |
 |---|---|
 | Source | <https://github.com/ehan03/jds-mma-data> |

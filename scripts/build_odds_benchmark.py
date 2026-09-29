@@ -1018,6 +1018,32 @@ def main_oof(predictions: Path, report: Path, out_path: Path) -> None:
         )
 
 
+MARKET_TABLE = ROOT / "data" / "external" / "market_odds.parquet"
+
+
+def build_market_table() -> pd.DataFrame:
+    """Per-fight devigged market probability, in the FEATURE TABLE's corner frame.
+
+    Everything else in this script writes aggregates, which left no way to
+    re-derive a per-fight market number without the kagglehub download -- so
+    `scripts/residual_probe.py` could not ask "does our signal add on top of the
+    line?" offline or reproducibly. This writes the one column that question
+    needs, committed for the same reason `external`, `notice` and `rankings` are.
+
+    It reuses `align_odds_to_fights` and `to_features_convention` rather than
+    re-deriving either. A second implementation of the devig or, worse, of the
+    corner orientation is exactly the drift that would flip roughly half the
+    rows and read the line backwards.
+    """
+    fights = pd.read_parquet(PROCESSED / "fights.parquet")
+    fighters = pd.read_parquet(PROCESSED / "fighters.parquet")
+    features = load_features()
+    aligned, _stats = align_odds_to_fights(load_odds_raw(), fights, fighters)
+    merged = join_odds_by_id(features[["fight_id", "swapped"]].copy(), aligned)
+    out = to_features_convention(merged)
+    return out[["fight_id", "market_implied_a", "align_method", "n_books"]].copy()
+
+
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -1036,11 +1062,24 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="output path (defaults to the mode's own artifact)")
     parser.add_argument("--force", action="store_true",
                         help="deployed mode: overwrite the frozen July 2026 artifact")
+    parser.add_argument("--dump-market", type=Path, nargs="?", const=MARKET_TABLE,
+                        default=None, metavar="PATH",
+                        help="write the per-fight devigged market probability, in "
+                             "the feature table's corner frame, and exit. This is "
+                             "what scripts/residual_probe.py's market group reads, "
+                             "so it can run offline.")
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> None:
     args = parse_args(argv)
+    if args.dump_market is not None:
+        table = build_market_table()
+        args.dump_market.parent.mkdir(parents=True, exist_ok=True)
+        table.to_parquet(args.dump_market, index=False)
+        print(f"wrote {len(table)} fights to "
+              f"{args.dump_market.relative_to(ROOT)}")
+        return
     if args.mode == "deployed":
         if args.out is not None:
             raise SystemExit("--out is not supported in deployed mode")

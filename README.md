@@ -92,6 +92,7 @@ numbers:
 | The simulator's own winner opinion as a third member | fails the mechanism screen; it is 0.93 correlated with the blend |
 | **Accumulated damage** (incl. knockdowns suffered, which the model never had) | no signal, at a floor that *could* have seen one |
 | Ten pre-registered looks for any edge over the market | ten losses |
+| **Does our signal add on top of the closing line?** | **no — −0.0006, at a floor of 0.0008 that could have seen it** |
 | **The 0.003 bar itself**, audited against sampling error | the bar was too *low* — the harness floor is **0.0044** |
 
 **→ [The full record, with every number](docs/EXPERIMENTS.md)**

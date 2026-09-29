@@ -202,7 +202,13 @@ def test_every_registered_group_names_real_fields():
 @pytest.mark.skipif(not ARTIFACT.exists(), reason="probe not run")
 def test_the_committed_probe_found_no_signal():
     """If this fails a group has started showing something, and it needs a
-    pre-registered harness run rather than a louder screen."""
+    pre-registered harness run rather than a louder screen.
+
+    `any_signal` covers SCREENS only. The `market` group also carries a
+    diagnostic direction -- whether the closing line adds on top of us -- which
+    is known-positive and reported separately as `diagnostic_signal`; folding it
+    in here would make this test fail on a result the benchmark already
+    published."""
     report = json.loads(ARTIFACT.read_text())
     for name, block in report["groups"].items():
         assert block["any_signal"] is False, name

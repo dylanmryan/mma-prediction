@@ -224,6 +224,90 @@ GROUPS = {
 }
 
 
+# --- the market: what is our odds-free signal worth on top of the line? -------
+
+MARKET_TABLE = ROOT / "data" / "external" / "market_odds.parquet"
+
+
+def load_market_frame() -> pd.DataFrame:
+    """The deployed model's out-of-fold probability beside the devigged line.
+
+    Joined on `fight_id` and validated one-to-one -- never by row position.
+    Both columns are already in the feature table's corner frame: the dump
+    because the harness wrote it there, the market because
+    `build_odds_benchmark.build_market_table` oriented it through the same
+    `swapped` flag.
+
+    Coverage is 68% of walk-forward rows and thins sharply in recent years
+    (86% in 2018, 21% in 2025), so the exploration window this probe uses is
+    also where the odds are densest -- about 1,830 fights.
+    """
+    dump = json.loads(OOF_PREDICTIONS.read_text())
+    oof = pd.DataFrame({
+        "fight_id": [str(v) for v in dump["fight_id"]],
+        "fold_year": np.asarray(dump["fold_year"], dtype=int),
+        "y": np.asarray(dump["y_winner"], dtype=float),
+        "p": np.asarray(dump["p_winner"], dtype=float),
+    })
+    market = pd.read_parquet(MARKET_TABLE)[["fight_id", "market_implied_a"]]
+    data = oof.merge(market, on="fight_id", how="inner", validate="one_to_one")
+    data["market_p"] = data["market_implied_a"]
+    data["model_logit"] = logit(data["p"])
+    data["market_logit"] = logit(data["market_p"])
+    return data
+
+
+#: Groups whose columns are already per-fight, so there is no per-fighter
+#: builder and no `orient` step. A subgroup here names the PINNED side as well
+#: as the candidate columns, because the two directions below are different
+#: questions and a gain means the opposite thing in each.
+#: A subgroup is (pinned side, candidate columns, role). `role` matters for
+#: the artifact's `any_signal`, which exists to say "something turned up that
+#: needs a pre-registered harness run". Only a SCREEN can do that. The second
+#: direction below is a DIAGNOSTIC: that the closing line adds on top of us is
+#: already known from the benchmark, it is guaranteed positive, and the
+#: actionable version of it -- odds as a model feature -- is a separate
+#: experiment needing its own pre-registration rather than a louder screen.
+FIGHT_LEVEL_GROUPS = {
+    "market": (
+        load_market_frame,
+        {
+            "our signal on top of the closing line":
+                ("market_p", ("model_logit",), "screen"),
+            "the closing line on top of our signal":
+                ("p", ("market_logit",), "diagnostic"),
+        },
+    ),
+}
+
+
+def run_fight_level(group_name: str, rng) -> dict:
+    loader, subgroups = FIGHT_LEVEL_GROUPS[group_name]
+    data = loader()
+    explore = data[data["fold_year"].isin(EXPLORE_YEARS)].copy()
+    results, roles = {}, {}
+    for label, (offset, columns, role) in subgroups.items():
+        results[label] = dict(assess_subgroup(explore, list(columns), rng,
+                                              offset=offset), role=role)
+        roles[label] = role
+
+    def showed(role: str) -> bool:
+        return any(results[label].get(est, {}).get("signal", False)
+                   for label, r in roles.items() if r == role
+                   for est, _fn, _d in ESTIMATORS)
+
+    return {
+        "n_exploration_rows": int(len(explore)),
+        "n_held_back_and_untouched": int(
+            (~data["fold_year"].isin(EXPLORE_YEARS)).sum()),
+        "subgroups": results,
+        # Screens only: a diagnostic showing signal is the expected reading,
+        # not a prompt to run the harness.
+        "any_signal": showed("screen"),
+        "diagnostic_signal": showed("diagnostic"),
+    }
+
+
 # --- running a group ----------------------------------------------------------
 
 def orient(per_fighter: pd.DataFrame, fights: pd.DataFrame,
@@ -249,17 +333,29 @@ def orient(per_fighter: pd.DataFrame, fights: pd.DataFrame,
     return out
 
 
-def assess_subgroup(frame: pd.DataFrame, columns, rng) -> dict:
-    usable = frame.dropna(subset=list(columns))
+def assess_subgroup(frame: pd.DataFrame, columns, rng, offset: str = "p") -> dict:
+    """Do `columns` add on top of the probability in `offset`?
+
+    `offset` names the column whose logit is PINNED. It defaults to "p", the
+    deployed model's own out-of-fold probability, which is the question every
+    column group asks. The market probe passes the devigged line instead and
+    puts the model's logit in `columns`, which inverts the question into "what
+    is our odds-free signal worth to someone who already has the line?" -- so
+    the pinned side is reported, because a gain means opposite things depending
+    on which side it was measured against.
+    """
+    needed = list(columns) + [offset]
+    usable = frame.dropna(subset=needed)
     if len(usable) < MIN_ROWS:
         return {"n": len(usable), "skipped": "too few usable rows"}
     y = usable["y"].to_numpy(dtype=float)
-    off = logit(usable["p"].to_numpy(dtype=float))
+    off = logit(usable[offset].to_numpy(dtype=float))
     x = usable[list(columns)].to_numpy(dtype=float)
     x = (x - x.mean(axis=0)) / (x.std(axis=0) + 1e-9)
 
     out = {"n": int(len(usable)), "n_columns": len(columns),
-           "baseline_log_loss": round(log_loss(y, usable["p"]), 4),
+           "offset": offset,
+           "baseline_log_loss": round(log_loss(y, usable[offset]), 4),
            "columns": list(columns)}
     for label, fn, draws in ESTIMATORS:
         real = float(np.mean([fn(x, y, off, seed=s) for s in range(5)]))
@@ -332,18 +428,23 @@ def render(name: str, block: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--group", choices=sorted(GROUPS), action="append")
+    parser.add_argument("--group", action="append",
+                        choices=sorted(set(GROUPS) | set(FIGHT_LEVEL_GROUPS)))
     parser.add_argument("--out", type=Path, default=OUT_PATH)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
     rng = np.random.default_rng(args.seed)
-    names = args.group or sorted(GROUPS)
+    names = args.group or sorted(set(GROUPS) | set(FIGHT_LEVEL_GROUPS))
     report = {
         "experiment": "residual probes -- does a column group add on top of "
                       "the deployed model?",
         "generated_by": "scripts/residual_probe.py",
         "offset": str(OOF_PREDICTIONS.relative_to(ROOT)),
+        "offset_note": ("the default pinned side. The `market` group pins the "
+                        "devigged closing line instead and puts the model's "
+                        "logit in the candidate columns, so each subgroup "
+                        "records which side it pinned."),
         "exploration_years": list(EXPLORE_YEARS),
         "held_back_years": list(HELD_BACK),
         "bar": PROJECT_BAR,
@@ -353,7 +454,8 @@ def main() -> int:
         "groups": {},
     }
     for name in names:
-        block = run(name, rng)
+        block = run_fight_level(name, rng) if name in FIGHT_LEVEL_GROUPS \
+            else run(name, rng)
         report["groups"][name] = block
         render(name, block)
 

@@ -871,6 +871,65 @@ The rejected member (`BlendCandidate.extra` gained a `"simulator"` branch) was
 reverted per the standing rule; it is recoverable from this branch's history
 if a future experiment wants it.
 
+### What is our odds-free signal worth to someone who already has the line?
+
+`scripts/residual_probe.py --group market` → `models/residual_probes.json`.
+
+Every previous market number here is a *comparison*: the model loses by 0.036
+pooled log-loss, and ten pre-registered looks for a subset where it wins all
+lost. That says the market is better. It does not say whether the model knows
+anything the market does not — and those are different questions, because two
+forecasters can each be worth something to the other.
+
+So the instrument is inverted. Instead of pinning the deployed model's logit
+and asking what new columns add, pin the **devigged closing line** and ask what
+the **model's own logit** adds on top of it. Exploration window 2018–2021,
+1,832 odds-matched fights (coverage is densest in exactly these years: 86% in
+2018 against 21% in 2025); 1,478 later fights held back and untouched.
+
+| direction | pinned baseline | linear gain | sd from null | detection floor |
+|---|---|---|---|---|
+| **our signal on top of the closing line** | 0.6190 | **−0.00058** | +0.3 | **0.00076** — resolves the bar |
+| the closing line on top of our signal | 0.6617 | **+0.01680** | +34.8 | 0.00100 — resolves the bar |
+
+**The null is the result, and it is a real null rather than an absent one.**
+The detection floor is 0.00076 — the procedure could have resolved an effect a
+quarter the size of the project bar, and what it found was very slightly
+negative at 0.3 standard deviations from a shuffled control. **Our odds-free
+model contributes nothing to a forecast that already has the closing line.**
+The reverse is overwhelming: the line adds 0.0168 on top of us at 34.8σ.
+
+The tree estimator agrees in sign both ways but its floor (0.0052 and 0.0044)
+cannot resolve the bar at this sample size, so only the linear reading carries
+here. Reporting that distinction is the whole reason the floor is printed:
+a null from a procedure that cannot resolve the bar says nothing at all.
+
+**What this settles.** The honest headline was "it does not beat the market."
+The stronger and more useful statement is now measured: **it is not
+complementary to the market either.** Concretely —
+
+- A value-betting layer built on this model has a ceiling of approximately
+  zero. That deferred spec can be closed rather than postponed.
+- Adding odds as a *feature* would improve the model a great deal — but by
+  importing the market's judgement, not by combining two independent views.
+  Any such model should be read as "the line, plus a small amount of noise",
+  and the honest benchmark for it is the closing line it was trained toward,
+  never the odds-free model it replaced.
+- The 0.036 gap is not a gap the feature table can close, which is consistent
+  with the bar audit: the effects that remain are below what 4,856 fights can
+  resolve, and the one signal that would close the gap is the line itself.
+
+The held-back years 2022–2025 were **not** spent. They stay clean, because a
+negative in the exploration window is not something a confirmatory run can
+overturn — and the one thing this project has that a confirmatory window is
+for is a positive.
+
+`data/external/market_odds.parquet` exists so this can be re-derived offline:
+one column, the devigged closing-line probability in the feature table's corner
+frame, written by `build_odds_benchmark.py --dump-market`. It is **not** a
+feature table and `src/mma/odds.py`'s evaluation-only rule applies to it
+unchanged.
+
 ### What should the bar have been? The harness's own detection floor
 
 `scripts/bar_audit.py` → `models/bar_audit.json`. Every decision in this

@@ -2,6 +2,7 @@
   "experiment": "residual probes -- does a column group add on top of the deployed model?",
   "generated_by": "scripts/residual_probe.py",
   "offset": "models/walkforward/preds/hybrid_e2_cells.json",
+  "offset_note": "the default pinned side. The `market` group pins the devigged closing line instead and puts the model's logit in the candidate columns, so each subgroup records which side it pinned.",
   "exploration_years": [
     2018,
     2019,
@@ -17,126 +18,69 @@
   "bar": 0.003,
   "note": "a SCREEN, not a decision. A group that showed signal would still have to clear the bar through run_walkforward.py with the bar fixed in advance.",
   "groups": {
-    "accumulated_damage": {
-      "n_exploration_rows": 2113,
-      "n_held_back_and_untouched": 2743,
+    "market": {
+      "n_exploration_rows": 1832,
+      "n_held_back_and_untouched": 1478,
       "subgroups": {
-        "knockdowns suffered (absent from the model entirely)": {
-          "n": 1542,
-          "n_columns": 2,
-          "baseline_log_loss": 0.6618,
+        "our signal on top of the closing line": {
+          "n": 1832,
+          "n_columns": 1,
+          "offset": "market_p",
+          "baseline_log_loss": 0.619,
           "columns": [
-            "kd_suffered_diff",
-            "kd_suffered_pf_diff"
+            "model_logit"
           ],
           "linear": {
-            "gain": -0.0015,
-            "shuffled_null_mean": -0.00114,
-            "shuffled_null_sd": 0.00112,
-            "sd_from_null": -0.32,
-            "detection_floor": 0.00224,
+            "gain": -0.00058,
+            "shuffled_null_mean": -0.00069,
+            "shuffled_null_sd": 0.00038,
+            "sd_from_null": 0.29,
+            "detection_floor": 0.00076,
             "floor_resolves_the_bar": true,
             "signal": false
           },
           "trees": {
-            "gain": -0.00551,
-            "shuffled_null_mean": -0.00356,
-            "shuffled_null_sd": 0.00205,
-            "sd_from_null": -0.95,
-            "detection_floor": 0.0041,
+            "gain": -0.00571,
+            "shuffled_null_mean": -0.00517,
+            "shuffled_null_sd": 0.00261,
+            "sd_from_null": -0.21,
+            "detection_floor": 0.00522,
             "floor_resolves_the_bar": false,
             "signal": false
-          }
+          },
+          "role": "screen"
         },
-        "cumulative absorbed punishment": {
-          "n": 2006,
-          "n_columns": 3,
-          "baseline_log_loss": 0.6555,
+        "the closing line on top of our signal": {
+          "n": 1832,
+          "n_columns": 1,
+          "offset": "p",
+          "baseline_log_loss": 0.6617,
           "columns": [
-            "head_absorbed_diff",
-            "sig_absorbed_diff",
-            "career_minutes_diff"
+            "market_logit"
           ],
           "linear": {
-            "gain": -0.00147,
-            "shuffled_null_mean": -0.00147,
-            "shuffled_null_sd": 0.00104,
-            "sd_from_null": 0.0,
-            "detection_floor": 0.00207,
+            "gain": 0.0168,
+            "shuffled_null_mean": -0.0006,
+            "shuffled_null_sd": 0.0005,
+            "sd_from_null": 34.84,
+            "detection_floor": 0.001,
             "floor_resolves_the_bar": true,
-            "signal": false
+            "signal": true
           },
           "trees": {
-            "gain": -0.00646,
-            "shuffled_null_mean": -0.00596,
-            "shuffled_null_sd": 0.00224,
-            "sd_from_null": -0.22,
-            "detection_floor": 0.00447,
+            "gain": 0.01342,
+            "shuffled_null_mean": -0.00633,
+            "shuffled_null_sd": 0.0022,
+            "sd_from_null": 8.97,
+            "detection_floor": 0.0044,
             "floor_resolves_the_bar": false,
-            "signal": false
-          }
-        },
-        "recent wear and the age interaction": {
-          "n": 2006,
-          "n_columns": 2,
-          "baseline_log_loss": 0.6555,
-          "columns": [
-            "head_absorbed_365d_diff",
-            "age_x_head_absorbed_diff"
-          ],
-          "linear": {
-            "gain": -0.00109,
-            "shuffled_null_mean": -0.00135,
-            "shuffled_null_sd": 0.00073,
-            "sd_from_null": 0.36,
-            "detection_floor": 0.00147,
-            "floor_resolves_the_bar": true,
-            "signal": false
+            "signal": true
           },
-          "trees": {
-            "gain": -0.0054,
-            "shuffled_null_mean": -0.00436,
-            "shuffled_null_sd": 0.00335,
-            "sd_from_null": -0.31,
-            "detection_floor": 0.0067,
-            "floor_resolves_the_bar": false,
-            "signal": false
-          }
-        },
-        "every damage column at once": {
-          "n": 1542,
-          "n_columns": 7,
-          "baseline_log_loss": 0.6618,
-          "columns": [
-            "kd_suffered_diff",
-            "kd_suffered_pf_diff",
-            "head_absorbed_diff",
-            "sig_absorbed_diff",
-            "career_minutes_diff",
-            "head_absorbed_365d_diff",
-            "age_x_head_absorbed_diff"
-          ],
-          "linear": {
-            "gain": -0.00272,
-            "shuffled_null_mean": -0.00262,
-            "shuffled_null_sd": 0.00158,
-            "sd_from_null": -0.06,
-            "detection_floor": 0.00317,
-            "floor_resolves_the_bar": false,
-            "signal": false
-          },
-          "trees": {
-            "gain": -0.00861,
-            "shuffled_null_mean": -0.00881,
-            "shuffled_null_sd": 0.00445,
-            "sd_from_null": 0.04,
-            "detection_floor": 0.0089,
-            "floor_resolves_the_bar": false,
-            "signal": false
-          }
+          "role": "diagnostic"
         }
       },
-      "any_signal": false
+      "any_signal": false,
+      "diagnostic_signal": true
     }
   }
 }
