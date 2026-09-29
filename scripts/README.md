@@ -1,6 +1,6 @@
 # scripts/
 
-Thirty-nine files, and only twelve of them run on a schedule. This says which
+Forty files, and only twelve of them run on a schedule. This says which
 is which, because "what actually runs?" should not require reading a workflow
 file.
 
@@ -59,6 +59,7 @@ in the README can be re-derived rather than taken on trust.
 | `sp2_2_decision.py` | the two-family blend — the project's one real win |
 | `sp3_decision.py` | the Monte Carlo simulator, and the joint it produces |
 | `sp5_decision.py` | the scorecard margin as a training label (fails; mechanism backwards) |
+| `sp7_decision.py` | the simulator's own winner opinion as a third blend member (fails at the mechanism screen; no harness arm was run) |
 | `sp6_decision.py` | a third blend member (fails; 2 → 3 is worth nothing) |
 | `calibration_audit.py` | is the model's confidence honest, and is fixing it worth anything? (yes; no) |
 | `external_decay_decision.py` | whether the decaying `external` block still earns its place |

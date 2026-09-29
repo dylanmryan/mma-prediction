@@ -1,0 +1,46 @@
+{
+  "experiment": "SP7 -- the simulator's own winner opinion as a third blend member",
+  "pre_registration": "docs/superpowers/plans/2026-09-29-sp7-simulator-third-member.md",
+  "generated_by": "scripts/sp7_decision.py",
+  "verdict": "FAIL",
+  "decision": "Stopped at the mechanism screen. No walk-forward arm was run, which is the pre-registered rule and not a shortcut: the screen exists so a candidate that cannot help is refused before the expensive part.",
+  "why": "The simulator's winner opinion correlates 0.9296 with the blend -- MORE than the blend's own two members correlate with each other (0.8518). It correlates 0.9196 with xgb alone, which is what it really is: the hazard members are XGBoost models fitted on features derived from the same table, so the per-round likelihood and the Monte Carlo composition change what the simulator PREDICTS without changing what it KNOWS. It disagrees with the blend on 10.4% of winners against the incumbent pair's 14.5%, so it has strictly less to add than the second member did -- and that member's gain, 0.0028, does not itself clear the 0.0044 floor measured in models/bar_audit.json.",
+  "predicted_before_measuring": {
+    "range": [
+      0.6,
+      0.8
+    ],
+    "measured": 0.9296,
+    "was_correct": false,
+    "note": "The plan predicted 0.60-0.80 and the answer was 0.9296. The prediction was wrong in the direction that matters: the simulator's structural difference is in its OUTPUT (a joint over method and round) and not in its INPUT, and only the second kind of difference decorrelates a winner opinion."
+  },
+  "clauses": {
+    "standalone_within_0.005_of_blend": {
+      "measured": 0.004,
+      "threshold": 0.005,
+      "passed": true
+    },
+    "correlation_below_reference": {
+      "measured": 0.9296,
+      "threshold": 0.8518,
+      "threshold_re_derived_here": 0.8518,
+      "passed": false
+    }
+  },
+  "standalone_winner_log_loss": {
+    "blend": 0.6459,
+    "simulator": 0.6499,
+    "torch": 0.6487,
+    "xgb": 0.6488
+  },
+  "correlations": {
+    "blend vs xgb": 0.9564,
+    "blend vs torch": 0.9622,
+    "blend vs simulator": 0.9296,
+    "xgb vs torch": 0.8518,
+    "xgb vs simulator": 0.9196,
+    "torch vs simulator": 0.8731
+  },
+  "n": 4856,
+  "harness_arm_run": false
+}

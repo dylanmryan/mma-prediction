@@ -806,6 +806,71 @@ blocked on serving parity (we know the panel historically but do not scrape it
 prospectively), not on this result.
 
 
+### SP7 — the simulator's winner opinion, and why it never reached the harness
+
+`scripts/sp7_decision.py` → `models/walkforward/sp7_decision.json`.
+Pre-registered in
+[`2026-09-29-sp7-simulator-third-member.md`](superpowers/plans/2026-09-29-sp7-simulator-third-member.md)
+before anything below was measured.
+
+SP3's simulator produces, unavoidably, an opinion about *who wins* — the
+simulated fights have winners. SP3 measured it once, found it slightly worse
+than the blend's, imposed the blend's marginal over it, and discarded it. On
+paper it was the best third-member candidate this project has had: better
+standalone than either member SP6 went looking for, and reading per-round
+hazard rows rather than the 87-column differential row.
+
+**It failed the mechanism screen, and no walk-forward arm was ever run.** That
+is the gate working. The screen costs three minutes; the arm it guards is a
+full harness run plus mandatory fresh-seed confirmation.
+
+| stream | standalone winner LL | accuracy |
+|---|---|---|
+| deployed blend | 0.6459 | 0.6199 |
+| xgb member | 0.6488 | 0.6153 |
+| torch member | 0.6487 | 0.6209 |
+| **simulator** | **0.6499** | 0.6190 |
+
+| pair | correlation | disagree on winner |
+|---|---|---|
+| xgb vs torch — **the reference** | **0.8518** | 14.5% |
+| torch vs simulator | 0.8731 | 12.4% |
+| xgb vs simulator | 0.9196 | 12.6% |
+| **simulator vs blend — the screen** | **0.9296** | **10.4%** |
+
+The reference re-derives to **0.8518 on the current 4,856-fight table**, the
+same figure SP6 measured on 4,804, so the threshold was not stale.
+
+**The simulator is more correlated with the blend than the blend's own two
+members are with each other**, and it disagrees on fewer winners — 10.4%
+against 14.5%. It therefore has strictly *less* to add than the second member
+did, and that member's gain of 0.0028 does not itself clear the 0.0044 floor.
+
+**The prediction was recorded before measuring, and it was wrong.** The plan
+said 0.60–0.80; the answer was 0.9296. The direction of the error is the
+finding: the simulator correlates 0.9196 with **xgb alone**, higher than xgb
+correlates with torch. That is what it actually is — the hazard members are
+XGBoost models fitted on features derived from the same table, so the
+per-round likelihood, the censoring and the Monte Carlo composition change
+what the simulator *predicts* without changing what it *knows*. Its structural
+difference is in its **output** — a joint over method and round, which is
+exactly where it earned its place — and not in its **input**, and only the
+second kind of difference decorrelates a winner opinion.
+
+So SP3 lost nothing by discarding that marginal, which is worth knowing: the
+hybrid's design is right for a reason, not by luck.
+
+**What this closes.** The blend arc is finished. 1 → 2 members bought 0.0028;
+2 → 3 has now been tried with a weak-and-decorrelated member (BT), a
+strong-and-correlated one (logistic), and the best remaining candidate in the
+codebase, and none of the three had anything to add. Adding members to this
+blend is not a path to accuracy, and the reason is structural rather than
+incidental: every candidate is ultimately reading the same 87 columns.
+
+The rejected member (`BlendCandidate.extra` gained a `"simulator"` branch) was
+reverted per the standing rule; it is recoverable from this branch's history
+if a future experiment wants it.
+
 ### What should the bar have been? The harness's own detection floor
 
 `scripts/bar_audit.py` → `models/bar_audit.json`. Every decision in this
