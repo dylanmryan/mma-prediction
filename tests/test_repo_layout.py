@@ -1,7 +1,7 @@
 """The repository stays legible, or the suite says so.
 
 Two documents exist purely so a reader can tell what matters: `scripts/README.md`
-says which of the thirty-eight scripts actually run, and `README.md` points at
+says which of the scripts actually run, and `README.md` points at
 `docs/EXPERIMENTS.md` for the detail it no longer carries itself. Both rot
 silently -- a new script simply never gets classified, and nobody notices until
 the map is worse than no map.

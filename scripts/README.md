@@ -1,6 +1,6 @@
 # scripts/
 
-Thirty-eight files, and only twelve of them run on a schedule. This says which
+Thirty-nine files, and only twelve of them run on a schedule. This says which
 is which, because "what actually runs?" should not require reading a workflow
 file.
 
@@ -41,6 +41,7 @@ Reusable measurement, not one-off answers.
 | `run_walkforward.py` | score **any** candidate on the expanding-window harness; every report in `models/walkforward/` came from here |
 | `noise_floor.py` | measure a scorer's seed noise, so a bar can be `max(0.003, 2σ)` rather than a guess |
 | `residual_probe.py` | *"does this column group add anything on top of what we deploy?"* — pinned offset, shuffled null, reported detection floor |
+| `bar_audit.py` | *"what should the bar be?"* — the paired, fold-clustered sampling error of a log-loss difference, combined with seed noise |
 | `blend_check.py` | compose two finished reports post hoc (a diagnostic; the real blend is a candidate) |
 | `config_search.py` | the SP2.1 architecture space, **frozen** — re-sampling it would turn its two arms into two unrelated searches |
 
