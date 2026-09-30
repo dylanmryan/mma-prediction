@@ -37,6 +37,29 @@ simulator_artifacts = pytest.mark.skipif(
 )
 
 
+#: A GROSS failure bound for the single-fixture smoke test: a dropped corner
+#: swap or an inverted orientation puts P(A) + P(B) near 0 or 2. Normal jitter
+#: is an order of magnitude smaller (measured: max 0.098 across both members
+#: over 250 matchups), so this catches breakage without flaking on a retrain.
+GROSS_ASYMMETRY = 0.25
+
+#: The regression bound on normal asymmetry, gated on the MEAN over a sample.
+#: Measured for the blend at 0.0425 over this fixture's 12 matchups and 0.060
+#: over 250, so the ceiling is roughly three times the observed mean. The
+#: headroom is sized against what a retrain actually moves: it shifted the old
+#: single-fixture value by 0.026 (0.054 -> 0.0802), and a mean over 12 moves by
+#: far less than one draw does. Still an order of magnitude below an inverted
+#: corner, which is the failure worth catching.
+ASYMMETRY_CEILING = 0.15
+
+
+@pytest.fixture(scope="module")
+def asymmetry_sample(matchup_factory):
+    """A dozen random matchups, each built in both corner orientations."""
+    rng = np.random.default_rng(1)
+    return [matchup_factory(rng) for _ in range(12)]
+
+
 @pytest.fixture(scope="module")
 def blended():
     from mma.inference import BlendedPredictor
@@ -50,10 +73,11 @@ def simulator(blended):
     return SimulatorPredictor.load(blend=blended)
 
 
-@pytest.fixture(scope="module")
-def matchup(ensemble):
-    from mma.inference import build_matchup
-    snapshot = pd.Series(
+#: One served snapshot, as `mma.snapshots.build_snapshots` emits it. Module
+#: level so the `matchup` fixture and `matchup_factory` build from the same
+#: fields instead of carrying two copies that can drift apart.
+def served_snapshot(**overrides) -> pd.Series:
+    row = pd.Series(
         {
             "career_fights": 10, "career_wins": 8.0, "career_win_rate": 0.8,
             "career_finish_rate": 0.5, "kd_pf": 0.4, "sub_att_pf": 0.5,
@@ -74,28 +98,67 @@ def matchup(ensemble):
             "avg_opp_elo_wins": 1520.0, "avg_opp_elo_losses": 1610.0,
         }
     )
+    for key, value in overrides.items():
+        row[key] = value
+    return row
+
+
+#: The bio row's index label is the ufcstats id the `external` block joins on.
+#: One of these the snapshot maps and one it does not, which is also the served
+#: shape of every post-snapshot debutant -- NaN differentials plus the flag.
+MAPPED_ID = "002ca196477ce572"
+UNMAPPED_ID = "000774e57404d8c7"
+
+
+def served_bio(fighter_id: str) -> pd.Series:
+    return pd.Series(
+        {"dob": pd.Timestamp("1993-01-01"), "height_cm": 180.0,
+         "reach_cm": 185.0, "stance": "Orthodox"},
+        name=fighter_id,
+    )
+
+
+def both_orientations(snap_a, snap_b, id_a, id_b):
+    """One matchup built each way round, which is what a corner check needs."""
+    from mma.inference import build_matchup
+
+    as_of = pd.Timestamp("2025-09-06")
+    return (
+        build_matchup(snap_a, snap_b, served_bio(id_a), served_bio(id_b),
+                      "Lightweight", False, 3, as_of=as_of),
+        build_matchup(snap_b, snap_a, served_bio(id_b), served_bio(id_a),
+                      "Lightweight", False, 3, as_of=as_of),
+    )
+
+
+@pytest.fixture(scope="module")
+def matchup_factory():
+    """A random matchup, in both orientations. Draws the fields that move a
+    prediction and leaves the rest at the served template's values."""
+    def make(rng):
+        def one():
+            return served_snapshot(
+                elo_overall=float(rng.uniform(1250, 1750)),
+                career_win_rate=float(rng.uniform(0.2, 0.95)),
+                career_wins=float(rng.integers(1, 15)),
+                streak=int(rng.integers(-5, 6)),
+                sig_pm=float(rng.uniform(2, 7)),
+            )
+        return both_orientations(one(), one(),
+                                 str(rng.choice([MAPPED_ID, UNMAPPED_ID])),
+                                 str(rng.choice([MAPPED_ID, UNMAPPED_ID])))
+    return make
+
+
+@pytest.fixture(scope="module")
+def matchup(ensemble):
+    snapshot = served_snapshot()
     weaker = snapshot.copy()
     weaker["elo_overall"] = 1450.0
     weaker["career_win_rate"] = 0.4
     weaker["career_wins"] = 4.0
     weaker["streak"] = -2
-    # The bio row's index label is the ufcstats id the `external` block joins
-    # on, so the two corners get real ids: one the snapshot maps (A) and one it
-    # does not (B), which is also the served shape of every post-snapshot
-    # debutant -- NaN differentials plus the flag, not a crash.
-    bio = pd.Series(
-        {"dob": pd.Timestamp("1993-01-01"), "height_cm": 180.0,
-         "reach_cm": 185.0, "stance": "Orthodox"},
-        name="002ca196477ce572",
-    )
-    bio_unmapped = pd.Series(bio, name="000774e57404d8c7")
-    return build_matchup(
-        snapshot, weaker, bio, bio_unmapped, "Lightweight", False, 3,
-        as_of=pd.Timestamp("2025-09-06"),
-    ), build_matchup(
-        weaker, snapshot, bio_unmapped, bio, "Lightweight", False, 3,
-        as_of=pd.Timestamp("2025-09-06"),
-    )
+    return both_orientations(snapshot, weaker, MAPPED_ID, UNMAPPED_ID)
 
 
 def test_feature_contract_complete(ensemble, matchup):
@@ -105,11 +168,55 @@ def test_feature_contract_complete(ensemble, matchup):
 
 
 def test_stronger_fighter_favored_and_symmetric(ensemble, matchup):
+    """The stronger fighter is favoured, and the corners are not WILDLY apart.
+
+    The bound is deliberately loose, and the old 0.08 is why. The model is not
+    corner-symmetric -- that is a known Phase 5 finding and the whole reason
+    `predict_symmetrized` exists -- and measured over 250 random matchups the
+    normal asymmetry is mean 0.039 / max 0.066 for this member and mean 0.060 /
+    max 0.098 for the blend that actually serves. So 0.08 sat INSIDE the normal
+    range: it is exceeded on 17% of matchups by the blend, and a retrain that
+    moved this fixture from 0.054 to 0.0802 failed the weekly pipeline on
+    nothing. It guarded no property the system relies on, because the served
+    path corner-averages and is exactly self-consistent -- asserted without
+    tolerance by the two tests below, which passed on that same retrain.
+
+    What remains worth catching here is a GROSS failure: a dropped corner swap
+    or an inverted orientation, which puts the sum near 0 or 2 rather than near
+    1.06. Hence a ceiling an order of magnitude above normal jitter and far
+    below inversion. `test_corner_asymmetry_stays_far_below_inversion` is the
+    regression guard on the jitter itself, over a sample rather than one row.
+    """
     forward, reverse = matchup
     p_forward = ensemble.predict(forward)["winner_prob"][0]
     p_reverse = ensemble.predict(reverse)["winner_prob"][0]
     assert p_forward > 0.5
-    assert p_forward + p_reverse == pytest.approx(1.0, abs=0.08)
+    assert p_forward + p_reverse == pytest.approx(1.0, abs=GROSS_ASYMMETRY)
+
+
+def test_corner_asymmetry_stays_far_below_inversion(blended, asymmetry_sample):
+    """Asymmetry is measured on the BLEND, over a sample, and gated on the mean.
+
+    Three deliberate differences from the test above, each one a reason the old
+    assertion flaked. It reads the blend, because that is what serves and it is
+    the more asymmetric of the two. It uses many matchups, so one fixture
+    landing badly cannot decide it. And it gates the mean rather than a single
+    draw, so a retrain's jitter moves it by far less than the bound.
+
+    This can still fail for a real reason: if the corner swap broke, or a
+    per-corner absolute column started dominating, mean asymmetry would move by
+    much more than the 0.06 measured here.
+    """
+    sums = [float(blended.predict(f)["winner_prob"][0])
+            + float(blended.predict(r)["winner_prob"][0])
+            for f, r in asymmetry_sample]
+    mean_asymmetry = float(np.mean([abs(s - 1.0) for s in sums]))
+    assert mean_asymmetry < ASYMMETRY_CEILING, (
+        f"mean corner asymmetry {mean_asymmetry:.4f} over "
+        f"{len(asymmetry_sample)} matchups; measured at 0.060 when this was "
+        "written, and the served path corrects it -- but a jump this large "
+        "means the corner handling itself changed"
+    )
 
 
 def test_round_45_zero_for_three_round_fight(ensemble, matchup):

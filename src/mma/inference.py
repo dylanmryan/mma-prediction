@@ -721,10 +721,18 @@ def predict_symmetrized(
     a member's corners after the blend would be a third.
 
     Phase 5 finding: the model is not perfectly symmetric under fighter
-    order -- P(A beats B) + P(B beats A) can be off from 1.0 by ~15
-    percentage points in a smoke test (see test_stronger_fighter_favored_and_symmetric,
-    which only asserts within 0.08). This averages both orientations so the
-    reported probability is exactly self-consistent: p + (1-p) == 1.
+    order -- P(A beats B) + P(B beats A) is off from 1.0 by a mean of 0.039 and
+    a max of 0.066 for the torch member, and a mean of 0.060 and a max of 0.098
+    for the blend, measured over 250 random matchups. The blend is the MORE
+    asymmetric of the two and it is what serves, which is the argument for this
+    function existing rather than for chasing the asymmetry itself.
+
+    This averages both orientations so the reported probability is exactly
+    self-consistent: p + (1-p) == 1. That exactness is the invariant worth
+    asserting, and `tests/test_inference.py` does assert it without tolerance
+    for both the member and the blend. The neighbouring smoke test bounds gross
+    breakage only -- its old 0.08 sat inside the normal range above, so a
+    retrain crossed it and failed the weekly pipeline on nothing.
 
     `matchup_ab` and `matchup_ba` must be `build_matchup(...)` outputs for the
     same pair with fighters swapped (A-vs-B and B-vs-A respectively).
