@@ -12,6 +12,8 @@ comes first negates every judge's margin, so `|mean margin|` and the card
 shape are unchanged. The SIGN comes from `y_winner`, which the feature table
 already owns. There is therefore no orientation to get wrong.
 """
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -22,6 +24,19 @@ from mma.scorecards import (
     card_shape,
     parse_cards,
     subtype_of,
+)
+
+#: `data/raw/*.csv` is gitignored, so the raw scrape is absent in CI and in any
+#: fresh clone. The two tests below read it directly; without this they fail
+#: with FileNotFoundError rather than skipping, which is what has kept the
+#: Tests workflow red on every run since it was added. The rest of this module
+#: works from synthetic rows and must keep running either way, so this is a
+#: per-test marker and not a `pytestmark`.
+RAW_FIGHT_CSV = Path(__file__).resolve().parents[1] / "data" / "raw" / "fight.csv"
+
+needs_the_raw_scrape = pytest.mark.skipif(
+    not RAW_FIGHT_CSV.exists(),
+    reason="data/raw/fight.csv is gitignored; run scripts/download_data.py",
 )
 
 UNANIMOUS = "Andy Roberts 30 - 27. Doug Crosby 30 - 27. Chris Lee 29 - 28."
@@ -160,11 +175,12 @@ def test_the_magnitude_is_never_negative():
 
 # --- against the real table --------------------------------------------------
 
+@needs_the_raw_scrape
 def test_the_real_scrape_parses_at_the_rate_the_preregistration_claims():
     """SP5's pre-registration fixed 4,461 of 4,995 decisions as parseable
     before anything was built. If the scrape grows this may rise, but a
     COLLAPSE means the parser broke against a format change."""
-    raw = pd.read_csv("data/raw/fight.csv")
+    raw = pd.read_csv(RAW_FIGHT_CSV)
     decisions = raw[raw["method"].astype(str).str.contains("ecision", na=False)]
     out = build_scorecards(raw)
     assert len(decisions) >= 4995
@@ -174,10 +190,11 @@ def test_the_real_scrape_parses_at_the_rate_the_preregistration_claims():
     )
 
 
+@needs_the_raw_scrape
 def test_split_decisions_really_are_closer_than_unanimous_ones():
     """The mechanism, on the real data: if this ever stopped holding the
     label would be carrying no information worth adding a head for."""
-    raw = pd.read_csv("data/raw/fight.csv")
+    raw = pd.read_csv(RAW_FIGHT_CSV)
     out = build_scorecards(raw)
     split = out.loc[out["judges_disagreed"], "abs_mean_margin"].mean()
     unanimous = out.loc[~out["judges_disagreed"], "abs_mean_margin"].mean()
