@@ -30,7 +30,15 @@
       "elo_b": 1547.0148857751303,
       "skipped": false,
       "predicted_at_utc": "2026-09-07T17:39:56Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "262d32ebda89efc4",
+      "correct": true,
+      "log_loss_contribution": 0.34106977782321285,
+      "brier_contribution": 0.08351562827307735,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Deiveson Figueiredo",
@@ -57,7 +65,15 @@
       "elo_b": 1616.7185116965275,
       "skipped": false,
       "predicted_at_utc": "2026-09-07T17:39:56Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "6e743a33d56bdaa4",
+      "correct": true,
+      "log_loss_contribution": 0.6182262718680009,
+      "brier_contribution": 0.21261371583233402,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Khaos Williams",
@@ -93,7 +109,15 @@
       "elo_b": 1607.397113417605,
       "skipped": false,
       "predicted_at_utc": "2026-09-07T17:39:56Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "9d83f6da776ff7d6",
+      "correct": false,
+      "log_loss_contribution": 0.8902216995923095,
+      "brier_contribution": 0.3474339485652287,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Imanol Rodr\u00edguez",
@@ -147,7 +171,15 @@
       "elo_b": 1582.6059842348504,
       "skipped": false,
       "predicted_at_utc": "2026-09-07T17:39:56Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "323d4ca260dfa0ba",
+      "correct": true,
+      "log_loss_contribution": 0.44500107401901534,
+      "brier_contribution": 0.12900769509865762,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Johnny Walker",
@@ -174,7 +206,15 @@
       "elo_b": 1595.5899149798047,
       "skipped": false,
       "predicted_at_utc": "2026-09-07T17:39:56Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "c21f26bbde777573",
+      "correct": true,
+      "log_loss_contribution": 0.6437464141827611,
+      "brier_contribution": 0.22532047197964666,
+      "coin_flip_correct": true,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": true
     },
     {
       "fighter_a_name": "Rafael dos Anjos",
@@ -201,7 +241,15 @@
       "elo_b": 1600.3494152412802,
       "skipped": false,
       "predicted_at_utc": "2026-09-07T17:39:56Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "262a7d06203657e6",
+      "correct": true,
+      "log_loss_contribution": 0.4909349025425663,
+      "brier_contribution": 0.15050216420090323,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Marvin Vettori",
@@ -228,7 +276,15 @@
       "elo_b": 1530.5232039594016,
       "skipped": false,
       "predicted_at_utc": "2026-09-07T17:39:56Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "6a96ad1bc34fb113",
+      "correct": false,
+      "log_loss_contribution": 0.8517099286542736,
+      "brier_contribution": 0.3286904247253739,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     },
     {
       "fighter_a_name": "Court McGee",
@@ -255,7 +311,15 @@
       "elo_b": 1455.2,
       "skipped": false,
       "predicted_at_utc": "2026-09-07T17:39:56Z",
-      "model_version": "40df77ec43c7"
+      "model_version": "40df77ec43c7",
+      "actual_winner": "64b12fe31be7560c",
+      "correct": true,
+      "log_loss_contribution": 0.48004280524539167,
+      "brier_contribution": 0.14534629733413262,
+      "coin_flip_correct": false,
+      "coin_flip_log_loss_contribution": 0.6931471805599453,
+      "coin_flip_brier_contribution": 0.25,
+      "elo_dummy_correct": false
     }
   ]
 }
